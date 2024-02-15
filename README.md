@@ -1,2 +1,1 @@
-# jane
-joy along new experience (jane) programming languages
+![jane](.github/jane.png)

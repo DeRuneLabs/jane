@@ -96,6 +96,10 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "}"
 		tk.Type = Brace
 		lexer.Position++
+  case isKeyword(lexerline, "int32"):
+  tk.Value = "int32"
+    tk.Type = Type
+    lexer.Position += 5
 	default:
 		if chk := lexer.lexName(lexerline); chk != "" {
 			tk.Value = chk
