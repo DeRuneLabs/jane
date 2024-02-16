@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/slowy07/jane/package/jane"
+	"github.com/De-Rune/jane/package/jane"
 )
 
 func GetJn(path string) (*FILE, error) {

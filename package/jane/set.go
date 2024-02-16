@@ -1,6 +1,7 @@
 package jane
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -19,13 +20,25 @@ func NewJnSet() *JnSet {
 	return jnset
 }
 
-func (jnset *JnSet) Parse(contet []byte) error {
-	var lines []string
+func splitlines(content string) []string {
 	if runtime.GOOS == "windows" {
-		lines = strings.SplitN(string(contet), "\n", -1)
-	} else {
-		lines = strings.SplitN(string(contet), "\n\r", -1)
+		return strings.SplitN(string(content), "\n", -1)
 	}
+	return strings.SplitN(string(content), "\n\r", -1)
+}
+
+func (jnset *JnSet) checkUnset() []error {
+	var errs []error
+	for key := range jnset.Fields {
+		if jnset.Fields[key] == "" {
+			errs = append(errs, errors.New("\""+key+"\" is not define"))
+		}
+	}
+	return errs
+}
+
+func (jnset *JnSet) Parse(content []byte) []error {
+	lines := splitlines(string(content))
 	for index, line := range lines {
 		line = strings.TrimFunc(line, unicode.IsSpace)
 		if line == "" {
@@ -33,20 +46,20 @@ func (jnset *JnSet) Parse(contet []byte) error {
 		}
 		parts := strings.SplitN(line, " ", -1)
 		if len(parts) < 2 {
-			return fmt.Errorf("invalid syntax at line %d", index+1)
+			return []error{fmt.Errorf("invalid syntax at line %d", index+1)}
 		}
 		key, value := parts[0], parts[1]
 		_, ok := jnset.Fields[key]
 		if !ok {
-			return fmt.Errorf("invalid field at line %d", index+1)
+			return []error{fmt.Errorf("invalid field at line %d", index+1)}
 		}
 		switch key {
 		case "out_name":
 			if len(parts) > 2 {
-				return fmt.Errorf("invalid value at line %d", index+1)
+				return []error{fmt.Errorf("invalid value at line %d", index+1)}
 			}
 		}
-		jnset.Fields[value] = value
+		jnset.Fields[key] = value
 	}
-	return nil
+	return jnset.checkUnset()
 }

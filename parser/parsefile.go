@@ -1,11 +1,10 @@
 package parser
 
 import (
-	"fmt"
 	"sync"
 
-	"github.com/slowy07/jane/lexer"
-	"github.com/slowy07/jane/package/io"
+	"github.com/De-Rune/jane/lexer"
+	"github.com/De-Rune/jane/package/io"
 )
 
 type ParseFileInfo struct {
@@ -24,7 +23,8 @@ func ParseFile(info *ParseFileInfo) {
 		info.Errors = jnlexer.Errors
 		return
 	}
-	for _, token := range tokens {
-		fmt.Println("'"+token.Value+"'", " ")
-	}
+  parser := NewParser(tokens, info)
+  parser.Parse()
+  code := parser.String()
+  info.JN_CXX += code
 }

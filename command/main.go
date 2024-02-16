@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/slowy07/jane/package/io"
-	"github.com/slowy07/jane/package/jane"
-	"github.com/slowy07/jane/parser"
+	"github.com/De-Rune/jane/package/io"
+	"github.com/De-Rune/jane/package/jane"
+	"github.com/De-Rune/jane/parser"
 )
 
 func help(cmd string) {
@@ -111,10 +111,13 @@ func LoadJaneSet() {
 		println(error.Error())
 		os.Exit(0)
 	}
-	error = jane.JnSettings.Parse(bytes)
-	if error != nil {
-		println(error.Error())
-		os.Exit(1)
+	errors := jane.JnSettings.Parse(bytes)
+	if errors != nil {
+		println("Jane settings has error;")
+		for _, err := range errors {
+			println(err.Error())
+		}
+		os.Exit(0)
 	}
 }
 
@@ -144,5 +147,5 @@ func main() {
 	if info.Errors != nil {
 		printErrors(info.Errors)
 	}
-	os.WriteFile("jane.cxx", []byte(info.JN_CXX), 0606)
+	os.WriteFile(filepath.Join(jane.JnSettings.Fields["out_dir"], jane.JnSettings.Fields["out_name"]), []byte(info.JN_CXX), 0606)
 }

@@ -1,6 +1,6 @@
 package lexer
 
-import "github.com/slowy07/jane/package/io"
+import "github.com/De-Rune/jane/package/io"
 
 type Lexer struct {
 	File     *io.FILE

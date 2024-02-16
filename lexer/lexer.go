@@ -2,7 +2,7 @@ package lexer
 
 import (
 	"fmt"
-	"github.com/slowy07/jane/package/jane"
+	"github.com/De-Rune/jane/package/jane"
 	"regexp"
 	"strings"
 	"unicode"
@@ -96,6 +96,10 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "}"
 		tk.Type = Brace
 		lexer.Position++
+  case isKeyword(lexerline, "int8"):
+		tk.Value = "int8"
+		tk.Type = Type
+		lexer.Position += 4
 	case isKeyword(lexerline, "int16"):
 		tk.Value = "int16"
 		tk.Type = Type
@@ -104,6 +108,26 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "int32"
 		tk.Type = Type
 		lexer.Position += 5
+  case isKeyword(lexerline, "int64"):
+		tk.Value = "int64"
+		tk.Type = Type
+		lexer.Position += 5
+	case isKeyword(lexerline, "uint8"):
+		tk.Value = "uint8"
+		tk.Type = Type
+		lexer.Position += 5
+	case isKeyword(lexerline, "uint16"):
+		tk.Value = "uint16"
+		tk.Type = Type
+		lexer.Position += 6
+	case isKeyword(lexerline, "uint32"):
+		tk.Value = "uint32"
+		tk.Type = Type
+		lexer.Position += 6
+	case isKeyword(lexerline, "uint64"):
+		tk.Value = "uint64"
+		tk.Type = Type
+		lexer.Position += 6
 	default:
 		if chk := lexer.lexName(lexerline); chk != "" {
 			tk.Value = chk
