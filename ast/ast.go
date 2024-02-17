@@ -75,7 +75,7 @@ func (ast *AST) BuildFunction() {
 			ast.Position = -1
 			return
 		}
-		ast.Position += 3
+		ast.Position += 2
 	default:
 		ast.pushError("invalid_syntax")
 		ast.Position = -1

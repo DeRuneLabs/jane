@@ -23,9 +23,13 @@ func NewParser(tokens []lexer.Token, PFI *ParseFileInfo) *CxxParser {
 	return parser
 }
 
-func (cp *CxxParser) PushError(token lexer.Token, err string) {
+func (cp *CxxParser) PushErrorToken(token lexer.Token, err string) {
 	message := jane.Errors[err]
-	cp.PFI.Errors = append(cp.PFI.Errors, fmt.Sprintf("%s %s: %d", token.File.Path, message, token.Line))
+	cp.PFI.Errors = append(cp.PFI.Errors, fmt.Sprintf("%s:%d %s", token.File.Path, token.Line, message))
+}
+
+func (cp *CxxParser) PushError(err string) {
+	cp.PFI.Errors = append(cp.PFI.Errors, jane.Errors[err])
 }
 
 func (cp CxxParser) String() string {
@@ -48,7 +52,7 @@ func (cp *CxxParser) Parse() {
 		case ast.Statement:
 			cp.ParseStatement(model.Value.(ast.StatementAST))
 		default:
-			cp.PushError(model.Token, "invalid_syntax")
+			cp.PushErrorToken(model.Token, "invalid_syntax")
 		}
 	}
 }
@@ -58,15 +62,34 @@ func (cp *CxxParser) ParseStatement(s ast.StatementAST) {
 	case ast.StatementFunction:
 		cp.ParseFunction(s.Value.(ast.FunctionAST))
 	default:
-		cp.PushError(s.Token, "invalid_syntax")
+		cp.PushErrorToken(s.Token, "invalid_syntax")
 	}
 }
 
 func (cp *CxxParser) ParseFunction(f ast.FunctionAST) {
+	if function := cp.functionByName(f.Name); function != nil {
+		cp.PushErrorToken(f.Token, "exist_name")
+		return
+	}
 	function := new(Function)
 	function.Name = f.Name
 	function.Line = f.Token.Line
 	function.FILE = f.Token.File
 	function.ReturnType = f.ReturnType.Type
 	cp.Functions = append(cp.Functions, function)
+}
+
+func (cp *CxxParser) functionByName(name string) *Function {
+	for _, function := range cp.Functions {
+		if function.Name == name {
+			return function
+		}
+	}
+	return nil
+}
+
+func (cp *CxxParser) finalChek() {
+	if cp.functionByName(jane.EntryPoint) == nil {
+		cp.PushError("no_entry_point")
+	}
 }

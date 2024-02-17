@@ -15,6 +15,7 @@ type JnSet struct {
 func NewJnSet() *JnSet {
 	jnset := new(JnSet)
 	jnset.Fields = make(map[string]string)
+	jnset.Fields["out_name"] = ""
 	jnset.Fields["cxx_out_dir"] = ""
 	jnset.Fields["cxx_out_name"] = ""
 	return jnset

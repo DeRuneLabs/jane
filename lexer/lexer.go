@@ -54,7 +54,7 @@ func (lexer *Lexer) resume() string {
 		if unicode.IsSpace(r) {
 			lexer.Column++
 			lexer.Position++
-			if r == '\n' || r == '\r' {
+			if r == '\n' {
 				lexer.Line++
 				lexer.Column = 1
 			}
