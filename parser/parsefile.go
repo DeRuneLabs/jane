@@ -23,8 +23,8 @@ func ParseFile(info *ParseFileInfo) {
 		info.Errors = jnlexer.Errors
 		return
 	}
-  parser := NewParser(tokens, info)
-  parser.Parse()
-  code := parser.String()
-  info.JN_CXX += code
+	parser := NewParser(tokens, info)
+	parser.Parse()
+	code := parser.String()
+	info.JN_CXX += code
 }

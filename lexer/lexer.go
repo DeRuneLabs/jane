@@ -96,7 +96,7 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "}"
 		tk.Type = Brace
 		lexer.Position++
-  case isKeyword(lexerline, "int8"):
+	case isKeyword(lexerline, "int8"):
 		tk.Value = "int8"
 		tk.Type = Type
 		lexer.Position += 4
@@ -108,7 +108,7 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "int32"
 		tk.Type = Type
 		lexer.Position += 5
-  case isKeyword(lexerline, "int64"):
+	case isKeyword(lexerline, "int64"):
 		tk.Value = "int64"
 		tk.Type = Type
 		lexer.Position += 5
