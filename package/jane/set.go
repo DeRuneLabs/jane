@@ -48,7 +48,8 @@ func (jnset *JnSet) Parse(content []byte) []error {
 		if len(parts) < 2 {
 			return []error{fmt.Errorf("invalid syntax at line %d", index+1)}
 		}
-		key, value := parts[0], parts[1]
+		key := parts[0]
+		value := parts[1]
 		_, ok := jnset.Fields[key]
 		if !ok {
 			return []error{fmt.Errorf("invalid field at line %d", index+1)}
