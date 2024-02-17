@@ -57,7 +57,7 @@ func initProjecT(cmd string) {
 		println("this mod can only be used as single")
 		return
 	}
-	error := os.WriteFile(jane.SettingsFile, []byte(`out_dir ./ out_name jane.cpp`), 0606)
+	error := os.WriteFile(jane.SettingsFile, []byte(`cxx_out_dir ./ cxx_out_name jane.cpp`), 0606)
 	if error != nil {
 		println(error.Error())
 		return
@@ -147,5 +147,5 @@ func main() {
 	if info.Errors != nil {
 		printErrors(info.Errors)
 	}
-	os.WriteFile(filepath.Join(jane.JnSettings.Fields["out_dir"], jane.JnSettings.Fields["out_name"]), []byte(info.JN_CXX), 0606)
+	os.WriteFile(filepath.Join(jane.JnSettings.Fields["cxx_out_dir"], jane.JnSettings.Fields["cxx_out_name"]), []byte(info.JN_CXX), 0606)
 }

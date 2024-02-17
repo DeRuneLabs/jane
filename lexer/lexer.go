@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 )
 
-func (lexer *Lexer) error(error string) {
+func (lexer *Lexer) pushError(error string) {
 	lexer.Errors = append(lexer.Errors, fmt.Sprintf("%s %d:%d %s", lexer.File.Path, lexer.Line, lexer.Column, jane.Errors[error]))
 }
 
@@ -134,7 +134,7 @@ func (lexer *Lexer) Token() Token {
 			tk.Type = Name
 			break
 		}
-		lexer.error("invalid_token")
+		lexer.pushError("invalid_token")
 		lexer.Column++
 		lexer.Position++
 		return tk
