@@ -1,15 +1,17 @@
 package parser
 
 import (
-	"github.com/De-Rune/jane/package/io"
+	"fmt"
+	"github.com/De-Rune/jane/ast"
+	"github.com/De-Rune/jane/lexer"
 	"strings"
 )
 
 type Function struct {
-	FILE       *io.FILE
-	Line       int
+	Token      lexer.Token
 	Name       string
 	ReturnType uint8
+	Block      ast.BlockAST
 }
 
 func (f Function) String() string {
@@ -19,6 +21,11 @@ func (f Function) String() string {
 	sb.WriteString(f.Name)
 	sb.WriteString("()")
 	sb.WriteString(" {")
-	sb.WriteByte('}')
+	for _, s := range f.Block.Content {
+		sb.WriteByte('\n')
+		sb.WriteString("\t" + fmt.Sprint(s.Value))
+		sb.WriteByte(';')
+	}
+	sb.WriteString("\n}")
 	return sb.String()
 }

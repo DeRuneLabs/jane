@@ -36,6 +36,7 @@ func (cp CxxParser) String() string {
 	var sb strings.Builder
 	for _, function := range cp.Functions {
 		sb.WriteString(function.String())
+		sb.WriteString("\n\n")
 	}
 	return sb.String()
 }
@@ -55,6 +56,7 @@ func (cp *CxxParser) Parse() {
 			cp.PushErrorToken(model.Token, "invalid_syntax")
 		}
 	}
+	cp.finalCheck()
 }
 
 func (cp *CxxParser) ParseStatement(s ast.StatementAST) {
@@ -66,17 +68,30 @@ func (cp *CxxParser) ParseStatement(s ast.StatementAST) {
 	}
 }
 
-func (cp *CxxParser) ParseFunction(f ast.FunctionAST) {
-	if function := cp.functionByName(f.Name); function != nil {
-		cp.PushErrorToken(f.Token, "exist_name")
+func (cp *CxxParser) ParseFunction(fnAst ast.FunctionAST) {
+	if function := cp.functionByName(fnAst.Name); function != nil {
+		cp.PushErrorToken(fnAst.Token, "exist_name")
 		return
 	}
-	function := new(Function)
-	function.Name = f.Name
-	function.Line = f.Token.Line
-	function.FILE = f.Token.File
-	function.ReturnType = f.ReturnType.Type
-	cp.Functions = append(cp.Functions, function)
+	fn := new(Function)
+	fn.Token = fnAst.Token
+	fn.Name = fnAst.Name
+	fn.ReturnType = fnAst.ReturnType.Type
+	fn.Block = fnAst.Block
+	cp.checkFunctionReturn(fn)
+	cp.Functions = append(cp.Functions, fn)
+}
+
+func (cp *CxxParser) checkFunctionReturn(fn *Function) {
+	if fn.ReturnType == jane.Void {
+		return
+	}
+	for _, s := range fn.Block.Content {
+		if s.Type == ast.StatementReturn {
+			return
+		}
+	}
+	cp.PushErrorToken(fn.Token, "missing_return")
 }
 
 func (cp *CxxParser) functionByName(name string) *Function {
@@ -88,7 +103,7 @@ func (cp *CxxParser) functionByName(name string) *Function {
 	return nil
 }
 
-func (cp *CxxParser) finalChek() {
+func (cp *CxxParser) finalCheck() {
 	if cp.functionByName(jane.EntryPoint) == nil {
 		cp.PushError("no_entry_point")
 	}

@@ -80,6 +80,10 @@ func (lexer *Lexer) Token() Token {
 	tk.Line = lexer.Line
 
 	switch {
+	case lexerline[0] == ';':
+		tk.Value = ";"
+		tk.Type = SemiColon
+		lexer.Position++
 	case lexerline[0] == '(':
 		tk.Value = "("
 		tk.Type = Brace
@@ -127,6 +131,10 @@ func (lexer *Lexer) Token() Token {
 	case isKeyword(lexerline, "uint64"):
 		tk.Value = "uint64"
 		tk.Type = Type
+		lexer.Position += 6
+	case isKeyword(lexerline, "return"):
+		tk.Value = "return"
+		tk.Type = Return
 		lexer.Position += 6
 	default:
 		if chk := lexer.lexName(lexerline); chk != "" {

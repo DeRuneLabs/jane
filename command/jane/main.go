@@ -59,7 +59,7 @@ func initProjecT(cmd string) {
 	}
 	error := os.WriteFile(jane.SettingsFile, []byte(`out_name main
 cxx_out_dir ./
-cxx_out_name jane.cpp`), 0606)
+cxx_out_name jane.cxx`), 0606)
 	if error != nil {
 		println(error.Error())
 		return

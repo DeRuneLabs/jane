@@ -25,7 +25,7 @@ type RangeAST struct {
 }
 
 type BlockAST struct {
-	content []Object
+	Content []Object
 }
 
 type TypeAST struct {
@@ -38,4 +38,15 @@ type FunctionAST struct {
 	Name       string
 	ReturnType TypeAST
 	Block      BlockAST
+}
+
+type ExpressionAST struct{}
+
+type ReturnAST struct {
+	Token      lexer.Token
+	Expression ExpressionAST
+}
+
+func (rast ReturnAST) String() string {
+	return rast.Token.Value
 }
