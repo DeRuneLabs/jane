@@ -48,6 +48,17 @@ func (lexer *Lexer) lexerName(lexerline string) string {
 	return sb.String()
 }
 
+func (lexer *Lexer) lexNumeric(lexerline string) string {
+	for index, run := range lexerline {
+		if '0' <= run && '9' >= run {
+			lexer.Position++
+			continue
+		}
+		return lexerline[:index]
+	}
+	return ""
+}
+
 func (lexer *Lexer) resume() string {
 	var lexerline string
 	runes := lexer.File.Content[lexer.Position:]
@@ -136,9 +147,16 @@ func (lexer *Lexer) Token() Token {
 		tk.Type = Return
 		lexer.Position += 6
 	default:
-		if chk := lexer.lexerName(lexerline); chk != "" {
-			tk.Value = chk
+		lex := lexer.lexerName(lexerline)
+		if lex != "" {
+			tk.Value = lex
 			tk.Type = Name
+			break
+		}
+		lex = lexer.lexNumeric(lexerline)
+		if lex != "" {
+			tk.Value = lex
+			tk.Type = Value
 			break
 		}
 		lexer.pushError("invalid_token")

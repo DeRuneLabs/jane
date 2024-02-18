@@ -1,6 +1,10 @@
 package ast
 
-import "github.com/De-Rune/jane/lexer"
+import (
+	"fmt"
+	"github.com/De-Rune/jane/lexer"
+	"strings"
+)
 
 type Object struct {
 	Token lexer.Token
@@ -41,6 +45,40 @@ type FunctionAST struct {
 }
 
 type ExpressionAST struct {
+	Content []ExpressionNode
+	Type    uint8
+}
+
+func (e ExpressionAST) string() string {
+	var sb strings.Builder
+	for _, node := range e.Content {
+		sb.WriteString(node.String())
+	}
+	return sb.String()
+}
+
+type ExpressionNode struct {
+	Content interface{}
+	Type    uint8
+}
+
+func (n ExpressionNode) String() string {
+	return fmt.Sprint(n.Content)
+}
+
+type ValueAST struct {
+	Token lexer.Token
+	Data  string
+	Type  uint8
+}
+
+func (v ValueAST) String() string {
+	return v.Data
+}
+
+type OperatorAST struct {
+	Token lexer.Token
+	Value string
 }
 
 type ReturnAST struct {
@@ -49,5 +87,8 @@ type ReturnAST struct {
 }
 
 func (rast ReturnAST) String() string {
+	if rast.Expression.Type != NA {
+		return rast.Token.Value + " " + rast.Expression.string()
+	}
 	return rast.Token.Value
 }
