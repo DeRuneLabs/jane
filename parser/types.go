@@ -2,8 +2,8 @@ package parser
 
 import "github.com/De-Rune/jane/package/jane"
 
-func cxxTypeNameFromType(typecode uint8) string {
-	switch typecode {
+func cxxTypeNameFromType(typeCode uint8) string {
+	switch typeCode {
 	case jane.Void:
 		return "void"
 	case jane.Int8:

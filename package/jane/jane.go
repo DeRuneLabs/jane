@@ -1,13 +1,13 @@
 package jane
 
 const (
-	Version      = `@dev_ver 0.0.1`
+	Version      = `@dev_beta 1.0.0`
 	Extension    = `.jn`
-	SettingsFile = "jn.set"
+	SettingsFile = "jane.set"
 	EntryPoint   = "main"
 )
 
 var (
 	ExecutablePath string
-	JnSettings     *JnSet
+	JaneSettings   *JnSet
 )

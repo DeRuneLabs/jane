@@ -15,6 +15,6 @@ func New(f *io.FILE) *Lexer {
 	lexer.File = f
 	lexer.Line = 1
 	lexer.Column = 1
-	lexer.Position = 0
+	lexer.Position = 1
 	return lexer
 }

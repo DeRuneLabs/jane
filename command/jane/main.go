@@ -14,13 +14,13 @@ import (
 
 func help(cmd string) {
 	if cmd != "" {
-		println("this mod can only used as single")
+		println("this module can be only used as single!")
 		return
 	}
 	helpContent := [][]string{
-		{"help", "showing the help"},
-		{"version", "showing version"},
-		{"init", "initialize new project"},
+		{"help", "show help message"},
+		{"version", "show version"},
+		{"init", "intialize new project jane"},
 	}
 	maxlen := len(helpContent[0][0])
 	for _, part := range helpContent {
@@ -46,35 +46,34 @@ func help(cmd string) {
 
 func version(cmd string) {
 	if cmd != "" {
-		println("this mod can only used as single file")
-		return
+		println("this module can only be used as single")
 	}
-	println("jane programming language\n" + jane.Version)
+	println("The Jane Programming Language\n" + jane.Version)
 }
 
-func initProjecT(cmd string) {
+func initProject(cmd string) {
 	if cmd != "" {
-		println("this mod can only be used as single")
+		println("this module can only be used as single")
 		return
 	}
-	error := os.WriteFile(jane.SettingsFile, []byte(`out_name main
+	err := os.WriteFile(jane.SettingsFile, []byte(`out_name main
 cxx_out_dir ./
 cxx_out_name jane.cxx`), 0606)
-	if error != nil {
-		println(error.Error())
+	if err != nil {
+		println(err.Error())
 		return
 	}
-	println("initialize project")
+	println("initialized project")
 }
 
-func proccessCommand(namespace, cmd string) bool {
+func processCommand(namespace, cmd string) bool {
 	switch namespace {
 	case "help":
 		help(cmd)
 	case "version":
 		version(cmd)
 	case "init":
-		initProjecT(cmd)
+		initProject(cmd)
 	default:
 		return false
 	}
@@ -96,26 +95,26 @@ func init() {
 	if index == -1 {
 		index = len(arg)
 	}
-	if proccessCommand(arg[:index], arg[index:]) {
+	if processCommand(arg[:index], arg[index:]) {
 		os.Exit(0)
 	}
 }
 
-func LoadJaneSet() {
-	info, error := os.Stat(jane.SettingsFile)
-	if error != nil || info.IsDir() {
-		println(`JANE settings file ("` + jane.SettingsFile + `") is not found`)
+func loadJnSet() {
+	info, err := os.Stat(jane.SettingsFile)
+	if err != nil || info.IsDir() {
+		println(`Jane settings file ("` + jane.SettingsFile + `") not found`)
 		os.Exit(0)
 	}
-	jane.JnSettings = jane.NewJnSet()
-	bytes, error := os.ReadFile(jane.SettingsFile)
-	if error != nil {
-		println(error.Error())
+	jane.JaneSettings = jane.NewJnSet()
+	bytes, err := os.ReadFile(jane.SettingsFile)
+	if err != nil {
+		println(err.Error())
 		os.Exit(0)
 	}
-	errors := jane.JnSettings.Parse(bytes)
+	errors := jane.JaneSettings.Parse(bytes)
 	if errors != nil {
-		println("Jane settings has error;")
+		println("Jane settings has errors;")
 		for _, err := range errors {
 			println(err.Error())
 		}
@@ -133,12 +132,12 @@ func printErrors(errors []string) {
 var routines *sync.WaitGroup
 
 func main() {
-	f, error := io.GetJn(os.Args[0])
-	if error != nil {
-		println(error.Error())
+	f, err := io.GetJn(os.Args[0])
+	if err != nil {
+		println(err.Error())
 		return
 	}
-	LoadJaneSet()
+	loadJnSet()
 	routines = new(sync.WaitGroup)
 	info := new(parser.ParseFileInfo)
 	info.File = f
@@ -149,5 +148,8 @@ func main() {
 	if info.Errors != nil {
 		printErrors(info.Errors)
 	}
-	os.WriteFile(filepath.Join(jane.JnSettings.Fields["cxx_out_dir"], jane.JnSettings.Fields["cxx_out_name"]), []byte(info.JN_CXX), 0606)
+	os.WriteFile(
+		filepath.Join(
+			jane.JaneSettings.Fields["cxx_out_dir"],
+			jane.JaneSettings.Fields["cxx_out_name"]), []byte(info.JN_CXX), 0606)
 }

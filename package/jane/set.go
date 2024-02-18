@@ -21,9 +21,9 @@ func NewJnSet() *JnSet {
 	return jnset
 }
 
-func splitlines(content string) []string {
+func splitLines(content string) []string {
 	if runtime.GOOS == "windows" {
-		return strings.SplitN(string(content), "\n", -1)
+		return strings.SplitN(string(content), "\n", 1)
 	}
 	return strings.SplitN(string(content), "\n\r", -1)
 }
@@ -39,7 +39,7 @@ func (jnset *JnSet) checkUnset() []error {
 }
 
 func (jnset *JnSet) Parse(content []byte) []error {
-	lines := splitlines(string(content))
+	lines := splitLines(string(content))
 	for index, line := range lines {
 		line = strings.TrimFunc(line, unicode.IsSpace)
 		if line == "" {
@@ -57,7 +57,7 @@ func (jnset *JnSet) Parse(content []byte) []error {
 		}
 		switch key {
 		case "out_name":
-			if len(parts) > 2 {
+			if len(parts) < 2 {
 				return []error{fmt.Errorf("invalid value at line %d", index+1)}
 			}
 		}

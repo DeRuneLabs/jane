@@ -21,13 +21,13 @@ func New(tokens []lexer.Token) *AST {
 	return ast
 }
 
-func (ast *AST) pushErrorToken(token lexer.Token, err string) {
+func (ast *AST) PushErrorToken(token lexer.Token, err string) {
 	message := jane.Errors[err]
 	ast.Errors = append(ast.Errors, fmt.Sprintf("%s:%d %s", token.File.Path, token.Line, message))
 }
 
-func (ast *AST) pushError(err string) {
-	ast.pushErrorToken(ast.Tokens[ast.Position], err)
+func (ast *AST) PushError(err string) {
+	ast.PushErrorToken(ast.Tokens[ast.Position], err)
 }
 
 func (ast *AST) Ended() bool {
@@ -39,9 +39,9 @@ func (ast *AST) Build() {
 		firstToken := ast.Tokens[ast.Position]
 		switch firstToken.Type {
 		case lexer.Name:
-			ast.ProcessName()
+			ast.processName()
 		default:
-			ast.pushError("invalid_syntax")
+			ast.PushError("invalid_syntax")
 		}
 	}
 }
@@ -53,22 +53,119 @@ func (ast *AST) BuildFunction() {
 	function.ReturnType.Type = jane.Void
 	ast.Position++
 	parameters := ast.getRange("(", ")")
+
 	if parameters == nil {
 		return
 	} else if len(parameters) > 0 {
-		ast.pushError("parameters_no_supported")
+		ast.PushError("parameters_not_supported")
 	}
 	if ast.Ended() {
 		ast.Position--
-		ast.pushError("function_body_not_exist")
+		ast.PushError("function_body_not_exist")
+		ast.Position = -1
+		return
+	}
+	token := ast.Tokens[ast.Position]
+	if token.Type == lexer.Type {
+		function.ReturnType.Type = jane.TypeFromName(token.Value)
+		function.ReturnType.Value = token.Value
+		ast.Position++
+		if ast.Ended() {
+			ast.Position--
+			ast.PushError("function_body_not_exist")
+			ast.Position = -1
+			return
+		}
+		token = ast.Tokens[ast.Position]
+	}
+	if token.Type != lexer.Brace || token.Value != "{" {
+		ast.PushError("invalid_syntax")
+		ast.Position = -1
+		return
+	}
+	blockTokens := ast.getRange("{", "}")
+	if blockTokens == nil {
+		ast.PushError("function_body_not_exist")
+		ast.Position = -1
+		return
+	}
+	function.Block = ast.BuildBlock(blockTokens)
+	ast.Tree = append(ast.Tree, Object{
+		Token: function.Token,
+		Type:  Statement,
+		Value: StatementAST{
+			Token: function.Token,
+			Type:  StatementFunction,
+			Value: function,
+		},
+	})
+}
+
+func IsStatement(before, current lexer.Token) bool {
+	return current.Type == lexer.SemiColon || before.Line < current.Line
+}
+
+func (ast *AST) BuildBlock(tokens []lexer.Token) (b BlockAST) {
+	braceCount := 0
+	oldStatementPoint := 0
+	for index, token := range tokens {
+		if token.Type == lexer.Brace {
+			if token.Value == "{" {
+				braceCount++
+			} else {
+				braceCount--
+			}
+		}
+		if braceCount < 0 {
+			continue
+		}
+		for index < len(tokens)-1 {
+			if index == 0 && !IsStatement(token, token) {
+				continue
+			} else if index > 0 && !IsStatement(tokens[index-1], token) {
+				continue
+			}
+		}
+		if token.Type != lexer.SemiColon {
+			index++
+		}
+		if index-oldStatementPoint == 0 {
+			continue
+		}
+		b.Content = append(b.Content, ast.BuildStatement(tokens[oldStatementPoint:index]))
+		oldStatementPoint = index + 1
+	}
+	return
+}
+func (ast *AST) BuildStatement(tokens []lexer.Token) (s StatementAST) {
+	firstToken := tokens[0]
+	switch firstToken.Type {
+	case lexer.Return:
+		return ast.BuildReturnStatement(tokens)
+	default:
+		ast.PushErrorToken(firstToken, "invalid_syntax")
+	}
+	return
+}
+
+func (ast *AST) BuildReturnStatement(tokens []lexer.Token) StatementAST {
+	var returnModel ReturnAST
+	returnModel.Token = tokens[0]
+	if len(tokens) > 1 {
+		ast.PushErrorToken(tokens[1], "not_support_expression")
+	}
+	return StatementAST{
+		Token: returnModel.Token,
+		Type:  StatementReturn,
+		Value: returnModel,
 	}
 }
 
-func (ast *AST) ProcessName() {
+func (ast *AST) processName() {
 	ast.Position++
 	if ast.Ended() {
 		ast.Position--
-		ast.pushError("invalid_syntax")
+		ast.PushError("invalid_syntax")
 		return
 	}
 	ast.Position--
@@ -79,7 +176,7 @@ func (ast *AST) ProcessName() {
 		case "(":
 			ast.BuildFunction()
 		default:
-			ast.pushError("invalid_syntax")
+			ast.PushError("invalid_syntax")
 		}
 	}
 }
@@ -103,7 +200,7 @@ func (ast *AST) getRange(open, close string) []lexer.Token {
 		}
 		if braceCount > 0 {
 			ast.Position--
-			ast.pushError("brace_not_closed")
+			ast.PushError("brace_not_closed")
 			ast.Position = -1
 			return nil
 		}

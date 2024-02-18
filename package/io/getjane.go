@@ -2,15 +2,14 @@ package io
 
 import (
 	"errors"
+	"github.com/De-Rune/jane/package/jane"
 	"os"
 	"path/filepath"
-
-	"github.com/De-Rune/jane/package/jane"
 )
 
 func GetJn(path string) (*FILE, error) {
 	if filepath.Ext(path) != jane.Extension {
-		return nil, errors.New(jane.Errors[`file_not_jn`] + path)
+		return nil, errors.New(jane.Errors[`file_not_jane`] + path)
 	}
 	bytes, err := os.ReadFile(path)
 	if err != nil {

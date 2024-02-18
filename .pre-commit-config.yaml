@@ -2,13 +2,10 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
-      - id: check-executables-have-shebangs
-      - id: check-toml
       - id: check-yaml
       - id: end-of-file-fixer
         types: [go]
       - id: trailing-whitespace
-      - id: requirements-txt-fixer
 
   - repo: https://github.com/dnephin/pre-commit-golang
     rev: v0.5.0

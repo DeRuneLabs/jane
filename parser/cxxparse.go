@@ -43,10 +43,8 @@ func (cp CxxParser) String() string {
 
 func (cp *CxxParser) Parse() {
 	astModel := ast.New(cp.Tokens)
-	astModel.Build()
 	if astModel.Errors != nil {
 		cp.PFI.Errors = append(cp.PFI.Errors, astModel.Errors...)
-		return
 	}
 	for _, model := range astModel.Tree {
 		switch model.Type {
@@ -69,7 +67,7 @@ func (cp *CxxParser) ParseStatement(s ast.StatementAST) {
 }
 
 func (cp *CxxParser) ParseFunction(fnAst ast.FunctionAST) {
-	if function := cp.functionByName(fnAst.Name); function != nil {
+	if function := cp.functionByBName(fnAst.Name); function != nil {
 		cp.PushErrorToken(fnAst.Token, "exist_name")
 		return
 	}
@@ -94,7 +92,7 @@ func (cp *CxxParser) checkFunctionReturn(fn *Function) {
 	cp.PushErrorToken(fn.Token, "missing_return")
 }
 
-func (cp *CxxParser) functionByName(name string) *Function {
+func (cp *CxxParser) functionByBName(name string) *Function {
 	for _, function := range cp.Functions {
 		if function.Name == name {
 			return function
@@ -104,7 +102,7 @@ func (cp *CxxParser) functionByName(name string) *Function {
 }
 
 func (cp *CxxParser) finalCheck() {
-	if cp.functionByName(jane.EntryPoint) == nil {
+	if cp.functionByBName(jane.EntryPoint) == nil {
 		cp.PushError("no_entry_point")
 	}
 }

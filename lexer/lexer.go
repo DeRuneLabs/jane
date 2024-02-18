@@ -2,15 +2,16 @@ package lexer
 
 import (
 	"fmt"
-	"github.com/De-Rune/jane/package/jane"
 	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/De-Rune/jane/package/jane"
 )
 
-func (lexer *Lexer) pushError(error string) {
-	lexer.Errors = append(lexer.Errors, fmt.Sprintf("%s %d:%d %s", lexer.File.Path, lexer.Line, lexer.Column, jane.Errors[error]))
+func (lexer *Lexer) pushError(err string) {
+	lexer.Errors = append(lexer.Errors, fmt.Sprintf("%s %d:%d %s", lexer.File.Path, lexer.Line, lexer.Column, jane.Errors[err]))
 }
 
 func (lexer *Lexer) Tokenize() []Token {
@@ -29,7 +30,7 @@ func isKeyword(lexerline, kw string) bool {
 	return regexp.MustCompile("^" + kw + `(\s+|$|[[:punct:]])`).MatchString(lexerline)
 }
 
-func (lexer *Lexer) lexName(lexerline string) string {
+func (lexer *Lexer) lexerName(lexerline string) string {
 	if lexerline[0] != '_' {
 		r, _ := utf8.DecodeRuneInString(lexerline)
 		if !unicode.IsLetter(r) {
@@ -75,10 +76,8 @@ func (lexer *Lexer) Token() Token {
 	if lexerline == "" {
 		return tk
 	}
-
 	tk.Column = lexer.Column
 	tk.Line = lexer.Line
-
 	switch {
 	case lexerline[0] == ';':
 		tk.Value = ";"
@@ -137,7 +136,7 @@ func (lexer *Lexer) Token() Token {
 		tk.Type = Return
 		lexer.Position += 6
 	default:
-		if chk := lexer.lexName(lexerline); chk != "" {
+		if chk := lexer.lexerName(lexerline); chk != "" {
 			tk.Value = chk
 			tk.Type = Name
 			break

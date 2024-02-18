@@ -2,9 +2,10 @@ package parser
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/De-Rune/jane/ast"
 	"github.com/De-Rune/jane/lexer"
-	"strings"
 )
 
 type Function struct {
