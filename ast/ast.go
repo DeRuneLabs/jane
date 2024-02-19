@@ -185,7 +185,8 @@ func (ast *AST) BuildReturnStatement(tokens []lexer.Token) StatementAST {
 }
 
 func (ast *AST) BuildExpression(tokens []lexer.Token) (e ExpressionAST) {
-	return ast.processExpression(tokens)
+	_, e = ast.processExpression(tokens)
+	return
 }
 
 func (ast *AST) processSingleValuePart(token lexer.Token) (result ValueAST) {
@@ -212,6 +213,64 @@ func (ast *AST) processSingleValuePart(token lexer.Token) (result ValueAST) {
 		result.Value = token.Value
 	}
 	return
+}
+
+func (ast *AST) processValuePart(tokens []lexer.Token) (result ValueAST) {
+	if len(tokens) == 1 {
+		result = ast.processSingleValuePart(tokens[0])
+		if result.Type != NA {
+			goto end
+		}
+		switch token := tokens[len(tokens)-1]; token.Type {
+		case lexer.Brace:
+			switch token.Value {
+			case ")":
+				return ast.processParenthesesValuePart(tokens)
+			}
+		default:
+			ast.PushErrorToken(tokens[0], "invalid_syntax")
+		}
+	}
+end:
+	return
+}
+
+func (ast *AST) processParenthesesValuePart(tokens []lexer.Token) ValueAST {
+	var valueTokens []lexer.Token
+	j := len(tokens) - 1
+	braceCount := 0
+	for ; j >= 0; j-- {
+		token := tokens[j]
+		if token.Type != lexer.Brace {
+			continue
+		}
+		switch token.Value {
+		case ")":
+			braceCount++
+		case "(":
+			braceCount--
+		}
+		if braceCount > 0 {
+			continue
+		}
+		valueTokens = tokens[:j]
+		break
+	}
+	if len(valueTokens) == 0 && braceCount == 0 {
+		tk := tokens[0]
+		tokens = tokens[1 : len(tokens)-1]
+		if len(tokens) == 0 {
+			ast.PushErrorToken(tk, "invalid_syntax")
+		}
+		value, _ := ast.processExpression(tokens)
+		return value
+	}
+	val := ast.processValuePart(valueTokens)
+	switch val.Type {
+	default:
+		ast.PushErrorToken(tokens[len(valueTokens)], "invalid_syntax")
+	}
+	return ValueAST{}
 }
 
 type arithmeticProcess struct {
@@ -257,34 +316,17 @@ func (p arithmeticProcess) solve() (value ValueAST) {
 	return
 }
 
-func (ast *AST) processValuePart(tokens []lexer.Token) (result ValueAST) {
-	if len(tokens) == 1 {
-		result = ast.processSingleValuePart(tokens[0])
-		if result.Type != NA {
-			goto end
-		}
-		switch token := tokens[len(tokens)-1]; token.Type {
-		default:
-			ast.PushErrorToken(tokens[0], "invalid_syntax")
-		}
-	}
-end:
-	return
-}
-
-func (ast *AST) processExpression(tokens []lexer.Token) ExpressionAST {
+func (ast *AST) processExpression(tokens []lexer.Token) (ValueAST, ExpressionAST) {
 	processes := ast.getExpressionProcesses(tokens)
-	if len(processes) == 1 {
-		value := ast.processValuePart(processes[0])
-		return ExpressionAST{
-			Content: []ExpressionNode{{
-				Content: value,
-				Type:    ExpressionNodeValue,
-			}},
-			Type: value.Type,
-		}
+	if processes == nil {
+		return ValueAST{}, ExpressionAST{}
 	}
 	result := buildExpressionByProcesses(processes)
+	if len(processes) == 1 {
+		value := ast.processValuePart(processes[0])
+		result.Type = value.Type
+		return value, result
+	}
 	var process arithmeticProcess
 	var value ValueAST
 	process.ast = ast
@@ -340,7 +382,7 @@ func (ast *AST) processExpression(tokens []lexer.Token) ExpressionAST {
 		j = ast.nextOperator(processes)
 	}
 	result.Type = value.Type
-	return result
+	return value, result
 }
 
 func buildExpressionByProcesses(processes [][]lexer.Token) ExpressionAST {

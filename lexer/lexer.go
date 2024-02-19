@@ -2,7 +2,6 @@ package lexer
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -27,7 +26,18 @@ func (lexer *Lexer) Tokenize() []Token {
 }
 
 func isKeyword(lexerline, kw string) bool {
-	return regexp.MustCompile("^" + kw + `(\s+|$|[[:punct:]])`).MatchString(lexerline)
+	if !strings.HasPrefix(lexerline, kw) {
+		return false
+	}
+	lexerline = lexerline[len(kw):]
+	if lexerline == "" {
+		return true
+	} else if unicode.IsSpace(rune(lexerline[0])) {
+		return true
+	} else if unicode.IsPunct(rune(lexerline[0])) {
+		return true
+	}
+	return false
 }
 
 func (lexer *Lexer) lexerName(lexerline string) string {

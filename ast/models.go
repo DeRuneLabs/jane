@@ -52,9 +52,9 @@ type ExpressionAST struct {
 func (e ExpressionAST) string() string {
 	var sb strings.Builder
 	for _, node := range e.Content {
-		sb.WriteString(node.String())
+		sb.WriteString(node.String() + " ")
 	}
-	return sb.String()
+	return sb.String()[:sb.Len()-1]
 }
 
 type ExpressionNode struct {
