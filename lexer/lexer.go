@@ -110,6 +110,21 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "}"
 		tk.Type = Brace
 		lexer.Position++
+	case lexerline[0] == '+':
+		tk.Value = "+"
+		tk.Type = Operator
+		lexer.Position++
+	case lexerline[0] == '-':
+		tk.Value = "-"
+		tk.Type = Operator
+	case lexerline[0] == '*':
+		tk.Value = "*"
+		tk.Type = Operator
+		lexer.Position++
+	case lexerline[0] == '/':
+		tk.Value = "/"
+		tk.Type = Operator
+		lexer.Position++
 	case isKeyword(lexerline, "int8"):
 		tk.Value = "int8"
 		tk.Type = Type

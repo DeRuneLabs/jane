@@ -68,17 +68,30 @@ func (n ExpressionNode) String() string {
 
 type ValueAST struct {
 	Token lexer.Token
-	Data  string
+	Value string
 	Type  uint8
 }
 
 func (v ValueAST) String() string {
-	return v.Data
+	return v.Value
+}
+
+type BraceAST struct {
+	Token lexer.Token
+	Value string
+}
+
+func (b BraceAST) String() string {
+	return b.Value
 }
 
 type OperatorAST struct {
 	Token lexer.Token
 	Value string
+}
+
+func (o OperatorAST) String() string {
+	return o.Value
 }
 
 type ReturnAST struct {

@@ -87,8 +87,9 @@ func (cp *CxxParser) checkFunctionReturn(fn *Function) {
 	miss := true
 	for _, s := range fn.Block.Content {
 		if s.Type == ast.StatementReturn {
-			if !checkStrongType(s.Value.(ast.ReturnAST).Expression.Type, fn.ReturnType) {
-				cp.PushErrorToken(s.Token, "incompatible_value")
+			if !jane.TypesAreCompatible(
+				s.Value.(ast.ReturnAST).Expression.Type, fn.ReturnType) {
+				cp.PushErrorToken(s.Token, "incompatible_type")
 			}
 			miss = false
 		}
@@ -96,27 +97,6 @@ func (cp *CxxParser) checkFunctionReturn(fn *Function) {
 	if miss {
 		cp.PushErrorToken(fn.Token, "missing_return")
 	}
-}
-
-func checkStrongType(t1, t2 uint8) bool {
-	switch t1 {
-	case jane.Int8:
-		return t2 == jane.Int8 ||
-			t2 == jane.Int16 ||
-			t2 == jane.Int32 ||
-			t2 == jane.Int64
-
-	case jane.Int16:
-		return t2 == jane.Int16 ||
-			t2 == jane.Int32 ||
-			t2 == jane.Int64
-	case jane.Int32:
-		return t2 == jane.Int32 ||
-			t2 == jane.Int64
-	case jane.Int64:
-		return t2 == jane.Int64
-	}
-	return false
 }
 
 func (cp *CxxParser) functionByBName(name string) *Function {
