@@ -171,6 +171,18 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "return"
 		tk.Type = Return
 		lexer.Position += 6
+	case isKeyword(lexerline, "bool"):
+		tk.Value = "bool"
+		tk.Type = Type
+		lexer.Position += 4
+	case isKeyword(lexerline, "true"):
+		tk.Value = "true"
+		tk.Type = Value
+		lexer.Position += 4
+	case isKeyword(lexerline, "false"):
+		tk.Value = "false"
+		tk.Type = Value
+		lexer.Position += 5
 	default:
 		lex := lexer.lexerName(lexerline)
 		if lex != "" {

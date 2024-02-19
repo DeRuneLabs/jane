@@ -200,17 +200,18 @@ func (ast *AST) processSingleValuePart(token lexer.Token) (result ValueAST) {
 		} else if IsBoolean(token.Value) {
 			result.Value = token.Value
 			result.Type = jane.Boolean
-		}
-		if strings.Contains(token.Value, ".") || strings.ContainsAny(token.Value, "eE") {
-			result.Type = jane.Float64
 		} else {
-			result.Type = jane.Float32
-			ok := CheckBitInt(token.Value, 32)
-			if !ok {
-				result.Type = jane.Int64
+			if strings.Contains(token.Value, ".") || strings.ContainsAny(token.Value, "eE") {
+				result.Type = jane.Float64
+			} else {
+				result.Type = jane.Int32
+				ok := CheckBitInt(token.Value, 32)
+				if !ok {
+					result.Type = jane.Int64
+				}
 			}
+			result.Value = token.Value
 		}
-		result.Value = token.Value
 	}
 	return
 }

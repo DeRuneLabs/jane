@@ -22,6 +22,12 @@ func cxxTypeNameFromType(typeCode uint8) string {
 		return "unsigned int"
 	case jane.UInt64:
 		return "unsigned long"
+	case jane.Boolean:
+		return "bool"
+	case jane.Float32:
+		return "float"
+	case jane.Float64:
+		return "double"
 	}
 	return ""
 }
