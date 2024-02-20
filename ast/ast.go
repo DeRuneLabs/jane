@@ -41,8 +41,8 @@ func (ast *AST) Build() {
 	for ast.Position != -1 && !ast.Ended() {
 		firstToken := ast.Tokens[ast.Position]
 		switch firstToken.Type {
-		case lexer.Name:
-			ast.processName()
+		case lexer.Function:
+			ast.BuildFunction()
 		default:
 			ast.PushError("invalid_syntax")
 		}
@@ -50,6 +50,7 @@ func (ast *AST) Build() {
 }
 
 func (ast *AST) BuildFunction() {
+	ast.Position++
 	var function FunctionAST
 	function.Token = ast.Tokens[ast.Position]
 	function.Name = function.Token.Value
@@ -348,26 +349,6 @@ func (ast *AST) checkExpressionToken(token lexer.Token) {
 		}
 		if !result {
 			ast.PushErrorToken(token, "invalid_numeric_range")
-		}
-	}
-}
-
-func (ast *AST) processName() {
-	ast.Position++
-	if ast.Ended() {
-		ast.Position--
-		ast.PushError("invalid_syntax")
-		return
-	}
-	ast.Position--
-	secondToken := ast.Tokens[ast.Position-1]
-	switch secondToken.Type {
-	case lexer.Brace:
-		switch secondToken.Value {
-		case "(":
-			ast.BuildFunction()
-		default:
-			ast.PushError("invalid_syntax")
 		}
 	}
 }

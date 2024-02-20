@@ -139,6 +139,9 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = ","
 		tk.Type = Comma
 		lexer.Position++
+	case isKeyword(lexerline, "fun"):
+		tk.Value = "function"
+		tk.Type = Function
 	case isKeyword(lexerline, "int8"):
 		tk.Value = "int8"
 		tk.Type = Type

@@ -11,3 +11,23 @@ mission to be advance, readable and good choic for system programming
 | `command` | main and compile files      |
 | `parser`  | interpreter                 |
 | `package` | uitlity package jane        |
+
+example jane code
+
+```
+function main() int32 {
+    return 0;
+}
+```
+
+will be transpile to cpp output which is
+
+```cpp
+#include <iostream>
+#include <locale.h>
+
+int main() {
+    setlocale(0x0, "");
+    return 0;
+}
+```
