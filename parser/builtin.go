@@ -5,7 +5,7 @@ import (
 	"github.com/De-Rune/jane/package/jane"
 )
 
-var builtinFunctions = []*Function{
+var builtinFunctions = []*function{
 	{
 		Name:       "print",
 		ReturnType: jane.Void,

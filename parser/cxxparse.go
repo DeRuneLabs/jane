@@ -11,12 +11,12 @@ import (
 )
 
 type CxxParser struct {
-	Functions       []*Function
-	GlobalVariables []*Variable
-	BlockVariables  []*Variable
-
-	Tokens []lexer.Token
-	PFI    *ParseFileInfo
+	tags            []ast.TagAST
+	Functions       []*function
+	GlobalVariables []*variable
+	BlockVariables  []*variable
+	Tokens          []lexer.Token
+	PFI             *ParseFileInfo
 }
 
 func NewParser(tokens []lexer.Token, PFI *ParseFileInfo) *CxxParser {
@@ -53,6 +53,8 @@ func (cp *CxxParser) Parse() {
 	}
 	for _, model := range astModel.Tree {
 		switch model.Type {
+		case ast.Tag:
+			cp.pushTag(model.Value.(ast.TagAST))
 		case ast.Statement:
 			cp.ParseStatement(model.Value.(ast.StatementAST))
 		default:
@@ -60,6 +62,15 @@ func (cp *CxxParser) Parse() {
 		}
 	}
 	cp.finalCheck()
+}
+
+func (cp *CxxParser) pushTag(t ast.TagAST) {
+	switch t.Token.Type {
+	case lexer.Inline:
+	default:
+		cp.PushErrorToken(t.Token, "invalid_syntax")
+	}
+	cp.tags = append(cp.tags, t)
 }
 
 func (cp *CxxParser) ParseStatement(s ast.StatementAST) {
@@ -76,19 +87,31 @@ func (cp *CxxParser) ParseFunction(funAst ast.FunctionAST) {
 		cp.PushErrorToken(funAst.Token, "exist_name")
 		return
 	}
-	fn := new(Function)
-	fn.Token = funAst.Token
-	fn.Name = funAst.Name
-	fn.ReturnType = funAst.ReturnType.Type
-	fn.Block = funAst.Block
-	fn.Params = funAst.Params
-	cp.Functions = append(cp.Functions, fn)
+	fun := new(function)
+	fun.Token = funAst.Token
+	fun.Name = funAst.Name
+	fun.ReturnType = funAst.ReturnType.Type
+	fun.Block = funAst.Block
+	fun.Params = funAst.Params
+	fun.Tags = nil
+	cp.checkFunctionTags(fun.Tags)
+	cp.Functions = append(cp.Functions, fun)
 }
 
-func variablesFromParameters(params []ast.ParameterAST) []*Variable {
-	var vars []*Variable
+func (cp *CxxParser) checkFunctionTags(tags []ast.TagAST) {
+	for _, tag := range tags {
+		switch tag.Token.Type {
+		case lexer.Inline:
+		default:
+			cp.PushErrorToken(tag.Token, "invalid_tag")
+		}
+	}
+}
+
+func variablesFromParameters(params []ast.ParameterAST) []*variable {
+	var vars []*variable
 	for _, param := range params {
-		variable := new(Variable)
+		variable := new(variable)
 		variable.Name = param.Name
 		variable.Token = param.Token
 		variable.Type = param.Type.Type
@@ -96,7 +119,7 @@ func variablesFromParameters(params []ast.ParameterAST) []*Variable {
 	return vars
 }
 
-func (cp *CxxParser) checkFunctionReturn(fun *Function) {
+func (cp *CxxParser) checkFunctionReturn(fun *function) {
 	if fun.ReturnType == jane.Void {
 		return
 	}
@@ -115,7 +138,7 @@ func (cp *CxxParser) checkFunctionReturn(fun *Function) {
 	}
 }
 
-func (cp *CxxParser) functionByName(name string) *Function {
+func (cp *CxxParser) functionByName(name string) *function {
 	for _, fun := range builtinFunctions {
 		if fun.Name == name {
 			return fun
@@ -129,7 +152,7 @@ func (cp *CxxParser) functionByName(name string) *Function {
 	return nil
 }
 
-func (cp *CxxParser) variableByName(name string) *Variable {
+func (cp *CxxParser) variableByName(name string) *variable {
 	for _, variable := range cp.BlockVariables {
 		if variable.Name == name {
 			return variable
@@ -417,7 +440,7 @@ func (cp *CxxParser) processParenthesesValuePart(tokens []lexer.Token) ast.Value
 	return value
 }
 
-func (cp *CxxParser) parseFunctionCallStatement(fun *Function, tokens []lexer.Token) {
+func (cp *CxxParser) parseFunctionCallStatement(fun *function, tokens []lexer.Token) {
 	errToken := tokens[0]
 	tokens = cp.getRangeTokens("(", ")", tokens)
 	if tokens == nil {
@@ -428,7 +451,7 @@ func (cp *CxxParser) parseFunctionCallStatement(fun *Function, tokens []lexer.To
 	}
 }
 
-func (cp *CxxParser) parseArgs(fun *Function, tokens []lexer.Token) int {
+func (cp *CxxParser) parseArgs(fun *function, tokens []lexer.Token) int {
 	last := 0
 	braceCount := 0
 	count := 0
@@ -459,7 +482,7 @@ func (cp *CxxParser) parseArgs(fun *Function, tokens []lexer.Token) int {
 	return count
 }
 
-func (cp *CxxParser) parseArg(fun *Function, count int, tokens []lexer.Token, err lexer.Token) {
+func (cp *CxxParser) parseArg(fun *function, count int, tokens []lexer.Token, err lexer.Token) {
 	if len(tokens) == 0 {
 		cp.PushErrorToken(err, "invalid_syntax")
 		return
