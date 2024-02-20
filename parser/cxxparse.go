@@ -71,17 +71,17 @@ func (cp *CxxParser) ParseStatement(s ast.StatementAST) {
 	}
 }
 
-func (cp *CxxParser) ParseFunction(fnAst ast.FunctionAST) {
-	if token := cp.existName(fnAst.Name); token.Type != ast.NA {
-		cp.PushErrorToken(fnAst.Token, "exist_name")
+func (cp *CxxParser) ParseFunction(funAst ast.FunctionAST) {
+	if token := cp.existName(funAst.Name); token.Type != ast.NA {
+		cp.PushErrorToken(funAst.Token, "exist_name")
 		return
 	}
 	fn := new(Function)
-	fn.Token = fnAst.Token
-	fn.Name = fnAst.Name
-	fn.ReturnType = fnAst.ReturnType.Type
-	fn.Block = fnAst.Block
-	fn.Params = fnAst.Params
+	fn.Token = funAst.Token
+	fn.Name = funAst.Name
+	fn.ReturnType = funAst.ReturnType.Type
+	fn.Block = funAst.Block
+	fn.Params = funAst.Params
 	cp.Functions = append(cp.Functions, fn)
 }
 
@@ -96,29 +96,29 @@ func variablesFromParameters(params []ast.ParameterAST) []*Variable {
 	return vars
 }
 
-func (cp *CxxParser) checkFunctionReturn(fn *Function) {
-	if fn.ReturnType == jane.Void {
+func (cp *CxxParser) checkFunctionReturn(fun *Function) {
+	if fun.ReturnType == jane.Void {
 		return
 	}
 	miss := true
-	for _, s := range fn.Block.Content {
+	for _, s := range fun.Block.Content {
 		if s.Type == ast.StatementReturn {
 			value := cp.computeExpression(s.Value.(ast.ReturnAST).Expression)
-			if !jane.TypesAreCompatible(value.Type, fn.ReturnType) {
+			if !jane.TypesAreCompatible(value.Type, fun.ReturnType, true) {
 				cp.PushErrorToken(s.Token, "incompatible_type")
 			}
 			miss = false
 		}
 	}
 	if miss {
-		cp.PushErrorToken(fn.Token, "missing_return")
+		cp.PushErrorToken(fun.Token, "missing_return")
 	}
 }
 
 func (cp *CxxParser) functionByName(name string) *Function {
-	for _, function := range cp.Functions {
-		if function.Name == name {
-			return function
+	for _, fun := range cp.Functions {
+		if fun.Name == name {
+			return fun
 		}
 	}
 	return nil
@@ -139,9 +139,9 @@ func (cp *CxxParser) variableByName(name string) *Variable {
 }
 
 func (cp *CxxParser) existName(name string) lexer.Token {
-	fn := cp.functionByName(name)
-	if fn != nil {
-		return fn.Token
+	fun := cp.functionByName(name)
+	if fun != nil {
+		return fun.Token
 	}
 	return lexer.Token{}
 }
@@ -150,9 +150,9 @@ func (cp *CxxParser) finalCheck() {
 	if cp.functionByName(jane.EntryPoint) == nil {
 		cp.PushError("no_entry_point")
 	}
-	for _, fn := range cp.Functions {
-		cp.BlockVariables = variablesFromParameters(fn.Params)
-		cp.checkFunctionReturn(fn)
+	for _, fun := range cp.Functions {
+		cp.BlockVariables = variablesFromParameters(fun.Params)
+		cp.checkFunctionReturn(fun)
 	}
 }
 
@@ -291,8 +291,10 @@ func (p arithmeticProcess) solveString() (value ast.ValueAST) {
 
 func (p arithmeticProcess) solve() (value ast.ValueAST) {
 	switch {
-	case p.leftVal.Type == jane.Boolean || p.rightVal.Type == jane.Boolean:
-		p.cp.PushErrorToken(p.operator, "operator_notfor_booleans")
+	case p.leftVal.Type == jane.Any || p.rightVal.Type == jane.Any:
+		p.cp.PushErrorToken(p.operator, "operator_notfor_any")
+	case p.leftVal.Type == jane.Bool || p.rightVal.Type == jane.Bool:
+		p.cp.PushErrorToken(p.operator, "operator_notfor_boolean")
 		return
 	case p.leftVal.Type == jane.String || p.rightVal.Type == jane.String:
 		return p.solveString()
@@ -316,11 +318,11 @@ func (cp *CxxParser) processSingleValuePart(token lexer.Token) (result ast.Value
 	switch token.Type {
 	case lexer.Value:
 		if IsString(token.Value) {
-			result.Value = token.Value
+			result.Value = "L" + token.Value
 			result.Type = jane.String
 		} else if IsBoolean(token.Value) {
 			result.Value = token.Value
-			result.Type = jane.Boolean
+			result.Type = jane.Bool
 		} else {
 			if strings.Contains(token.Value, ".") || strings.ContainsAny(token.Value, "eE") {
 				result.Type = jane.Float64
@@ -401,27 +403,27 @@ func (cp *CxxParser) processParenthesesValuePart(tokens []lexer.Token) ast.Value
 	value := cp.processValuePart(valueTokens)
 	switch value.Type {
 	case functionName:
-		fn := cp.functionByName(value.Value)
-		cp.parseFunctionCallStatement(fn, tokens[len(valueTokens):])
-		value.Type = fn.ReturnType
+		fun := cp.functionByName(value.Value)
+		cp.parseFunctionCallStatement(fun, tokens[len(valueTokens):])
+		value.Type = fun.ReturnType
 	default:
 		cp.PushErrorToken(tokens[len(valueTokens)], "invalid_syntax")
 	}
 	return value
 }
 
-func (cp *CxxParser) parseFunctionCallStatement(fn *Function, tokens []lexer.Token) {
+func (cp *CxxParser) parseFunctionCallStatement(fun *Function, tokens []lexer.Token) {
 	errToken := tokens[0]
 	tokens = cp.getRangeTokens("(", ")", tokens)
 	if tokens == nil {
 		tokens = make([]lexer.Token, 0)
 	}
-	if cp.parseArgs(fn, tokens) < len(fn.Params) {
+	if cp.parseArgs(fun, tokens) < len(fun.Params) {
 		cp.PushErrorToken(errToken, "argument_missing")
 	}
 }
 
-func (cp *CxxParser) parseArgs(fn *Function, tokens []lexer.Token) int {
+func (cp *CxxParser) parseArgs(fun *Function, tokens []lexer.Token) int {
 	last := 0
 	braceCount := 0
 	count := 0
@@ -438,30 +440,30 @@ func (cp *CxxParser) parseArgs(fn *Function, tokens []lexer.Token) int {
 			continue
 		}
 		count++
-		cp.parseArg(fn, count, tokens[last:index], token)
+		cp.parseArg(fun, count, tokens[last:index], token)
 		last = index + 1
 	}
 	if last < len(tokens) {
 		count++
 		if last == 0 {
-			cp.parseArg(fn, count, tokens[last:], tokens[last])
+			cp.parseArg(fun, count, tokens[last:], tokens[last])
 		} else {
-			cp.parseArg(fn, count, tokens[last:], tokens[last-1])
+			cp.parseArg(fun, count, tokens[last:], tokens[last-1])
 		}
 	}
 	return count
 }
 
-func (cp *CxxParser) parseArg(fn *Function, count int, tokens []lexer.Token, err lexer.Token) {
+func (cp *CxxParser) parseArg(fun *Function, count int, tokens []lexer.Token, err lexer.Token) {
 	if len(tokens) == 0 {
 		cp.PushErrorToken(err, "invalid_syntax")
 		return
 	}
-	if count > len(fn.Params) {
+	if count > len(fun.Params) {
 		cp.PushErrorToken(err, "argument_overflow")
 		return
 	}
-	if !jane.TypesAreCompatible(cp.computeTokens(tokens).Type, fn.Params[count-1].Type.Type) {
+	if !jane.TypesAreCompatible(cp.computeTokens(tokens).Type, fun.Params[count-1].Type.Type, false) {
 		cp.PushErrorToken(err, "incompatible_type")
 	}
 }

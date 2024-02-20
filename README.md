@@ -26,6 +26,8 @@ will be transpile to cpp output which is
 #include <iostream>
 #include <locale.h>
 
+template <typename any>
+
 int main() {
     setlocale(0x0, "");
     return 0;

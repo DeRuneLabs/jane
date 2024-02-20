@@ -142,6 +142,10 @@ func (lexer *Lexer) Token() Token {
 	case isKeyword(lexerline, "fun"):
 		tk.Value = "function"
 		tk.Type = Function
+	case isKeyword(lexerline, "any"):
+		tk.Value = "any"
+		tk.Type = Type
+		lexer.Position += 3
 	case isKeyword(lexerline, "int8"):
 		tk.Value = "int8"
 		tk.Type = Type
