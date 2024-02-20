@@ -9,12 +9,7 @@ import (
 )
 
 const entryPointStandard = `
-  // Entry point standard codes.
-#if WIN32
-  _setmode(0x1, 0x40000);
-#else
-  setmode(0x1, 0x40000);
-#endif
+  setlocale(0x0, "");
 `
 
 type Function struct {
