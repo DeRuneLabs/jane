@@ -36,6 +36,10 @@ func (cp *CxxParser) PushError(err string) {
 }
 
 func (cp CxxParser) String() string {
+	return cp.Cxx()
+}
+
+func (cp CxxParser) Cxx() string {
 	var sb strings.Builder
 	for _, function := range cp.Functions {
 		sb.WriteString(function.String())
@@ -90,7 +94,7 @@ func (cp *CxxParser) ParseFunction(funAst ast.FunctionAST) {
 	fun := new(function)
 	fun.Token = funAst.Token
 	fun.Name = funAst.Name
-	fun.ReturnType = funAst.ReturnType.Type
+	fun.ReturnType = funAst.ReturnType
 	fun.Block = funAst.Block
 	fun.Params = funAst.Params
 	fun.Tags = nil
@@ -120,20 +124,28 @@ func variablesFromParameters(params []ast.ParameterAST) []*variable {
 }
 
 func (cp *CxxParser) checkFunctionReturn(fun *function) {
-	if fun.ReturnType == jane.Void {
-		return
-	}
 	miss := true
 	for _, s := range fun.Block.Content {
 		if s.Type == ast.StatementReturn {
-			value := cp.computeExpression(s.Value.(ast.ReturnAST).Expression)
-			if !jane.TypesAreCompatible(value.Type, fun.ReturnType, true) {
-				cp.PushErrorToken(s.Token, "incompatible_type")
+			retAST := s.Value.(ast.ReturnAST)
+			if len(retAST.Expression.Tokens) == 0 {
+				if fun.ReturnType.Type != jane.Void {
+					cp.PushErrorToken(retAST.Token, "require_return_value")
+				}
+			} else {
+				if fun.ReturnType.Type == jane.Void {
+					cp.PushErrorToken(retAST.Token, "void_function_return_value")
+				} else {
+					value := cp.computeExpression(retAST.Expression)
+					if !jane.TypesAreCompatible(value.Type, fun.ReturnType.Type, true) {
+						cp.PushErrorToken(retAST.Token, "incompatible_type")
+					}
+				}
 			}
 			miss = false
 		}
 	}
-	if miss {
+	if miss && fun.ReturnType.Type != jane.Void {
 		cp.PushErrorToken(fun.Token, "missing_return")
 	}
 }
@@ -307,7 +319,7 @@ func (p arithmeticProcess) solveString() (value ast.ValueAST) {
 		p.cp.PushErrorToken(p.operator, "invalid_data_types")
 		return
 	}
-	value.Type = jane.String
+	value.Type = jane.Str
 	switch p.operator.Value {
 	case "+":
 		value.Value = p.leftVal.String() + p.rightVal.String()
@@ -324,7 +336,7 @@ func (p arithmeticProcess) solve() (value ast.ValueAST) {
 	case p.leftVal.Type == jane.Bool || p.rightVal.Type == jane.Bool:
 		p.cp.PushErrorToken(p.operator, "operator_notfor_boolean")
 		return
-	case p.leftVal.Type == jane.String || p.rightVal.Type == jane.String:
+	case p.leftVal.Type == jane.Str || p.rightVal.Type == jane.Str:
 		return p.solveString()
 	}
 	if jane.IsSignedNumericType(p.leftVal.Type) != jane.IsSignedNumericType(p.rightVal.Type) {
@@ -347,7 +359,7 @@ func (cp *CxxParser) processSingleValuePart(token lexer.Token) (result ast.Value
 	case lexer.Value:
 		if IsString(token.Value) {
 			result.Value = "L" + token.Value
-			result.Type = jane.String
+			result.Type = jane.Str
 		} else if IsBoolean(token.Value) {
 			result.Value = token.Value
 			result.Type = jane.Bool
@@ -433,7 +445,7 @@ func (cp *CxxParser) processParenthesesValuePart(tokens []lexer.Token) ast.Value
 	case functionName:
 		fun := cp.functionByName(value.Value)
 		cp.parseFunctionCallStatement(fun, tokens[len(valueTokens):])
-		value.Type = fun.ReturnType
+		value.Type = fun.ReturnType.Type
 	default:
 		cp.PushErrorToken(tokens[len(valueTokens)], "invalid_syntax")
 	}

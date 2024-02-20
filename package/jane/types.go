@@ -11,7 +11,7 @@ const (
 	UInt32  uint8 = 7
 	UInt64  uint8 = 8
 	Bool    uint8 = 9
-	String  uint8 = 10
+	Str     uint8 = 10
 	Float32 uint8 = 11
 	Float64 uint8 = 12
 	Any     uint8 = 13
@@ -37,6 +37,10 @@ func TypeGreaterThan(t1, t2 uint8) bool {
 		return t2 == UInt8 ||
 			t2 == UInt16 ||
 			t2 == UInt32
+	case Float32:
+		return t2 != Any && t2 != Float64
+	case Float64:
+		return t2 != Any
 	}
 	return false
 }
@@ -81,8 +85,13 @@ func TypesAreCompatible(t1, t2 uint8, ignoreany bool) bool {
 		return t2 == UInt64
 	case Bool:
 		return t2 == Bool
-	case String:
-		return t2 == String
+	case Str:
+		return t2 == Str
+	case Float32:
+		return t2 == Float32 ||
+			t2 == Float64
+	case Float64:
+		return t2 == Float64
 	}
 	return false
 }
@@ -126,7 +135,7 @@ func TypeFromName(name string) uint8 {
 	case "uint64":
 		return UInt64
 	case "str":
-		return String
+		return Str
 	case "bool":
 		return Bool
 	case "float32":
@@ -150,7 +159,7 @@ func CxxTypeNameFromType(typeCode uint8) string {
 	case Int32:
 		return "int"
 	case Int64:
-		return "long"
+		return "long long int"
 	case UInt8:
 		return "unsigned char"
 	case UInt16:
@@ -158,7 +167,7 @@ func CxxTypeNameFromType(typeCode uint8) string {
 	case UInt32:
 		return "unsigned int"
 	case UInt64:
-		return "unsigned long"
+		return "unsigned long long int"
 	case Bool:
 		return "bool"
 	case Float32:
