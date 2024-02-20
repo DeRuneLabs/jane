@@ -14,8 +14,9 @@ const (
 )
 
 const (
-	StatementFunction uint8 = 1
-	StatementReturn   uint8 = 2
+	StatementFunction     uint8 = 1
+	StatementReturn       uint8 = 2
+	StatementFunctionCall uint8 = 3
 )
 
 const (
@@ -31,4 +32,5 @@ const (
 
 const (
 	ValueNumeric uint8 = 1
+	ValueName    uint8 = 2
 )

@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/De-Rune/jane/ast"
 	"github.com/De-Rune/jane/lexer"
@@ -22,27 +21,34 @@ type Function struct {
 	Token      lexer.Token
 	Name       string
 	ReturnType uint8
+	Params     []ast.ParameterAST
 	Block      ast.BlockAST
 }
 
 func (f Function) String() string {
-	var sb strings.Builder
-	sb.WriteString(cxxTypeNameFromType(f.ReturnType))
-	sb.WriteByte(' ')
-	sb.WriteString(f.Name)
-	sb.WriteString("()")
-	sb.WriteString(" {")
-	sb.WriteString(getFunctionStandardClose(f.Name))
-	for _, s := range f.Block.Content {
-		sb.WriteByte('\n')
-		sb.WriteString("\t" + fmt.Sprint(s.Value))
-		sb.WriteByte(';')
+	code := ""
+	code += jane.CxxTypeNameFromType(f.ReturnType)
+	code += " "
+	code += f.Name
+	if len(f.Params) > 0 {
+		for _, p := range f.Params {
+			code += p.String()
+			code += ","
+		}
+		code = code[:len(code)-1]
 	}
-	sb.WriteString("\n}")
-	return sb.String()
+	code += ") {"
+	code += getFunctionStandardCode(f.Name)
+	for _, s := range f.Block.Content {
+		code += "\n"
+		code += " " + fmt.Sprint(s.Value)
+		code += ";"
+	}
+	code += "\n}"
+	return code
 }
 
-func getFunctionStandardClose(name string) string {
+func getFunctionStandardCode(name string) string {
 	switch name {
 	case jane.EntryPoint:
 		return entryPointStandard

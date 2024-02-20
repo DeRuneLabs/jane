@@ -18,4 +18,10 @@ var Errors = map[string]string{
 	`operator_notfor_string`:       `this operator is not defined for string types`,
 	`operator_notfor_booleans`:     `this operator is not defined for boolean types`,
 	`operator_notfor_uint_and_int`: `this operator is not defined for uint and int types`,
+	`name_not_defined`:             `name is not defined`,
+	`type_missing`:                 `data type missing`,
+	`parameter_exist`:              `parameter is already exist in this name`,
+	`argument_overflow`:            `argument overflow`,
+	`argument_missing`:             `missing argument(s)`,
+	`invalid_type`:                 `invalid data type`,
 }

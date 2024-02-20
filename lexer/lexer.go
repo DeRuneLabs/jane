@@ -135,6 +135,10 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "/"
 		tk.Type = Operator
 		lexer.Position++
+	case lexerline[0] == ',':
+		tk.Value = ","
+		tk.Type = Comma
+		lexer.Position++
 	case isKeyword(lexerline, "int8"):
 		tk.Value = "int8"
 		tk.Type = Type

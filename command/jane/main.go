@@ -56,7 +56,7 @@ func initProject(cmd string) {
 		println("this module can only be used as single")
 		return
 	}
-	err := os.WriteFile(jane.SettingsFile, []byte(`out_name main
+	err := os.WriteFile(jane.SettingFile, []byte(`out_name main
 cxx_out_dir ./
 cxx_out_name jane.cxx`), 0606)
 	if err != nil {
@@ -101,13 +101,13 @@ func init() {
 }
 
 func loadJnSet() {
-	info, err := os.Stat(jane.SettingsFile)
+	info, err := os.Stat(jane.SettingFile)
 	if err != nil || info.IsDir() {
-		println(`Jane settings file ("` + jane.SettingsFile + `") not found`)
+		println(`Jane settings file ("` + jane.SettingFile + `") not found`)
 		os.Exit(0)
 	}
 	jane.JaneSettings = jane.NewJnSet()
-	bytes, err := os.ReadFile(jane.SettingsFile)
+	bytes, err := os.ReadFile(jane.SettingFile)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)

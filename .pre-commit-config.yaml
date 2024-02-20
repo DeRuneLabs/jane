@@ -7,7 +7,14 @@ repos:
         types: [go]
       - id: trailing-whitespace
 
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.56.2
+    hooks:
+      - id: golangci-lint
+        name: lint check with golangci-lint
+
   - repo: https://github.com/dnephin/pre-commit-golang
     rev: v0.5.0
     hooks:
       - id: go-fmt
+        name: format golang code

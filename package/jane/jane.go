@@ -1,10 +1,10 @@
 package jane
 
 const (
-	Version      = `@dev_beta 1.0.0`
-	Extension    = `.jn`
-	SettingsFile = "jane.set"
-	EntryPoint   = "main"
+	Version     = `@dev_beta 0.0.1`
+	Extension   = `.jn`
+	SettingFile = "jane.set"
+	EntryPoint  = "main"
 )
 
 var (

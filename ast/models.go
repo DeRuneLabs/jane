@@ -3,6 +3,7 @@ package ast
 import (
 	"fmt"
 	"github.com/De-Rune/jane/lexer"
+	"github.com/De-Rune/jane/package/jane"
 	"strings"
 )
 
@@ -40,21 +41,43 @@ type TypeAST struct {
 type FunctionAST struct {
 	Token      lexer.Token
 	Name       string
+	Params     []ParameterAST
 	ReturnType TypeAST
 	Block      BlockAST
 }
 
+type ParameterAST struct {
+	Token lexer.Token
+	Name  string
+	Type  TypeAST
+}
+
+func (p ParameterAST) String() string {
+	return jane.CxxTypeNameFromType(p.Type.Type) + " " + p.Name
+}
+
+type FunctionCallAST struct {
+	Token lexer.Token
+	Name  string
+	Args  []lexer.Token
+}
+
+func (fc FunctionCallAST) String() string {
+	var sb strings.Builder
+	sb.WriteString(fc.Name)
+	sb.WriteByte('(')
+	sb.WriteString(tokensToString(fc.Args))
+	sb.WriteByte(')')
+	return sb.String()
+}
+
 type ExpressionAST struct {
-	Content []ExpressionNode
-	Type    uint8
+	Tokens    []lexer.Token
+	Processes [][]lexer.Token
 }
 
 func (e ExpressionAST) string() string {
-	var sb strings.Builder
-	for _, node := range e.Content {
-		sb.WriteString(node.String() + " ")
-	}
-	return sb.String()[:sb.Len()-1]
+	return tokensToString(e.Tokens)
 }
 
 type ExpressionNode struct {
@@ -99,9 +122,17 @@ type ReturnAST struct {
 	Expression ExpressionAST
 }
 
-func (rast ReturnAST) String() string {
-	if rast.Expression.Type != NA {
-		return rast.Token.Value + " " + rast.Expression.string()
+func (r ReturnAST) String() string {
+	return r.Token.Value + " " + r.Expression.string()
+}
+
+func tokensToString(tokens []lexer.Token) string {
+	var sb strings.Builder
+	for _, token := range tokens {
+		sb.WriteString(token.Value)
+		if token.Type != lexer.Brace && token.Type != lexer.Name {
+			sb.WriteByte(' ')
+		}
 	}
-	return rast.Token.Value
+	return sb.String()
 }
