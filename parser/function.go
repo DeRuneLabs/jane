@@ -25,12 +25,20 @@ func (f Function) String() string {
 	code += jane.CxxTypeNameFromType(f.ReturnType)
 	code += " "
 	code += f.Name
+	code += "("
 	if len(f.Params) > 0 {
+		any := false
 		for _, p := range f.Params {
 			code += p.String()
 			code += ","
+			if !any {
+				any = p.Type.Type == jane.Any
+			}
 		}
 		code = code[:len(code)-1]
+		if any {
+			code = "templat <typename any>\n" + code
+		}
 	}
 	code += ") {"
 	code += getFunctionStandardCode(f.Name)

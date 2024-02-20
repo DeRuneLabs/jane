@@ -1,0 +1,8 @@
+function number(c int32) int32 {
+  return c;
+}
+
+function main() int32 {
+  println(5);
+  return number(0);
+}
