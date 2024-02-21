@@ -34,6 +34,17 @@ type BlockAST struct {
 	Content []StatementAST
 }
 
+func (b BlockAST) String() string {
+	var cxx strings.Builder
+	for _, s := range b.Content {
+		cxx.WriteByte('\n')
+		cxx.WriteString(" ")
+		cxx.WriteString(fmt.Sprint(s.Value))
+		cxx.WriteByte(';')
+	}
+	return cxx.String()
+}
+
 type TypeAST struct {
 	Token lexer.Token
 	Type  uint8
@@ -62,11 +73,32 @@ type FunctionCallAST struct {
 	Token      lexer.Token
 	Name       string
 	Expression ExpressionAST
-	Args       []lexer.Token
+	Args       []ArgAST
 }
 
 func (fc FunctionCallAST) String() string {
-	return fc.Expression.string()
+	var cxx string
+	cxx += fc.Name
+	cxx += "("
+	if len(fc.Args) > 0 {
+		for _, arg := range fc.Args {
+			cxx += arg.String()
+			cxx += ","
+		}
+		cxx = cxx[:len(cxx)-1]
+	}
+	cxx += ")"
+	return cxx
+}
+
+type ArgAST struct {
+	Token      lexer.Token
+	Tokens     []lexer.Token
+	Expression ExpressionAST
+}
+
+func (a ArgAST) String() string {
+	return a.Expression.string()
 }
 
 type ExpressionAST struct {

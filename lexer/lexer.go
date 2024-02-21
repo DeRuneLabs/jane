@@ -151,6 +151,14 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "%"
 		tk.Type = Operator
 		lexer.Position++
+	case strings.HasPrefix(lexerline, "<<"):
+		tk.Value = "<<"
+		tk.Type = Operator
+		lexer.Position += 2
+	case strings.HasPrefix(lexerline, ">>"):
+		tk.Value = ">>"
+		tk.Type = Operator
+		lexer.Position += 2
 	case isKeyword(lexerline, "fun"):
 		tk.Value = "function"
 		tk.Type = Function

@@ -193,6 +193,8 @@ func (cp *CxxParser) finalCheck() {
 	}
 	for _, fun := range cp.Functions {
 		cp.BlockVariables = variablesFromParameters(fun.Params)
+		cp.checkFunction(fun)
+		cp.checkBlock(fun.Block)
 		cp.checkFunctionReturn(fun)
 	}
 }
@@ -247,8 +249,8 @@ func (cp *CxxParser) computeProcesses(processes [][]lexer.Token) ast.ValueAST {
 		solvedValue := process.solve()
 		if value.Type != ast.NA {
 			process.operator.Value = "+"
-			process.right = processes[j+1]
 			process.leftVal = value
+			process.right = processes[j+1]
 			process.rightVal = solvedValue
 			value = process.solve()
 		} else {
@@ -396,6 +398,11 @@ func (p arithmeticProcess) solveSigned() (value ast.ValueAST) {
 		if jane.TypeGreaterThan(p.rightVal.Type, value.Type) {
 			value.Type = p.rightVal.Type
 		}
+	case ">>", "<<":
+		value.Type = p.leftVal.Type
+		if !jane.IsUnsignedNumericType(p.rightVal.Type) && !checkIntBit(p.rightVal, jnbits.BitsizeOfType(jane.UInt64)) {
+			p.cp.PushErrorToken(p.rightVal.Token, "bitshift_must_unsigned")
+		}
 	default:
 		p.cp.PushErrorToken(p.operator, "operator_notfor_int")
 	}
@@ -414,11 +421,7 @@ func (p arithmeticProcess) solveUnsigned() (value ast.ValueAST) {
 
 func (p arithmeticProcess) solve() (value ast.ValueAST) {
 	switch p.operator.Value {
-	case "+":
-	case "-":
-	case "*":
-	case "/":
-	case "%":
+	case "+", "-", "*", "/", "%", ">>", "<<":
 	default:
 		p.cp.PushErrorToken(p.operator, "invalid_operator")
 	}
@@ -618,11 +621,47 @@ func (cp *CxxParser) getRangeTokens(open, close string, tokens []lexer.Token) []
 	return nil
 }
 
+func (cp *CxxParser) checkFunction(fun *function) {
+	switch fun.Name {
+	case jane.EntryPoint:
+		if len(fun.Params) > 0 {
+			cp.PushErrorToken(fun.Token, "entrypoint_have_parameters")
+		}
+		if fun.ReturnType.Type != jane.Void {
+			cp.PushErrorToken(fun.ReturnType.Token, "entrypoint_have_return")
+		}
+	}
+}
+
+func (cp *CxxParser) checkBlock(b ast.BlockAST) {
+	for _, model := range b.Content {
+		switch model.Type {
+		case ast.StatementFunctionCall:
+			cp.checkFunctionCallStatement(model.Value.(ast.FunctionCallAST))
+		case ast.StatementReturn:
+		default:
+			cp.PushErrorToken(model.Token, "invalid_syntax")
+		}
+	}
+}
+
+func (cp *CxxParser) checkFunctionCallStatement(cs ast.FunctionCallAST) {
+	fun := cp.functionByName(cs.Name)
+	if fun == nil {
+		cp.PushErrorToken(cs.Token, "name_not_defined")
+		return
+	}
+	cp.parseFunctionCallStatement(fun, cs.Expression.Tokens[1:])
+}
+
 func IsConstantNumeric(v string) bool {
+	if v == "" {
+		return false
+	}
 	return v[0] >= '0' && v[0] <= '9'
 }
 
-func CheckBitInt(v ast.ValueAST, bit int) bool {
+func checkIntBit(v ast.ValueAST, bit int) bool {
 	if bit == 0 {
 		return false
 	}
