@@ -104,6 +104,10 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = ";"
 		tk.Type = SemiColon
 		lexer.Position++
+	case lexerline[0] == ',':
+		tk.Value = ","
+		tk.Type = Comma
+		lexer.Position++
 	case lexerline[0] == '(':
 		tk.Value = "("
 		tk.Type = Brace
@@ -143,9 +147,9 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "/"
 		tk.Type = Operator
 		lexer.Position++
-	case lexerline[0] == ',':
-		tk.Value = ","
-		tk.Type = Comma
+	case lexerline[0] == '%':
+		tk.Value = "%"
+		tk.Type = Operator
 		lexer.Position++
 	case isKeyword(lexerline, "fun"):
 		tk.Value = "function"
@@ -158,6 +162,10 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "any"
 		tk.Type = Type
 		lexer.Position += 3
+	case isKeyword(lexerline, "bool"):
+		tk.Value = "bool"
+		tk.Type = Type
+		lexer.Position += 4
 	case isKeyword(lexerline, "int8"):
 		tk.Value = "int8"
 		tk.Type = Type
@@ -190,6 +198,14 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "uint64"
 		tk.Type = Type
 		lexer.Position += 6
+	case isKeyword(lexerline, "float32"):
+		tk.Value = "float32"
+		tk.Type = Type
+		lexer.Position += 7
+	case isKeyword(lexerline, "float64"):
+		tk.Value = "float64"
+		tk.Type = Type
+		lexer.Position += 7
 	case isKeyword(lexerline, "return"):
 		tk.Value = "return"
 		tk.Type = Return

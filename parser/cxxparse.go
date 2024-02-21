@@ -271,7 +271,11 @@ func (cp *CxxParser) computeExpression(ex ast.ExpressionAST) ast.ValueAST {
 }
 
 func (cp *CxxParser) nextOperator(tokens [][]lexer.Token) int {
-	high, mid, low := -1, -1, -1
+	precedence5 := -1
+	precedence4 := -1
+	precedence3 := -1
+	precedence2 := -1
+	precedence1 := -1
 	for index, part := range tokens {
 		if len(part) != 1 {
 			continue
@@ -279,30 +283,30 @@ func (cp *CxxParser) nextOperator(tokens [][]lexer.Token) int {
 			continue
 		}
 		switch part[0].Value {
-		case "<<", ">>":
-			return index
-		case "&", "&^", "%":
-			if high == -1 {
-				high = index
-			}
-		case "*", "/", "\\", "|":
-			if mid == -1 {
-				mid = index
-			}
-		case "+", "-":
-			if low == -1 {
-				low = index
-			}
+		case "*", "/", "%", "<<", ">>", "&":
+			precedence5 = index
+		case "+", "-", "|", "^":
+			precedence4 = index
+		case "==", "!=", "<", "<=", ">", ">=":
+			precedence3 = index
+		case "&&":
+			precedence2 = index
+		case "||":
+			precedence1 = index
 		default:
 			cp.PushErrorToken(part[0], "invalid_operator")
 		}
 	}
-	if high != -1 {
-		return high
-	} else if mid != -1 {
-		return mid
+	if precedence5 != -1 {
+		return precedence5
+	} else if precedence4 != -1 {
+		return precedence4
+	} else if precedence3 != -1 {
+		return precedence3
+	} else if precedence2 != -1 {
+		return precedence2
 	}
-	return low
+	return precedence1
 }
 
 type arithmeticProcess struct {
@@ -316,36 +320,118 @@ type arithmeticProcess struct {
 
 func (p arithmeticProcess) solveString() (value ast.ValueAST) {
 	if p.leftVal.Type != p.rightVal.Type {
-		p.cp.PushErrorToken(p.operator, "invalid_data_types")
+		p.cp.PushErrorToken(p.operator, "invalid_datatype")
 		return
 	}
 	value.Type = jane.Str
 	switch p.operator.Value {
 	case "+":
-		value.Value = p.leftVal.String() + p.rightVal.String()
+		value.Type = jane.Str
+	case "==", "!=":
+		value.Type = jane.Bool
 	default:
 		p.cp.PushErrorToken(p.operator, "operator_notfor_strings")
 	}
 	return
 }
 
+func (p arithmeticProcess) solveAny() (value ast.ValueAST) {
+	switch p.operator.Value {
+	case "!=", "==":
+		value.Type = jane.Bool
+	default:
+		p.cp.PushErrorToken(p.operator, "operator_notfor_any")
+	}
+	return
+}
+
+func (p arithmeticProcess) solveBool() (value ast.ValueAST) {
+	if !jane.TypesAreCompatible(p.leftVal.Type, p.rightVal.Type, true) {
+		p.cp.PushErrorToken(p.operator, "incompatible_type")
+		return
+	}
+	switch p.operator.Value {
+	case "&&", "||", "!=", "==":
+		value.Type = jane.Bool
+	default:
+		p.cp.PushErrorToken(p.operator, "operator_notfor_bool")
+	}
+	return
+}
+
+func (p arithmeticProcess) solveFloat() (value ast.ValueAST) {
+	if !jane.TypesAreCompatible(p.leftVal.Type, p.rightVal.Type, true) {
+		if !(p.leftVal.Value[0] >= '0' && p.leftVal.Value[0] <= '9') && !(p.rightVal.Value[0] >= '0' && p.rightVal.Value[0] <= '9') {
+			p.cp.PushErrorToken(p.operator, "incompatible_type")
+			return
+		}
+	}
+	switch p.operator.Value {
+	case "!=", "==", "<", ">", ">=", "<=":
+		value.Type = jane.Bool
+	case "+", "-", "*", "/":
+		value.Type = jane.Float32
+		if p.leftVal.Type == jane.Float64 || p.rightVal.Type == jane.Float64 {
+			value.Type = jane.Float64
+		}
+	default:
+		p.cp.PushErrorToken(p.operator, "operator_notfor_float")
+	}
+	return
+}
+
+func (p arithmeticProcess) solveSigned() (value ast.ValueAST) {
+	if !jane.TypesAreCompatible(p.leftVal.Type, p.rightVal.Type, true) {
+		if !(p.leftVal.Value[0] >= '0' && p.leftVal.Value[0] <= '9') && !(p.rightVal.Value[0] >= '0' && p.rightVal.Value[0] <= '9') {
+			p.cp.PushErrorToken(p.operator, "incompatible_type")
+			return
+		}
+	}
+	switch p.operator.Value {
+	case "!=", "==", "<", ">", ">=", "<=":
+		value.Type = jane.Bool
+	case "+", "-", "*", "/", "%":
+		value.Type = p.leftVal.Type
+		if jane.TypeGreaterThan(p.rightVal.Type, value.Type) {
+			value.Type = p.rightVal.Type
+		}
+	default:
+		p.cp.PushErrorToken(p.operator, "operator_notfor_int")
+	}
+	return
+}
+
+func (p arithmeticProcess) solveUnsigned() (value ast.ValueAST) {
+	if !jane.TypesAreCompatible(p.leftVal.Type, p.rightVal.Type, true) {
+		p.cp.PushErrorToken(p.operator, "incompatible_type")
+		return
+	}
+	return
+}
+
 func (p arithmeticProcess) solve() (value ast.ValueAST) {
+	switch p.operator.Value {
+	case "+":
+	case "-":
+	case "*":
+	case "/":
+	case "%":
+	default:
+		p.cp.PushErrorToken(p.operator, "invalid_operator")
+	}
 	switch {
 	case p.leftVal.Type == jane.Any || p.rightVal.Type == jane.Any:
-		p.cp.PushErrorToken(p.operator, "operator_notfor_any")
+		return p.solveAny()
 	case p.leftVal.Type == jane.Bool || p.rightVal.Type == jane.Bool:
-		p.cp.PushErrorToken(p.operator, "operator_notfor_boolean")
-		return
+		return p.solveBool()
 	case p.leftVal.Type == jane.Str || p.rightVal.Type == jane.Str:
 		return p.solveString()
-	}
-	if jane.IsSignedNumericType(p.leftVal.Type) != jane.IsSignedNumericType(p.rightVal.Type) {
-		p.cp.PushErrorToken(p.operator, "operator_notfor_uint_and_int")
-		return
-	}
-	value.Type = p.leftVal.Type
-	if jane.TypeGreaterThan(p.rightVal.Type, value.Type) {
-		value.Type = p.rightVal.Type
+	case jane.IsFloatType(p.leftVal.Type) || jane.IsFloatType(p.rightVal.Type):
+		return p.solveFloat()
+	case jane.IsSignedNumericType(p.leftVal.Type) || jane.IsSignedNumericType(p.rightVal.Type):
+		return p.solveSigned()
+	case jane.IsUnsignedNumericType(p.leftVal.Type) || jane.IsUnsignedNumericType(p.rightVal.Type):
+		return p.solveUnsigned()
 	}
 	return
 }

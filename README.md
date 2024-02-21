@@ -18,3 +18,31 @@ function main() int32 {
     return 0;
 }
 ```
+
+operator
+
+| operator | description | support type                |
+| -------- | ----------- | --------------------------- |
+| `+`      | sum         | integer, float, string      |
+| `-`      | difference  | integer, float              |
+| `*`      | product     | integer, float              |
+| `/`      | quotient    | integer, float              |
+| `%`      | remainder   | integer                     |
+| `~`      | bitwise NOT | integer                     |
+| `&`      | bitwise AND | integer                     |
+| `^`      | bitwise XOR | integer                     |
+| `!`      | logical NOT | bool                        |
+| `&&`     | logical AND | bool                        |
+| `!=`     | LOGICAL XOR | bool                        |
+| `<<`     | left shift  | integer << unsigned integer |
+| `>>`     | right shift | integer >> unsigned integer |
+
+precedence
+
+| precedence | operator               |
+| ---------- | ---------------------- |
+| 5          | `*  /  %  <<  >>  &`   |
+| 4          | `+ - || ^`             |
+| 3          | `==  !=  <  <=  >  >=` |
+| 2          | `&&`                   |
+| 1          | `||`                   |

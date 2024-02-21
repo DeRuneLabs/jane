@@ -132,9 +132,7 @@ func tokensToString(tokens []lexer.Token) string {
 	var sb strings.Builder
 	for _, token := range tokens {
 		sb.WriteString(token.Value)
-		if token.Type != lexer.Brace && token.Type != lexer.Name {
-			sb.WriteByte(' ')
-		}
+		sb.WriteByte(' ')
 	}
 	return sb.String()
 }
