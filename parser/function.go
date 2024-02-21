@@ -20,14 +20,14 @@ type function struct {
 	Name       string
 	ReturnType ast.TypeAST
 	Params     []ast.ParameterAST
-	Tags       []ast.TagAST
+	Attributes []ast.AttributeAST
 	Block      ast.BlockAST
 }
 
 func (f function) String() string {
 	f.readyCxx()
 	var cxx string
-	cxx += tagsToString(f.Tags)
+	cxx += attributeToString(f.Attributes)
 	cxx += jane.CxxTypeNameFromType(f.ReturnType.Type)
 	cxx += " "
 	cxx += f.Name
@@ -47,10 +47,10 @@ func (f *function) readyCxx() {
 	}
 }
 
-func tagsToString(tags []ast.TagAST) string {
+func attributeToString(attributes []ast.AttributeAST) string {
 	var cxx strings.Builder
-	for _, tag := range tags {
-		cxx.WriteString(tag.String())
+	for _, attribute := range attributes {
+		cxx.WriteString(attribute.String())
 		cxx.WriteByte(' ')
 	}
 	return cxx.String()

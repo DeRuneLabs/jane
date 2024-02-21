@@ -137,11 +137,11 @@ func tokensToString(tokens []lexer.Token) string {
 	return sb.String()
 }
 
-type TagAST struct {
+type AttributeAST struct {
 	Token lexer.Token
 	Value string
 }
 
-func (t TagAST) String() string {
+func (t AttributeAST) String() string {
 	return t.Value
 }

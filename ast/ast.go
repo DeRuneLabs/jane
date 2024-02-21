@@ -63,7 +63,7 @@ func (ast *AST) BuildBrace() {
 }
 
 func (ast *AST) BuildTag() {
-	var tag TagAST
+	var tag AttributeAST
 	ast.Position++
 	if ast.Ended() {
 		ast.PushErrorToken(ast.Tokens[ast.Position-1], "invalid_syntax")
@@ -84,7 +84,7 @@ func (ast *AST) BuildTag() {
 	tag.Value = tag.Token.Value
 	ast.Tree = append(ast.Tree, Object{
 		Token: tag.Token,
-		Type:  Tag,
+		Type:  Attribute,
 		Value: tag,
 	})
 	ast.Position++

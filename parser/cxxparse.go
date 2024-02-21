@@ -11,7 +11,7 @@ import (
 )
 
 type CxxParser struct {
-	tags            []ast.TagAST
+	attributes      []ast.AttributeAST
 	Functions       []*function
 	GlobalVariables []*variable
 	BlockVariables  []*variable
@@ -57,8 +57,8 @@ func (cp *CxxParser) Parse() {
 	}
 	for _, model := range astModel.Tree {
 		switch model.Type {
-		case ast.Tag:
-			cp.pushTag(model.Value.(ast.TagAST))
+		case ast.Attribute:
+			cp.pushTag(model.Value.(ast.AttributeAST))
 		case ast.Statement:
 			cp.ParseStatement(model.Value.(ast.StatementAST))
 		default:
@@ -68,13 +68,13 @@ func (cp *CxxParser) Parse() {
 	cp.finalCheck()
 }
 
-func (cp *CxxParser) pushTag(t ast.TagAST) {
+func (cp *CxxParser) pushTag(t ast.AttributeAST) {
 	switch t.Token.Type {
 	case lexer.Inline:
 	default:
 		cp.PushErrorToken(t.Token, "invalid_syntax")
 	}
-	cp.tags = append(cp.tags, t)
+	cp.attributes = append(cp.attributes, t)
 }
 
 func (cp *CxxParser) ParseStatement(s ast.StatementAST) {
@@ -97,12 +97,13 @@ func (cp *CxxParser) ParseFunction(funAst ast.FunctionAST) {
 	fun.ReturnType = funAst.ReturnType
 	fun.Block = funAst.Block
 	fun.Params = funAst.Params
-	fun.Tags = nil
-	cp.checkFunctionTags(fun.Tags)
+	fun.Attributes = cp.attributes
+	cp.attributes = nil
+	cp.checkFunctionTags(fun.Attributes)
 	cp.Functions = append(cp.Functions, fun)
 }
 
-func (cp *CxxParser) checkFunctionTags(tags []ast.TagAST) {
+func (cp *CxxParser) checkFunctionTags(tags []ast.AttributeAST) {
 	for _, tag := range tags {
 		switch tag.Token.Type {
 		case lexer.Inline:
