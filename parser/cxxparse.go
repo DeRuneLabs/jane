@@ -58,7 +58,7 @@ func (cp *CxxParser) Parse() {
 	for _, model := range astModel.Tree {
 		switch model.Type {
 		case ast.Attribute:
-			cp.pushTag(model.Value.(ast.AttributeAST))
+			cp.PushAtrribute(model.Value.(ast.AttributeAST))
 		case ast.Statement:
 			cp.ParseStatement(model.Value.(ast.StatementAST))
 		default:
@@ -68,7 +68,7 @@ func (cp *CxxParser) Parse() {
 	cp.finalCheck()
 }
 
-func (cp *CxxParser) pushTag(t ast.AttributeAST) {
+func (cp *CxxParser) PushAtrribute(t ast.AttributeAST) {
 	switch t.Token.Type {
 	case lexer.Inline:
 	default:
@@ -99,11 +99,11 @@ func (cp *CxxParser) ParseFunction(funAst ast.FunctionAST) {
 	fun.Params = funAst.Params
 	fun.Attributes = cp.attributes
 	cp.attributes = nil
-	cp.checkFunctionTags(fun.Attributes)
+	cp.checkFunctionAttributes(fun.Attributes)
 	cp.Functions = append(cp.Functions, fun)
 }
 
-func (cp *CxxParser) checkFunctionTags(tags []ast.AttributeAST) {
+func (cp *CxxParser) checkFunctionAttributes(tags []ast.AttributeAST) {
 	for _, tag := range tags {
 		switch tag.Token.Type {
 		case lexer.Inline:
@@ -362,7 +362,7 @@ func (p arithmeticProcess) solveBool() (value ast.ValueAST) {
 
 func (p arithmeticProcess) solveFloat() (value ast.ValueAST) {
 	if !jane.TypesAreCompatible(p.leftVal.Type, p.rightVal.Type, true) {
-		if !(p.leftVal.Value[0] >= '0' && p.leftVal.Value[0] <= '9') && !(p.rightVal.Value[0] >= '0' && p.rightVal.Value[0] <= '9') {
+		if !IsConstantNumeric(p.leftVal.Value) && !IsConstantNumeric(p.rightVal.Value) {
 			p.cp.PushErrorToken(p.operator, "incompatible_type")
 			return
 		}
@@ -383,7 +383,7 @@ func (p arithmeticProcess) solveFloat() (value ast.ValueAST) {
 
 func (p arithmeticProcess) solveSigned() (value ast.ValueAST) {
 	if !jane.TypesAreCompatible(p.leftVal.Type, p.rightVal.Type, true) {
-		if !(p.leftVal.Value[0] >= '0' && p.leftVal.Value[0] <= '9') && !(p.rightVal.Value[0] >= '0' && p.rightVal.Value[0] <= '9') {
+		if !IsConstantNumeric(p.leftVal.Value) && !IsConstantNumeric(p.rightVal.Value) {
 			p.cp.PushErrorToken(p.operator, "incompatible_type")
 			return
 		}
@@ -404,8 +404,10 @@ func (p arithmeticProcess) solveSigned() (value ast.ValueAST) {
 
 func (p arithmeticProcess) solveUnsigned() (value ast.ValueAST) {
 	if !jane.TypesAreCompatible(p.leftVal.Type, p.rightVal.Type, true) {
-		p.cp.PushErrorToken(p.operator, "incompatible_type")
-		return
+		if !IsConstantNumeric(p.leftVal.Value) && !IsConstantNumeric(p.rightVal.Value) {
+			p.cp.PushErrorToken(p.operator, "incompatible_type")
+			return
+		}
 	}
 	return
 }
@@ -614,4 +616,18 @@ func (cp *CxxParser) getRangeTokens(open, close string, tokens []lexer.Token) []
 	}
 	cp.PushErrorToken(tokens[0], "brace_not_closed")
 	return nil
+}
+
+func IsConstantNumeric(v string) bool {
+	return v[0] >= '0' && v[0] <= '9'
+}
+
+func CheckBitInt(v ast.ValueAST, bit int) bool {
+	if bit == 0 {
+		return false
+	}
+	if jane.IsSignedNumericType(v.Type) {
+		return jnbits.CheckBitInt(v.Value, bit)
+	}
+	return jnbits.CheckBitUint(v.Value, bit)
 }
