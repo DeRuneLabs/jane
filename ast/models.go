@@ -59,18 +59,14 @@ func (p ParameterAST) String() string {
 }
 
 type FunctionCallAST struct {
-	Token lexer.Token
-	Name  string
-	Args  []lexer.Token
+	Token      lexer.Token
+	Name       string
+	Expression ExpressionAST
+	Args       []lexer.Token
 }
 
 func (fc FunctionCallAST) String() string {
-	var sb strings.Builder
-	sb.WriteString(fc.Name)
-	sb.WriteByte('(')
-	sb.WriteString(tokensToString(fc.Args))
-	sb.WriteByte(')')
-	return sb.String()
+	return fc.Expression.string()
 }
 
 type ExpressionAST struct {
@@ -79,7 +75,19 @@ type ExpressionAST struct {
 }
 
 func (e ExpressionAST) string() string {
-	return tokensToString(e.Tokens)
+	var sb strings.Builder
+	for _, process := range e.Processes {
+		if len(process) == 1 && process[0].Type == lexer.Operator {
+			sb.WriteByte(' ')
+			sb.WriteString(process[0].Value)
+			sb.WriteByte(' ')
+			continue
+		}
+		for _, token := range process {
+			sb.WriteString(token.Value)
+		}
+	}
+	return sb.String()
 }
 
 type ExpressionNode struct {
@@ -126,15 +134,6 @@ type ReturnAST struct {
 
 func (r ReturnAST) String() string {
 	return r.Token.Value + " " + r.Expression.string()
-}
-
-func tokensToString(tokens []lexer.Token) string {
-	var sb strings.Builder
-	for _, token := range tokens {
-		sb.WriteString(token.Value)
-		sb.WriteByte(' ')
-	}
-	return sb.String()
 }
 
 type AttributeAST struct {
