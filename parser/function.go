@@ -18,16 +18,17 @@ const entryPointStandard = `
 type function struct {
 	Token      lexer.Token
 	Name       string
-	ReturnType uint8
+	ReturnType ast.TypeAST
 	Params     []ast.ParameterAST
 	Tags       []ast.TagAST
 	Block      ast.BlockAST
 }
 
 func (f function) String() string {
+	f.readyCxx()
 	var cxx string
 	cxx += tagsToString(f.Tags)
-	cxx += jane.CxxTypeNameFromType(f.ReturnType)
+	cxx += jane.CxxTypeNameFromType(f.ReturnType.Type)
 	cxx += " "
 	cxx += f.Name
 	cxx += "("
@@ -37,6 +38,13 @@ func (f function) String() string {
 	cxx += blockToCxx(f.Block)
 	cxx += "\n}"
 	return cxx
+}
+
+func (f *function) readyCxx() {
+	switch f.Name {
+	case jane.EntryPoint:
+		f.ReturnType.Type = jane.Int32
+	}
 }
 
 func tagsToString(tags []ast.TagAST) string {

@@ -2,9 +2,10 @@ package ast
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/De-Rune/jane/lexer"
 	"github.com/De-Rune/jane/package/jane"
-	"strings"
 )
 
 type Object struct {
@@ -34,6 +35,7 @@ type BlockAST struct {
 }
 
 type TypeAST struct {
+	Token lexer.Token
 	Type  uint8
 	Value string
 }

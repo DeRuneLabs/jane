@@ -7,8 +7,10 @@ import (
 
 var builtinFunctions = []*function{
 	{
-		Name:       "print",
-		ReturnType: jane.Void,
+		Name: "print",
+		ReturnType: ast.TypeAST{
+			Type: jane.Void,
+		},
 		Params: []ast.ParameterAST{{
 			Name: "v",
 			Type: ast.TypeAST{
@@ -17,8 +19,10 @@ var builtinFunctions = []*function{
 			},
 		}},
 	}, {
-		Name:       "println",
-		ReturnType: jane.Void,
+		Name: "println",
+		ReturnType: ast.TypeAST{
+			Type: jane.Void,
+		},
 		Params: []ast.ParameterAST{{
 			Name: "v",
 			Type: ast.TypeAST{
