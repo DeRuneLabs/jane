@@ -31,6 +31,10 @@ func (cp *CxxParser) PushErrorToken(token lexer.Token, err string) {
 	cp.PFI.Errors = append(cp.PFI.Errors, fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Line, token.Column, message))
 }
 
+func (cp *CxxParser) AppendErrors(errors ...string) {
+	cp.PFI.Errors = append(cp.PFI.Errors, errors...)
+}
+
 func (cp *CxxParser) PushError(err string) {
 	cp.PFI.Errors = append(cp.PFI.Errors, jane.Errors[err])
 }
@@ -483,6 +487,30 @@ func (cp *CxxParser) processSingleValuePart(token lexer.Token) (result ast.Value
 	return
 }
 
+func (cp *CxxParser) processSingleOperatorPart(tokens []lexer.Token) ast.ValueAST {
+	var result ast.ValueAST
+	token := tokens[0]
+	if len(tokens) == 0 {
+		cp.PushErrorToken(token, "invalid_syntax")
+		return result
+	}
+	switch token.Value {
+	case "-":
+		result = cp.processValuePart(tokens)
+		if !jane.IsNumericType(result.Type) {
+			cp.PushErrorToken(token, "invalid_data_unary")
+		}
+	case "+":
+		result = cp.processValuePart(tokens)
+		if !jane.IsNumericType(result.Type) {
+			cp.PushErrorToken(token, "invalid_data_plus")
+		}
+	default:
+		cp.PushErrorToken(token, "invalid_syntax")
+	}
+	return result
+}
+
 func (cp *CxxParser) processValuePart(tokens []lexer.Token) (result ast.ValueAST) {
 	if len(tokens) == 1 {
 		result = cp.processSingleValuePart(tokens[0])
@@ -550,53 +578,35 @@ func (cp *CxxParser) parseFunctionCallStatement(fun *function, tokens []lexer.To
 	if tokens == nil {
 		tokens = make([]lexer.Token, 0)
 	}
-	if cp.parseArgs(fun, tokens) < len(fun.Params) {
+	ast := new(ast.AST)
+	args := ast.BuildArgs(tokens)
+	if len(ast.Errors) > 0 {
+		cp.AppendErrors(ast.Errors...)
+	}
+	cp.parseArgs(fun, args, errToken)
+}
+
+func (cp *CxxParser) parseArgs(fun *function, args []ast.ArgAST, errToken lexer.Token) {
+	if len(args) < len(fun.Params) {
 		cp.PushErrorToken(errToken, "argument_missing")
 	}
+	for index, arg := range args {
+		cp.parseArg(fun, index, arg)
+	}
 }
 
-func (cp *CxxParser) parseArgs(fun *function, tokens []lexer.Token) int {
-	last := 0
-	braceCount := 0
-	count := 0
-	for index, token := range tokens {
-		if token.Type == lexer.Brace {
-			switch token.Value {
-			case "{", "[", "(":
-				braceCount++
-			default:
-				braceCount--
-			}
-		}
-		if braceCount > 0 || token.Type != lexer.Comma {
-			continue
-		}
-		count++
-		cp.parseArg(fun, count, tokens[last:index], token)
-		last = index + 1
-	}
-	if last < len(tokens) {
-		count++
-		if last == 0 {
-			cp.parseArg(fun, count, tokens[last:], tokens[last])
-		} else {
-			cp.parseArg(fun, count, tokens[last:], tokens[last-1])
-		}
-	}
-	return count
-}
-
-func (cp *CxxParser) parseArg(fun *function, count int, tokens []lexer.Token, err lexer.Token) {
-	if len(tokens) == 0 {
-		cp.PushErrorToken(err, "invalid_syntax")
+func (cp *CxxParser) parseArg(fun *function, index int, arg ast.ArgAST) {
+	if index >= len(fun.Params) {
+		cp.PushErrorToken(arg.Token, "argument_overflow")
 		return
 	}
-	if count > len(fun.Params) {
-		cp.PushErrorToken(err, "argument_overflow")
-		return
-	}
-	if !jane.TypesAreCompatible(cp.computeTokens(tokens).Type, fun.Params[count-1].Type.Type, false) {
-		cp.PushErrorToken(err, "incompatible_type")
+	value := cp.computeExpression(arg.Expression)
+	param := fun.Params[index]
+	if !jane.TypesAreCompatible(value.Type, param.Type.Type, false) {
+		value.Type = param.Type.Type
+		if !checkIntBit(value, jnbits.BitsizeOfType(param.Type.Type)) {
+			cp.PushErrorToken(arg.Token, "incompatible_type")
+		}
 	}
 }
 
@@ -651,7 +661,7 @@ func (cp *CxxParser) checkFunctionCallStatement(cs ast.FunctionCallAST) {
 		cp.PushErrorToken(cs.Token, "name_not_defined")
 		return
 	}
-	cp.parseFunctionCallStatement(fun, cs.Expression.Tokens[1:])
+	cp.parseArgs(fun, cs.Args, cs.Token)
 }
 
 func IsConstantNumeric(v string) bool {
