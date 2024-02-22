@@ -505,6 +505,11 @@ func (cp *CxxParser) processSingleOperatorPart(tokens []lexer.Token) ast.ValueAS
 		if !jane.IsNumericType(result.Type) {
 			cp.PushErrorToken(token, "invalid_data_plus")
 		}
+	case "~":
+		result = cp.processValuePart(tokens)
+		if !jane.IsIntegerType(result.Type) {
+			cp.PushErrorToken(token, "invalid_data_tilde")
+		}
 	default:
 		cp.PushErrorToken(token, "invalid_syntax")
 	}

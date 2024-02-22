@@ -151,6 +151,10 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "%"
 		tk.Type = Operator
 		lexer.Position++
+	case lexerline[0] == '~':
+		tk.Value = "~"
+		tk.Type = Operator
+		lexer.Position++
 	case strings.HasPrefix(lexerline, "<<"):
 		tk.Value = "<<"
 		tk.Type = Operator
