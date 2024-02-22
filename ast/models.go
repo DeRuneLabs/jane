@@ -70,10 +70,9 @@ func (p ParameterAST) String() string {
 }
 
 type FunctionCallAST struct {
-	Token      lexer.Token
-	Name       string
-	Expression ExpressionAST
-	Args       []ArgAST
+	Token lexer.Token
+	Name  string
+	Args  []ArgAST
 }
 
 func (fc FunctionCallAST) String() string {
