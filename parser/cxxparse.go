@@ -397,7 +397,7 @@ func (p arithmeticProcess) solveSigned() (value ast.ValueAST) {
 	switch p.operator.Value {
 	case "!=", "==", "<", ">", ">=", "<=":
 		value.Type = jane.Bool
-	case "+", "-", "*", "/", "%":
+	case "+", "-", "*", "/", "%", "&", "|", "^":
 		value.Type = p.leftVal.Type
 		if jane.TypeGreaterThan(p.rightVal.Type, value.Type) {
 			value.Type = p.rightVal.Type
@@ -419,13 +419,25 @@ func (p arithmeticProcess) solveUnsigned() (value ast.ValueAST) {
 			p.cp.PushErrorToken(p.operator, "incompatible_type")
 			return
 		}
+		return
+	}
+	switch p.operator.Value {
+	case "!=", "==", "<", ">", ">=", "<=":
+		value.Type = jane.Bool
+	case "+", "-", "*", "/", "%", "&", "|", "^":
+		value.Type = p.leftVal.Type
+		if jane.TypeGreaterThan(p.rightVal.Type, value.Type) {
+			value.Type = p.rightVal.Type
+		}
+	default:
+		p.cp.PushErrorToken(p.operator, "operator_notfor_uint")
 	}
 	return
 }
 
 func (p arithmeticProcess) solve() (value ast.ValueAST) {
 	switch p.operator.Value {
-	case "+", "-", "*", "/", "%", ">>", "<<":
+	case "+", "-", "*", "/", "%", ">>", "<<", "&", "|", "^":
 	default:
 		p.cp.PushErrorToken(p.operator, "invalid_operator")
 	}
@@ -509,6 +521,11 @@ func (cp *CxxParser) processSingleOperatorPart(tokens []lexer.Token) ast.ValueAS
 		result = cp.processValuePart(tokens)
 		if !jane.IsIntegerType(result.Type) {
 			cp.PushErrorToken(token, "invalid_data_tilde")
+		}
+	case "!":
+		result = cp.processValuePart(tokens)
+		if result.Type != jane.Bool {
+			cp.PushErrorToken(token, "invalid_data_logical_not")
 		}
 	default:
 		cp.PushErrorToken(token, "invalid_syntax")

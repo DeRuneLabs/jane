@@ -212,7 +212,7 @@ func (ast *AST) BuildType(token lexer.Token) (t TypeAST) {
 }
 
 func IsSingleOperator(operator string) bool {
-	return operator == "+" || operator == "~"
+	return operator == "+" || operator == "~" || operator == "!"
 }
 
 func (ast *AST) BuildBlock(tokens []lexer.Token) (b BlockAST) {
