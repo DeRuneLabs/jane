@@ -215,7 +215,14 @@ func (cp *CxxParser) computeProcesses(processes [][]lexer.Token) ast.ValueAST {
 	var value ast.ValueAST
 	process.cp = cp
 	j := cp.nextOperator(processes)
+	boolean := false
 	for j != -1 {
+		if !boolean {
+			boolean = value.Type == jane.Bool
+		}
+		if boolean {
+			value.Type = jane.Bool
+		}
 		if j == 0 {
 			process.leftVal = value
 			process.operator = processes[j][0]
@@ -274,6 +281,8 @@ func (cp *CxxParser) computeTokens(tokens []lexer.Token) ast.ValueAST {
 }
 
 func (cp *CxxParser) computeExpression(ex ast.ExpressionAST) ast.ValueAST {
+	processes := make([][]lexer.Token, len(ex.Processes))
+	copy(processes, ex.Processes)
 	return cp.computeProcesses(ex.Processes)
 }
 
@@ -358,7 +367,7 @@ func (p arithmeticProcess) solveBool() (value ast.ValueAST) {
 		return
 	}
 	switch p.operator.Value {
-	case "&&", "||", "!=", "==":
+	case "!=", "==":
 		value.Type = jane.Bool
 	default:
 		p.cp.PushErrorToken(p.operator, "operator_notfor_bool")
@@ -435,9 +444,24 @@ func (p arithmeticProcess) solveUnsigned() (value ast.ValueAST) {
 	return
 }
 
+func (p arithmeticProcess) solveLogical() (value ast.ValueAST) {
+	value.Type = jane.Bool
+	if p.leftVal.Type != jane.Bool {
+		p.cp.PushErrorToken(p.leftVal.Token, "logical_not_bool")
+	}
+	if p.rightVal.Type != jane.Bool {
+		p.cp.PushErrorToken(p.rightVal.Token, "logical_not_bool")
+	}
+	return
+}
+
 func (p arithmeticProcess) solve() (value ast.ValueAST) {
 	switch p.operator.Value {
-	case "+", "-", "*", "/", "%", ">>", "<<", "&", "|", "^":
+	case "+", "-", "*", "/", "%", ">>",
+		"<<", "&", "|", "^", "==", "!=",
+		">=", "<=", ">", "<":
+	case "&&", "||":
+		return p.solveLogical()
 	default:
 		p.cp.PushErrorToken(p.operator, "invalid_operator")
 	}

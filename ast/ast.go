@@ -56,14 +56,14 @@ func (ast *AST) BuildBrace() {
 	token := ast.Tokens[ast.Position]
 	switch token.Value {
 	case "[":
-		ast.BuildTag()
+		ast.BuildAttribute()
 	default:
 		ast.PushErrorToken(token, "invalid_syntax")
 	}
 }
 
-func (ast *AST) BuildTag() {
-	var tag AttributeAST
+func (ast *AST) BuildAttribute() {
+	var attribute AttributeAST
 	ast.Position++
 	if ast.Ended() {
 		ast.PushErrorToken(ast.Tokens[ast.Position-1], "invalid_syntax")
@@ -74,18 +74,18 @@ func (ast *AST) BuildTag() {
 		ast.PushErrorToken(ast.Tokens[ast.Position-1], "invalid_syntax")
 		return
 	}
-	tag.Token = ast.Tokens[ast.Position]
-	if tag.Token.Type != lexer.Brace || tag.Token.Value != "]" {
-		ast.PushErrorToken(tag.Token, "invalid_syntax")
+	attribute.Token = ast.Tokens[ast.Position]
+	if attribute.Token.Type != lexer.Brace || attribute.Token.Value != "]" {
+		ast.PushErrorToken(attribute.Token, "invalid_syntax")
 		ast.Position = -1
 		return
 	}
-	tag.Token = ast.Tokens[ast.Position-1]
-	tag.Value = tag.Token.Value
+	attribute.Token = ast.Tokens[ast.Position-1]
+	attribute.Value = attribute.Token.Value
 	ast.Tree = append(ast.Tree, Object{
-		Token: tag.Token,
+		Token: attribute.Token,
 		Type:  Attribute,
-		Value: tag,
+		Value: attribute,
 	})
 	ast.Position++
 }

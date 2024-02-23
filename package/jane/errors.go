@@ -26,7 +26,7 @@ var Errors = map[string]string{
 	`argument_overflow`:          `argument overflow`,
 	`argument_missing`:           `missing argument(s)`,
 	`invalid_type`:               `invalid data type`,
-	`invalid_tag`:                `invalid tag for type`,
+	`invalid_attribute`:          `invalid atrribute for type`,
 	`entrypoint_have_return`:     `entry point is cannot have return type`,
 	`entrypoint_have_parameters`: `entry point is cannot have parameter(s)`,
 	`require_return_value`:       `return statements of non-void functions should have return value`,
@@ -37,4 +37,5 @@ var Errors = map[string]string{
 	`invalid_data_plus`:          `invalid data type for plus operator`,
 	`invalid_data_tilde`:         `invalid data type for tilde operator`,
 	`invalid_data_logical_not`:   `invalid data type for logical not operator`,
+	`logical_not_bool`:           `logical expression is have only boolean type`,
 }

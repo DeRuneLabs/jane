@@ -132,6 +132,38 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "]"
 		tk.Type = Brace
 		lexer.Position++
+	case strings.HasPrefix(lexerline, "<<"):
+		tk.Value = "<<"
+		tk.Type = Operator
+		lexer.Position += 2
+	case strings.HasPrefix(lexerline, ">>"):
+		tk.Value = ">>"
+		tk.Type = Operator
+		lexer.Position += 2
+	case strings.HasPrefix(lexerline, "=="):
+		tk.Value = "=="
+		tk.Type = Operator
+		lexer.Position += 2
+	case strings.HasPrefix(lexerline, "!="):
+		tk.Value = "!="
+		tk.Type = Operator
+		lexer.Position += 2
+	case strings.HasPrefix(lexerline, ">="):
+		tk.Value = ">="
+		tk.Type = Operator
+		lexer.Position += 2
+	case strings.HasPrefix(lexerline, "<="):
+		tk.Value = "<="
+		tk.Type = Operator
+		lexer.Position += 2
+	case strings.HasPrefix(lexerline, "&&"):
+		tk.Value = "&&"
+		tk.Type = Operator
+		lexer.Position += 2
+	case strings.HasPrefix(lexerline, "||"):
+		tk.Value = "||"
+		tk.Type = Operator
+		lexer.Position += 2
 	case lexerline[0] == '+':
 		tk.Value = "+"
 		tk.Type = Operator
@@ -171,14 +203,14 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = "!"
 		tk.Type = Operator
 		lexer.Position++
-	case strings.HasPrefix(lexerline, "<<"):
-		tk.Value = "<<"
+	case lexerline[0] == '<':
+		tk.Value = "<"
 		tk.Type = Operator
-		lexer.Position += 2
-	case strings.HasPrefix(lexerline, ">>"):
-		tk.Value = ">>"
+		lexer.Position++
+	case lexerline[0] == '>':
+		tk.Value = ">"
 		tk.Type = Operator
-		lexer.Position += 2
+		lexer.Position++
 	case isKeyword(lexerline, "fun"):
 		tk.Value = "function"
 		tk.Type = Function

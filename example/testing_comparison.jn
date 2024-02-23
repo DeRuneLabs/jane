@@ -1,0 +1,9 @@
+pinline
+function printNumber(x int32) {
+  println(x);
+}
+
+function main() {
+  println(12 > 300);
+  printNumber(12 + ~(2 ^ 5))
+}
