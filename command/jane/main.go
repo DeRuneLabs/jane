@@ -131,11 +131,13 @@ func printErrors(errors []string) {
 
 func appendStandards(code *string) {
 	*code = `
-#pragma region JANE_STANDARD_CODE
+#pragma region JANE_STANDARD_IMPORTS
 #include <iostream>
 #include <locale.h>
 template <typename any>
+#pragma endregion JANE_STANDARD_IMPORTS
 
+#pragma region JANE_BUILTIN_FUNCTIONS
 inline void print(any c) {
   std::wcout << c;
 }
@@ -146,7 +148,7 @@ inline void println(any c) {
   std::wcout << std::endl;
 }
 
-#pragma endregion
+#pragma endregion JANE_BUILTIN_FUNCTIONS
 
 ` + *code
 }

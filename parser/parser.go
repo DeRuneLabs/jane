@@ -10,7 +10,7 @@ import (
 	"github.com/De-Rune/jane/package/jnbits"
 )
 
-type CxxParser struct {
+type Parser struct {
 	attributes      []ast.AttributeAST
 	Functions       []*function
 	GlobalVariables []*variable
@@ -19,40 +19,51 @@ type CxxParser struct {
 	PFI             *ParseFileInfo
 }
 
-func NewParser(tokens []lexer.Token, PFI *ParseFileInfo) *CxxParser {
-	parser := new(CxxParser)
+func NewParser(tokens []lexer.Token, PFI *ParseFileInfo) *Parser {
+	parser := new(Parser)
 	parser.Tokens = tokens
 	parser.PFI = PFI
 	return parser
 }
 
-func (cp *CxxParser) PushErrorToken(token lexer.Token, err string) {
+func (cp *Parser) PushErrorToken(token lexer.Token, err string) {
 	message := jane.Errors[err]
 	cp.PFI.Errors = append(cp.PFI.Errors, fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Line, token.Column, message))
 }
 
-func (cp *CxxParser) AppendErrors(errors ...string) {
+func (cp *Parser) AppendErrors(errors ...string) {
 	cp.PFI.Errors = append(cp.PFI.Errors, errors...)
 }
 
-func (cp *CxxParser) PushError(err string) {
+func (cp *Parser) PushError(err string) {
 	cp.PFI.Errors = append(cp.PFI.Errors, jane.Errors[err])
 }
 
-func (cp CxxParser) String() string {
+func (cp Parser) String() string {
 	return cp.Cxx()
 }
 
-func (cp CxxParser) Cxx() string {
+func (p *Parser) Cxx() string {
 	var sb strings.Builder
-	for _, function := range cp.Functions {
-		sb.WriteString(function.String())
+	sb.WriteString("#pragma region JANE_GLOBAL_VARIABLES")
+	sb.WriteByte('\n')
+	for _, va := range p.GlobalVariables {
+		sb.WriteString(va.String())
+		sb.WriteByte('\n')
+	}
+	sb.WriteString("#pragma endregion JANE_GLOBAL_VARIABLES")
+	sb.WriteString("\n\n")
+	sb.WriteString("#pragma region JANE_FUNCTIONS")
+	sb.WriteByte('\n')
+	for _, fun := range p.Functions {
+		sb.WriteString(fun.String())
 		sb.WriteString("\n\n")
 	}
+	sb.WriteString("#pragma endregion JANE_FUNCTIONS")
 	return sb.String()
 }
 
-func (cp *CxxParser) Parse() {
+func (cp *Parser) Parse() {
 	astModel := ast.New(cp.Tokens)
 	astModel.Build()
 	if astModel.Errors != nil {
@@ -72,7 +83,7 @@ func (cp *CxxParser) Parse() {
 	cp.finalCheck()
 }
 
-func (cp *CxxParser) PushAtrribute(t ast.AttributeAST) {
+func (cp *Parser) PushAtrribute(t ast.AttributeAST) {
 	switch t.Token.Type {
 	case lexer.Inline:
 	default:
@@ -81,7 +92,7 @@ func (cp *CxxParser) PushAtrribute(t ast.AttributeAST) {
 	cp.attributes = append(cp.attributes, t)
 }
 
-func (cp *CxxParser) ParseStatement(s ast.StatementAST) {
+func (cp *Parser) ParseStatement(s ast.StatementAST) {
 	switch s.Type {
 	case ast.StatementFunction:
 		cp.ParseFunction(s.Value.(ast.FunctionAST))
@@ -90,7 +101,7 @@ func (cp *CxxParser) ParseStatement(s ast.StatementAST) {
 	}
 }
 
-func (cp *CxxParser) ParseFunction(funAst ast.FunctionAST) {
+func (cp *Parser) ParseFunction(funAst ast.FunctionAST) {
 	if token := cp.existName(funAst.Name); token.Type != ast.NA {
 		cp.PushErrorToken(funAst.Token, "exist_name")
 		return
@@ -107,7 +118,7 @@ func (cp *CxxParser) ParseFunction(funAst ast.FunctionAST) {
 	cp.Functions = append(cp.Functions, fun)
 }
 
-func (cp *CxxParser) checkFunctionAttributes(tags []ast.AttributeAST) {
+func (cp *Parser) checkFunctionAttributes(tags []ast.AttributeAST) {
 	for _, tag := range tags {
 		switch tag.Token.Type {
 		case lexer.Inline:
@@ -128,7 +139,7 @@ func variablesFromParameters(params []ast.ParameterAST) []*variable {
 	return vars
 }
 
-func (cp *CxxParser) checkFunctionReturn(fun *function) {
+func (cp *Parser) checkFunctionReturn(fun *function) {
 	miss := true
 	for _, s := range fun.Block.Content {
 		if s.Type == ast.StatementReturn {
@@ -155,7 +166,7 @@ func (cp *CxxParser) checkFunctionReturn(fun *function) {
 	}
 }
 
-func (cp *CxxParser) functionByName(name string) *function {
+func (cp *Parser) functionByName(name string) *function {
 	for _, fun := range builtinFunctions {
 		if fun.Name == name {
 			return fun
@@ -169,7 +180,7 @@ func (cp *CxxParser) functionByName(name string) *function {
 	return nil
 }
 
-func (cp *CxxParser) variableByName(name string) *variable {
+func (cp *Parser) variableByName(name string) *variable {
 	for _, variable := range cp.BlockVariables {
 		if variable.Name == name {
 			return variable
@@ -183,7 +194,7 @@ func (cp *CxxParser) variableByName(name string) *variable {
 	return nil
 }
 
-func (cp *CxxParser) existName(name string) lexer.Token {
+func (cp *Parser) existName(name string) lexer.Token {
 	fun := cp.functionByName(name)
 	if fun != nil {
 		return fun.Token
@@ -191,7 +202,7 @@ func (cp *CxxParser) existName(name string) lexer.Token {
 	return lexer.Token{}
 }
 
-func (cp *CxxParser) finalCheck() {
+func (cp *Parser) finalCheck() {
 	if cp.functionByName(jane.EntryPoint) == nil {
 		cp.PushError("no_entry_point")
 	}
@@ -203,7 +214,7 @@ func (cp *CxxParser) finalCheck() {
 	}
 }
 
-func (cp *CxxParser) computeProcesses(processes [][]lexer.Token) ast.ValueAST {
+func (cp *Parser) computeProcesses(processes [][]lexer.Token) ast.ValueAST {
 	if processes == nil {
 		return ast.ValueAST{}
 	}
@@ -276,17 +287,17 @@ func (cp *CxxParser) computeProcesses(processes [][]lexer.Token) ast.ValueAST {
 	return value
 }
 
-func (cp *CxxParser) computeTokens(tokens []lexer.Token) ast.ValueAST {
+func (cp *Parser) computeTokens(tokens []lexer.Token) ast.ValueAST {
 	return cp.computeProcesses(new(ast.AST).BuildExpression(tokens).Processes)
 }
 
-func (cp *CxxParser) computeExpression(ex ast.ExpressionAST) ast.ValueAST {
+func (cp *Parser) computeExpression(ex ast.ExpressionAST) ast.ValueAST {
 	processes := make([][]lexer.Token, len(ex.Processes))
 	copy(processes, ex.Processes)
 	return cp.computeProcesses(ex.Processes)
 }
 
-func (cp *CxxParser) nextOperator(tokens [][]lexer.Token) int {
+func (cp *Parser) nextOperator(tokens [][]lexer.Token) int {
 	precedence5 := -1
 	precedence4 := -1
 	precedence3 := -1
@@ -326,7 +337,7 @@ func (cp *CxxParser) nextOperator(tokens [][]lexer.Token) int {
 }
 
 type arithmeticProcess struct {
-	cp       *CxxParser
+	cp       *Parser
 	left     []lexer.Token
 	leftVal  ast.ValueAST
 	right    []lexer.Token
@@ -484,7 +495,7 @@ func (p arithmeticProcess) solve() (value ast.ValueAST) {
 
 const functionName = 0x0000A
 
-func (cp *CxxParser) processSingleValuePart(token lexer.Token) (result ast.ValueAST) {
+func (cp *Parser) processSingleValuePart(token lexer.Token) (result ast.ValueAST) {
 	result.Type = ast.NA
 	result.Token = token
 	switch token.Type {
@@ -523,7 +534,7 @@ func (cp *CxxParser) processSingleValuePart(token lexer.Token) (result ast.Value
 	return
 }
 
-func (cp *CxxParser) processSingleOperatorPart(tokens []lexer.Token) ast.ValueAST {
+func (cp *Parser) processSingleOperatorPart(tokens []lexer.Token) ast.ValueAST {
 	var result ast.ValueAST
 	token := tokens[0]
 	if len(tokens) == 0 {
@@ -557,7 +568,7 @@ func (cp *CxxParser) processSingleOperatorPart(tokens []lexer.Token) ast.ValueAS
 	return result
 }
 
-func (cp *CxxParser) processValuePart(tokens []lexer.Token) (result ast.ValueAST) {
+func (cp *Parser) processValuePart(tokens []lexer.Token) (result ast.ValueAST) {
 	if len(tokens) == 1 {
 		result = cp.processSingleValuePart(tokens[0])
 		if result.Type != ast.NA {
@@ -577,7 +588,7 @@ end:
 	return
 }
 
-func (cp *CxxParser) processParenthesesValuePart(tokens []lexer.Token) ast.ValueAST {
+func (cp *Parser) processParenthesesValuePart(tokens []lexer.Token) ast.ValueAST {
 	var valueTokens []lexer.Token
 	j := len(tokens) - 1
 	braceCount := 0
@@ -618,7 +629,7 @@ func (cp *CxxParser) processParenthesesValuePart(tokens []lexer.Token) ast.Value
 	return value
 }
 
-func (cp *CxxParser) parseFunctionCallStatement(fun *function, tokens []lexer.Token) {
+func (cp *Parser) parseFunctionCallStatement(fun *function, tokens []lexer.Token) {
 	errToken := tokens[0]
 	tokens = cp.getRangeTokens("(", ")", tokens)
 	if tokens == nil {
@@ -632,7 +643,7 @@ func (cp *CxxParser) parseFunctionCallStatement(fun *function, tokens []lexer.To
 	cp.parseArgs(fun, args, errToken)
 }
 
-func (cp *CxxParser) parseArgs(fun *function, args []ast.ArgAST, errToken lexer.Token) {
+func (cp *Parser) parseArgs(fun *function, args []ast.ArgAST, errToken lexer.Token) {
 	if len(args) < len(fun.Params) {
 		cp.PushErrorToken(errToken, "argument_missing")
 	}
@@ -641,7 +652,7 @@ func (cp *CxxParser) parseArgs(fun *function, args []ast.ArgAST, errToken lexer.
 	}
 }
 
-func (cp *CxxParser) parseArg(fun *function, index int, arg ast.ArgAST) {
+func (cp *Parser) parseArg(fun *function, index int, arg ast.ArgAST) {
 	if index >= len(fun.Params) {
 		cp.PushErrorToken(arg.Token, "argument_overflow")
 		return
@@ -656,7 +667,7 @@ func (cp *CxxParser) parseArg(fun *function, index int, arg ast.ArgAST) {
 	}
 }
 
-func (cp *CxxParser) getRangeTokens(open, close string, tokens []lexer.Token) []lexer.Token {
+func (cp *Parser) getRangeTokens(open, close string, tokens []lexer.Token) []lexer.Token {
 	braceCount := 0
 	start := 1
 	for index, token := range tokens {
@@ -677,7 +688,7 @@ func (cp *CxxParser) getRangeTokens(open, close string, tokens []lexer.Token) []
 	return nil
 }
 
-func (cp *CxxParser) checkFunction(fun *function) {
+func (cp *Parser) checkFunction(fun *function) {
 	switch fun.Name {
 	case jane.EntryPoint:
 		if len(fun.Params) > 0 {
@@ -689,7 +700,7 @@ func (cp *CxxParser) checkFunction(fun *function) {
 	}
 }
 
-func (cp *CxxParser) checkBlock(b ast.BlockAST) {
+func (cp *Parser) checkBlock(b ast.BlockAST) {
 	for _, model := range b.Content {
 		switch model.Type {
 		case ast.StatementFunctionCall:
@@ -701,7 +712,7 @@ func (cp *CxxParser) checkBlock(b ast.BlockAST) {
 	}
 }
 
-func (cp *CxxParser) checkFunctionCallStatement(cs ast.FunctionCallAST) {
+func (cp *Parser) checkFunctionCallStatement(cs ast.FunctionCallAST) {
 	fun := cp.functionByName(cs.Name)
 	if fun == nil {
 		cp.PushErrorToken(cs.Token, "name_not_defined")

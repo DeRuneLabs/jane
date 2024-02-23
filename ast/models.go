@@ -35,14 +35,27 @@ type BlockAST struct {
 }
 
 func (b BlockAST) String() string {
+	return parseBlock(b, 1)
+}
+
+func parseBlock(b BlockAST, indent int) string {
+	const indentSpace = 2
 	var cxx strings.Builder
 	for _, s := range b.Content {
 		cxx.WriteByte('\n')
-		cxx.WriteString(" ")
+		cxx.WriteString(fullString(' ', indent*indentSpace))
 		cxx.WriteString(fmt.Sprint(s.Value))
-		cxx.WriteByte(';')
 	}
 	return cxx.String()
+}
+
+func fullString(b byte, count int) string {
+	var sb strings.Builder
+	for count > 0 {
+		count--
+		sb.WriteByte(b)
+	}
+	return sb.String()
 }
 
 type TypeAST struct {
@@ -86,7 +99,7 @@ func (fc FunctionCallAST) String() string {
 		}
 		cxx = cxx[:len(cxx)-1]
 	}
-	cxx += ")"
+	cxx += ");"
 	return cxx
 }
 
@@ -97,7 +110,7 @@ type ArgAST struct {
 }
 
 func (a ArgAST) String() string {
-	return a.Expression.string()
+	return a.Expression.String()
 }
 
 type ExpressionAST struct {
@@ -105,7 +118,7 @@ type ExpressionAST struct {
 	Processes [][]lexer.Token
 }
 
-func (e ExpressionAST) string() string {
+func (e ExpressionAST) String() string {
 	var sb strings.Builder
 	for _, process := range e.Processes {
 		if len(process) == 1 && process[0].Type == lexer.Operator {
@@ -119,15 +132,6 @@ func (e ExpressionAST) string() string {
 		}
 	}
 	return sb.String()
-}
-
-type ExpressionNode struct {
-	Content interface{}
-	Type    uint8
-}
-
-func (n ExpressionNode) String() string {
-	return fmt.Sprint(n.Content)
 }
 
 type ValueAST struct {
@@ -164,7 +168,7 @@ type ReturnAST struct {
 }
 
 func (r ReturnAST) String() string {
-	return r.Token.Value + " " + r.Expression.string()
+	return r.Token.Value + " " + r.Expression.String()
 }
 
 type AttributeAST struct {
@@ -174,4 +178,11 @@ type AttributeAST struct {
 
 func (t AttributeAST) String() string {
 	return t.Value
+}
+
+type VariableAST struct {
+	Token lexer.Token
+	Name  string
+	Type  TypeAST
+	Value ExpressionAST
 }
