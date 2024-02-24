@@ -12,6 +12,7 @@ const entryPointStandard = `
 #pragma region JANE_ENTRY_POINT_STANDARD_CODES
   setlocale(0x0, "");
 #pragma endregion
+
 `
 
 type function struct {

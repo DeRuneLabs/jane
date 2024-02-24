@@ -1,0 +1,3 @@
+out_name main
+cxx_out_dir ./
+cxx_out_name jane.cxx

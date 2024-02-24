@@ -1,6 +1,6 @@
 // print specified value
-function print(c any)
+function print(v any)
 
 // println specified value to command line with new line
-function println(c any)
+function println(v any)
 

@@ -108,6 +108,7 @@ func (p *Parser) ParseStatement(s ast.StatementAST) {
 func (p *Parser) ParseFunction(funAst ast.FunctionAST) {
 	if p.existName(funAst.Name).Type != ast.NA {
 		p.PushErrorToken(funAst.Token, "exist_name")
+		return
 	}
 	fun := new(function)
 	fun.Token = funAst.Token
@@ -164,34 +165,34 @@ func variablesFromParameters(params []ast.ParameterAST) []ast.VariableAST {
 		variable.Name = param.Name
 		variable.Token = param.Token
 		variable.Type = param.Type
+		vars = append(vars, variable)
 	}
 	return vars
 }
 
-func (cp *Parser) checkFunctionReturn(fun *function) {
+func (p *Parser) checkFunctionReturn(fun *function) {
 	miss := true
 	for _, s := range fun.Block.Content {
 		if s.Type == ast.StatementReturn {
 			retAST := s.Value.(ast.ReturnAST)
 			if len(retAST.Expression.Tokens) == 0 {
 				if fun.ReturnType.Code != jane.Void {
-					cp.PushErrorToken(retAST.Token, "require_return_value")
+					p.PushErrorToken(retAST.Token, "require_return_value")
 				}
 			} else {
 				if fun.ReturnType.Code == jane.Void {
-					cp.PushErrorToken(retAST.Token, "void_function_return_value")
-				} else {
-					value := cp.computeExpression(retAST.Expression)
-					if !jane.TypesAreCompatible(value.Type, fun.ReturnType.Code, true) {
-						cp.PushErrorToken(retAST.Token, "incompatible_type")
-					}
+					p.PushErrorToken(retAST.Token, "void_function_return_value")
+				}
+				value := p.computeExpression(retAST.Expression)
+				if !jane.TypesAreCompatible(value.Type, fun.ReturnType.Code, true) {
+					p.PushErrorToken(retAST.Token, "incompatible_type")
 				}
 			}
 			miss = false
 		}
 	}
 	if miss && fun.ReturnType.Code != jane.Void {
-		cp.PushErrorToken(fun.Token, "missing_return")
+		p.PushErrorToken(fun.Token, "missing_return")
 	}
 }
 
@@ -258,18 +259,18 @@ func (p *Parser) checkFunctions() {
 	}
 }
 
-func (cp *Parser) computeProcesses(processes [][]lexer.Token) ast.ValueAST {
+func (p *Parser) computeProcesses(processes [][]lexer.Token) ast.ValueAST {
 	if processes == nil {
 		return ast.ValueAST{}
 	}
 	if len(processes) == 1 {
-		value := cp.processValuePart(processes[0])
+		value := p.processValuePart(processes[0])
 		return value
 	}
 	var process arithmeticProcess
 	var value ast.ValueAST
-	process.cp = cp
-	j := cp.nextOperator(processes)
+	process.cp = p
+	j := p.nextOperator(processes)
 	boolean := false
 	for j != -1 {
 		if !boolean {
@@ -282,36 +283,36 @@ func (cp *Parser) computeProcesses(processes [][]lexer.Token) ast.ValueAST {
 			process.leftVal = value
 			process.operator = processes[j][0]
 			process.right = processes[j+1]
-			process.rightVal = cp.processValuePart(process.right)
+			process.rightVal = p.processValuePart(process.right)
 			value = process.solve()
 			processes = processes[2:]
-			j = cp.nextOperator(processes)
+			j = p.nextOperator(processes)
 			continue
 		} else if j == len(processes)-1 {
 			process.operator = processes[j][0]
 			process.left = processes[j-1]
-			process.leftVal = cp.processValuePart(process.left)
+			process.leftVal = p.processValuePart(process.left)
 			process.rightVal = value
 			value = process.solve()
 			processes = processes[:j-1]
-			j = cp.nextOperator(processes)
+			j = p.nextOperator(processes)
 			continue
 		} else if prev := processes[j-1]; prev[0].Type == lexer.Operator &&
 			len(prev) == 1 {
 			process.leftVal = value
 			process.operator = processes[j][0]
 			process.right = processes[j+1]
-			process.rightVal = cp.processValuePart(process.right)
+			process.rightVal = p.processValuePart(process.right)
 			value = process.solve()
 			processes = append(processes[:j], processes[j+2:]...)
-			j = cp.nextOperator(processes)
+			j = p.nextOperator(processes)
 			continue
 		}
 		process.left = processes[j-1]
-		process.leftVal = cp.processValuePart(process.left)
+		process.leftVal = p.processValuePart(process.left)
 		process.operator = processes[j][0]
 		process.right = processes[j+1]
-		process.rightVal = cp.processValuePart(process.right)
+		process.rightVal = p.processValuePart(process.right)
 		solvedValue := process.solve()
 		if value.Type != ast.NA {
 			process.operator.Value = "+"
@@ -326,7 +327,7 @@ func (cp *Parser) computeProcesses(processes [][]lexer.Token) ast.ValueAST {
 		if len(processes) == 1 {
 			break
 		}
-		j = cp.nextOperator(processes)
+		j = p.nextOperator(processes)
 	}
 	return value
 }
@@ -430,109 +431,109 @@ func (p arithmeticProcess) solveBool() (value ast.ValueAST) {
 	return
 }
 
-func (p arithmeticProcess) solveFloat() (value ast.ValueAST) {
-	if !jane.TypesAreCompatible(p.leftVal.Type, p.rightVal.Type, true) {
-		if !IsConstantNumeric(p.leftVal.Value) && !IsConstantNumeric(p.rightVal.Value) {
-			p.cp.PushErrorToken(p.operator, "incompatible_type")
+func (ap arithmeticProcess) solveFloat() (value ast.ValueAST) {
+	if !jane.TypesAreCompatible(ap.leftVal.Type, ap.rightVal.Type, true) {
+		if !IsConstantNumeric(ap.leftVal.Value) && !IsConstantNumeric(ap.rightVal.Value) {
+			ap.cp.PushErrorToken(ap.operator, "incompatible_type")
 			return
 		}
 	}
-	switch p.operator.Value {
+	switch ap.operator.Value {
 	case "!=", "==", "<", ">", ">=", "<=":
 		value.Type = jane.Bool
 	case "+", "-", "*", "/":
 		value.Type = jane.Float32
-		if p.leftVal.Type == jane.Float64 || p.rightVal.Type == jane.Float64 {
+		if ap.leftVal.Type == jane.Float64 || ap.rightVal.Type == jane.Float64 {
 			value.Type = jane.Float64
 		}
 	default:
-		p.cp.PushErrorToken(p.operator, "operator_notfor_float")
+		ap.cp.PushErrorToken(ap.operator, "operator_notfor_float")
 	}
 	return
 }
 
-func (p arithmeticProcess) solveSigned() (value ast.ValueAST) {
-	if !jane.TypesAreCompatible(p.leftVal.Type, p.rightVal.Type, true) {
-		if !IsConstantNumeric(p.leftVal.Value) && !IsConstantNumeric(p.rightVal.Value) {
-			p.cp.PushErrorToken(p.operator, "incompatible_type")
+func (ap arithmeticProcess) solveSigned() (value ast.ValueAST) {
+	if !jane.TypesAreCompatible(ap.leftVal.Type, ap.rightVal.Type, true) {
+		if !IsConstantNumeric(ap.leftVal.Value) && !IsConstantNumeric(ap.rightVal.Value) {
+			ap.cp.PushErrorToken(ap.operator, "incompatible_type")
 			return
 		}
 	}
-	switch p.operator.Value {
+	switch ap.operator.Value {
 	case "!=", "==", "<", ">", ">=", "<=":
 		value.Type = jane.Bool
 	case "+", "-", "*", "/", "%", "&", "|", "^":
-		value.Type = p.leftVal.Type
-		if jane.TypeGreaterThan(p.rightVal.Type, value.Type) {
-			value.Type = p.rightVal.Type
+		value.Type = ap.leftVal.Type
+		if jane.TypeGreaterThan(ap.rightVal.Type, value.Type) {
+			value.Type = ap.rightVal.Type
 		}
 	case ">>", "<<":
-		value.Type = p.leftVal.Type
-		if !jane.IsUnsignedNumericType(p.rightVal.Type) && !checkIntBit(p.rightVal, jnbits.BitsizeOfType(jane.UInt64)) {
-			p.cp.PushErrorToken(p.rightVal.Token, "bitshift_must_unsigned")
+		value.Type = ap.leftVal.Type
+		if !jane.IsUnsignedNumericType(ap.rightVal.Type) && !checkIntBit(ap.rightVal, jnbits.BitsizeOfType(jane.UInt64)) {
+			ap.cp.PushErrorToken(ap.rightVal.Token, "bitshift_must_unsigned")
 		}
 	default:
-		p.cp.PushErrorToken(p.operator, "operator_notfor_int")
+		ap.cp.PushErrorToken(ap.operator, "operator_notfor_int")
 	}
 	return
 }
 
-func (p arithmeticProcess) solveUnsigned() (value ast.ValueAST) {
-	if !jane.TypesAreCompatible(p.leftVal.Type, p.rightVal.Type, true) {
-		if !IsConstantNumeric(p.leftVal.Value) && !IsConstantNumeric(p.rightVal.Value) {
-			p.cp.PushErrorToken(p.operator, "incompatible_type")
+func (ap arithmeticProcess) solveUnsigned() (value ast.ValueAST) {
+	if !jane.TypesAreCompatible(ap.leftVal.Type, ap.rightVal.Type, true) {
+		if !IsConstantNumeric(ap.leftVal.Value) && !IsConstantNumeric(ap.rightVal.Value) {
+			ap.cp.PushErrorToken(ap.operator, "incompatible_type")
 			return
 		}
 		return
 	}
-	switch p.operator.Value {
+	switch ap.operator.Value {
 	case "!=", "==", "<", ">", ">=", "<=":
 		value.Type = jane.Bool
 	case "+", "-", "*", "/", "%", "&", "|", "^":
-		value.Type = p.leftVal.Type
-		if jane.TypeGreaterThan(p.rightVal.Type, value.Type) {
-			value.Type = p.rightVal.Type
+		value.Type = ap.leftVal.Type
+		if jane.TypeGreaterThan(ap.rightVal.Type, value.Type) {
+			value.Type = ap.rightVal.Type
 		}
 	default:
-		p.cp.PushErrorToken(p.operator, "operator_notfor_uint")
+		ap.cp.PushErrorToken(ap.operator, "operator_notfor_uint")
 	}
 	return
 }
 
-func (p arithmeticProcess) solveLogical() (value ast.ValueAST) {
+func (ap arithmeticProcess) solveLogical() (value ast.ValueAST) {
 	value.Type = jane.Bool
-	if p.leftVal.Type != jane.Bool {
-		p.cp.PushErrorToken(p.leftVal.Token, "logical_not_bool")
+	if ap.leftVal.Type != jane.Bool {
+		ap.cp.PushErrorToken(ap.leftVal.Token, "logical_not_bool")
 	}
-	if p.rightVal.Type != jane.Bool {
-		p.cp.PushErrorToken(p.rightVal.Token, "logical_not_bool")
+	if ap.rightVal.Type != jane.Bool {
+		ap.cp.PushErrorToken(ap.rightVal.Token, "logical_not_bool")
 	}
 	return
 }
 
-func (p arithmeticProcess) solve() (value ast.ValueAST) {
-	switch p.operator.Value {
+func (ap arithmeticProcess) solve() (value ast.ValueAST) {
+	switch ap.operator.Value {
 	case "+", "-", "*", "/", "%", ">>",
 		"<<", "&", "|", "^", "==", "!=",
 		">=", "<=", ">", "<":
 	case "&&", "||":
-		return p.solveLogical()
+		return ap.solveLogical()
 	default:
-		p.cp.PushErrorToken(p.operator, "invalid_operator")
+		ap.cp.PushErrorToken(ap.operator, "invalid_operator")
 	}
 	switch {
-	case p.leftVal.Type == jane.Any || p.rightVal.Type == jane.Any:
-		return p.solveAny()
-	case p.leftVal.Type == jane.Bool || p.rightVal.Type == jane.Bool:
-		return p.solveBool()
-	case p.leftVal.Type == jane.Str || p.rightVal.Type == jane.Str:
-		return p.solveString()
-	case jane.IsFloatType(p.leftVal.Type) || jane.IsFloatType(p.rightVal.Type):
-		return p.solveFloat()
-	case jane.IsSignedNumericType(p.leftVal.Type) || jane.IsSignedNumericType(p.rightVal.Type):
-		return p.solveSigned()
-	case jane.IsUnsignedNumericType(p.leftVal.Type) || jane.IsUnsignedNumericType(p.rightVal.Type):
-		return p.solveUnsigned()
+	case ap.leftVal.Type == jane.Any || ap.rightVal.Type == jane.Any:
+		return ap.solveAny()
+	case ap.leftVal.Type == jane.Bool || ap.rightVal.Type == jane.Bool:
+		return ap.solveBool()
+	case ap.leftVal.Type == jane.Str || ap.rightVal.Type == jane.Str:
+		return ap.solveString()
+	case jane.IsFloatType(ap.leftVal.Type) || jane.IsFloatType(ap.rightVal.Type):
+		return ap.solveFloat()
+	case jane.IsSignedNumericType(ap.leftVal.Type) || jane.IsSignedNumericType(ap.rightVal.Type):
+		return ap.solveSigned()
+	case jane.IsUnsignedNumericType(ap.leftVal.Type) || jane.IsUnsignedNumericType(ap.rightVal.Type):
+		return ap.solveUnsigned()
 	}
 	return
 }
@@ -581,6 +582,7 @@ func (cp *Parser) processSingleValuePart(token lexer.Token) (result ast.ValueAST
 func (cp *Parser) processSingleOperatorPart(tokens []lexer.Token) ast.ValueAST {
 	var result ast.ValueAST
 	token := tokens[0]
+	tokens = tokens[1:]
 	if len(tokens) == 0 {
 		cp.PushErrorToken(token, "invalid_syntax")
 		return result

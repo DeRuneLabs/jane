@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,13 +139,13 @@ template <typename any>
 #pragma endregion JANE_STANDARD_IMPORTS
 
 #pragma region JANE_BUILTIN_FUNCTIONS
-inline void print(any c) {
-  std::wcout << c;
+inline void print(any v) {
+  std::wcout << v;
 }
 
 template <typename any>
-inline void println(any c) {
-  print(c);
+inline void println(any v) {
+  print(v);
   std::wcout << std::endl;
 }
 
