@@ -203,3 +203,16 @@ func CxxTypeNameFromType(typeCode uint8) string {
 	}
 	return ""
 }
+
+func DefaultValueOfType(t uint8) string {
+	if IsNumericType(t) {
+		return "0"
+	}
+	switch t {
+	case Bool:
+		return "false"
+	case Str:
+		return `""`
+	}
+	return "."
+}

@@ -60,7 +60,7 @@ func fullString(b byte, count int) string {
 
 type TypeAST struct {
 	Token lexer.Token
-	Type  uint8
+	Code  uint8
 	Value string
 }
 
@@ -79,7 +79,7 @@ type ParameterAST struct {
 }
 
 func (p ParameterAST) String() string {
-	return jane.CxxTypeNameFromType(p.Type.Type) + " " + p.Name
+	return jane.CxxTypeNameFromType(p.Type.Code) + " " + p.Name
 }
 
 type FunctionCallAST struct {
@@ -185,4 +185,19 @@ type VariableAST struct {
 	Name  string
 	Type  TypeAST
 	Value ExpressionAST
+}
+
+func (v VariableAST) String() string {
+	var sb strings.Builder
+	if v.Type.Code == jane.Void {
+		sb.WriteString("auto")
+	} else {
+		sb.WriteString(jane.CxxTypeNameFromType(v.Type.Code))
+	}
+	sb.WriteByte(' ')
+	sb.WriteString(v.Name)
+	sb.WriteString(" = ")
+	sb.WriteString(v.Value.String())
+	sb.WriteByte(';')
+	return sb.String()
 }

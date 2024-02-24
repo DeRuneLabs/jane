@@ -9,25 +9,25 @@ var builtinFunctions = []*function{
 	{
 		Name: "print",
 		ReturnType: ast.TypeAST{
-			Type: jane.Void,
+			Code: jane.Void,
 		},
 		Params: []ast.ParameterAST{{
 			Name: "v",
 			Type: ast.TypeAST{
 				Value: "any",
-				Type:  jane.Any,
+				Code:  jane.Any,
 			},
 		}},
 	}, {
 		Name: "println",
 		ReturnType: ast.TypeAST{
-			Type: jane.Void,
+			Code: jane.Void,
 		},
 		Params: []ast.ParameterAST{{
 			Name: "v",
 			Type: ast.TypeAST{
 				Value: "any",
-				Type:  jane.Any,
+				Code:  jane.Any,
 			},
 		}},
 	},

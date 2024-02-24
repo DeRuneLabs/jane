@@ -18,6 +18,7 @@ const (
 	StatementFunction     uint8 = 1
 	StatementReturn       uint8 = 2
 	StatementFunctionCall uint8 = 3
+	StatementVariable     uint8 = 4
 )
 
 const (

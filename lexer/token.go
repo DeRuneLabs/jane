@@ -21,5 +21,5 @@ const (
 	Operator  uint8 = 7
 	Comma     uint8 = 8
 	Function  uint8 = 9
-	Inline    uint8 = 10
+	Var       uint8 = 10
 )

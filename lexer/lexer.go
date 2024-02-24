@@ -211,13 +211,17 @@ func (lexer *Lexer) Token() Token {
 		tk.Value = ">"
 		tk.Type = Operator
 		lexer.Position++
+	case lexerline[0] == '=':
+		tk.Value = "="
+		tk.Type = Operator
+		lexer.Position++
 	case isKeyword(lexerline, "fun"):
 		tk.Value = "function"
 		tk.Type = Function
-	case isKeyword(lexerline, "inline"):
-		tk.Value = "inline"
-		tk.Type = Inline
-		lexer.Position += 6
+	case isKeyword(lexerline, "var"):
+		tk.Value = "var"
+		tk.Type = Var
+		lexer.Position += 3
 	case isKeyword(lexerline, "any"):
 		tk.Value = "any"
 		tk.Type = Type

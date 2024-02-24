@@ -45,6 +45,8 @@ func (ast *AST) Build() {
 			ast.BuildBrace()
 		case lexer.Function:
 			ast.BuildFunction()
+		case lexer.Var, lexer.Type:
+			ast.BuildGlobalVariable()
 		default:
 			ast.PushError("invalid_syntax")
 			ast.Position++
@@ -94,9 +96,18 @@ func (ast *AST) BuildFunction() {
 	ast.Position++
 	var funAst FunctionAST
 	funAst.Token = ast.Tokens[ast.Position]
+	if funAst.Token.Type != lexer.Name {
+		ast.PushErrorToken(funAst.Token, "invalid_syntax")
+	}
 	funAst.Name = funAst.Token.Value
-	funAst.ReturnType.Type = jane.Void
+	funAst.ReturnType.Code = jane.Void
 	ast.Position++
+	if ast.Ended() {
+		ast.Position--
+		ast.PushError("function_body_not_exist")
+		ast.Position = -1
+		return
+	}
 	tokens := ast.getRange("(", ")")
 	if tokens == nil {
 		return
@@ -141,6 +152,19 @@ func (ast *AST) BuildFunction() {
 			Type:  StatementFunction,
 			Value: funAst,
 		},
+	})
+}
+
+func (ast *AST) BuildGlobalVariable() {
+	statementTokens := ast.skipStatement()
+	if statementTokens == nil {
+		return
+	}
+	statement := ast.BuildVariableStatement(statementTokens)
+	ast.Tree = append(ast.Tree, Object{
+		Token: statement.Token,
+		Type:  Statement,
+		Value: statement,
 	})
 }
 
@@ -206,7 +230,7 @@ func (ast *AST) BuildType(token lexer.Token) (t TypeAST) {
 		return
 	}
 	t.Token = token
-	t.Type = jane.TypeFromName(token.Value)
+	t.Code = jane.TypeFromName(token.Value)
 	t.Value = token.Value
 	return t
 }
@@ -247,6 +271,10 @@ func (ast *AST) BuildBlock(tokens []lexer.Token) (b BlockAST) {
 func (ast *AST) BuildStatement(tokens []lexer.Token) (s StatementAST) {
 	firstToken := tokens[0]
 	switch firstToken.Type {
+	case lexer.Name:
+		return ast.BuildNameStatement(tokens)
+	case lexer.Var:
+		return ast.BuildVariableStatement(tokens)
 	case lexer.Return:
 		return ast.BuildReturnStatement(tokens)
 	default:
@@ -332,6 +360,51 @@ func (ast *AST) pushArg(args *[]ArgAST, tokens []lexer.Token, err lexer.Token) {
 	arg.Tokens = tokens
 	arg.Expression = ast.BuildExpression(arg.Tokens)
 	*args = append(*args, arg)
+}
+
+func (ast *AST) BuildVariableStatement(tokens []lexer.Token) (s StatementAST) {
+	position := 1
+	var varAST VariableAST
+	varAST.Token = tokens[position]
+	if varAST.Token.Type != lexer.Name {
+		ast.PushErrorToken(varAST.Token, "invalid_syntax")
+	}
+	varAST.Name = varAST.Token.Value
+	varAST.Type = TypeAST{Code: jane.Void}
+	position++
+	if position >= len(tokens) {
+		ast.PushErrorToken(tokens[position-1], "invalid_syntax")
+		return
+	}
+	token := tokens[position]
+	if token.Type == lexer.Type {
+		varAST.Type = ast.BuildType(token)
+		position++
+		if position >= len(tokens) {
+			ast.PushErrorToken(token, "invalid_syntax")
+			return
+		}
+		token = tokens[position]
+	}
+	switch token.Type {
+	case lexer.SemiColon:
+		if varAST.Type.Code == jane.Void {
+			ast.PushErrorToken(token, "missing_autotype_value")
+			goto end
+		}
+	case lexer.Operator:
+		if token.Value != "=" {
+			ast.PushErrorToken(token, "invalid_syntax")
+			goto end
+		}
+	}
+	varAST.Value = ast.BuildExpression(tokens[position+1:])
+end:
+	return StatementAST{
+		Token: varAST.Token,
+		Type:  StatementVariable,
+		Value: varAST,
+	}
 }
 
 func (ast *AST) BuildReturnStatement(tokens []lexer.Token) StatementAST {
@@ -487,5 +560,20 @@ func (ast *AST) getRange(open, close string) []lexer.Token {
 		}
 		return ast.Tokens[start : ast.Position-1]
 	}
+	return nil
+}
+
+func (ast *AST) skipStatement() []lexer.Token {
+	start := ast.Position
+	for ; !ast.Ended(); ast.Position++ {
+		token := ast.Tokens[ast.Position]
+		if token.Type == lexer.SemiColon {
+			ast.Position++
+			return ast.Tokens[start : ast.Position-1]
+		}
+	}
+	ast.Position--
+	ast.PushError("missing_semicolon")
+	ast.Position = -1
 	return nil
 }

@@ -11,12 +11,14 @@ import (
 )
 
 type Parser struct {
-	attributes      []ast.AttributeAST
-	Functions       []*function
-	GlobalVariables []*variable
-	BlockVariables  []*variable
-	Tokens          []lexer.Token
-	PFI             *ParseFileInfo
+	attributes []ast.AttributeAST
+
+	Functions              []*function
+	GlobalVariables        []ast.VariableAST
+	WaitingGlobalVariables []ast.VariableAST
+	BlockVariables         []ast.VariableAST
+	Tokens                 []lexer.Token
+	PFI                    *ParseFileInfo
 }
 
 func NewParser(tokens []lexer.Token, PFI *ParseFileInfo) *Parser {
@@ -84,27 +86,28 @@ func (cp *Parser) Parse() {
 }
 
 func (cp *Parser) PushAtrribute(t ast.AttributeAST) {
-	switch t.Token.Type {
-	case lexer.Inline:
+	switch t.Token.Value {
+	case "inline":
 	default:
 		cp.PushErrorToken(t.Token, "invalid_syntax")
 	}
 	cp.attributes = append(cp.attributes, t)
 }
 
-func (cp *Parser) ParseStatement(s ast.StatementAST) {
+func (p *Parser) ParseStatement(s ast.StatementAST) {
 	switch s.Type {
 	case ast.StatementFunction:
-		cp.ParseFunction(s.Value.(ast.FunctionAST))
+		p.ParseFunction(s.Value.(ast.FunctionAST))
+	case ast.StatementVariable:
+		p.ParseGlobalVariable(s.Value.(ast.VariableAST))
 	default:
-		cp.PushErrorToken(s.Token, "invalid_syntax")
+		p.PushErrorToken(s.Token, "invalid_syntax")
 	}
 }
 
-func (cp *Parser) ParseFunction(funAst ast.FunctionAST) {
-	if token := cp.existName(funAst.Name); token.Type != ast.NA {
-		cp.PushErrorToken(funAst.Token, "exist_name")
-		return
+func (p *Parser) ParseFunction(funAst ast.FunctionAST) {
+	if p.existName(funAst.Name).Type != ast.NA {
+		p.PushErrorToken(funAst.Token, "exist_name")
 	}
 	fun := new(function)
 	fun.Token = funAst.Token
@@ -112,29 +115,55 @@ func (cp *Parser) ParseFunction(funAst ast.FunctionAST) {
 	fun.ReturnType = funAst.ReturnType
 	fun.Block = funAst.Block
 	fun.Params = funAst.Params
-	fun.Attributes = cp.attributes
-	cp.attributes = nil
-	cp.checkFunctionAttributes(fun.Attributes)
-	cp.Functions = append(cp.Functions, fun)
+	fun.Attributes = p.attributes
+	p.attributes = nil
+	p.checkFunctionAttributes(fun.Attributes)
+	p.Functions = append(p.Functions, fun)
 }
 
-func (cp *Parser) checkFunctionAttributes(tags []ast.AttributeAST) {
-	for _, tag := range tags {
-		switch tag.Token.Type {
-		case lexer.Inline:
+func (p *Parser) ParseGlobalVariable(varAST ast.VariableAST) {
+	if p.existName(varAST.Name).Type != ast.NA {
+		p.PushErrorToken(varAST.Token, "exist_name")
+		return
+	}
+	p.WaitingGlobalVariables = append(p.WaitingGlobalVariables, varAST)
+}
+
+func (p *Parser) ParseWaitingGlobalVariables() {
+	for _, varAST := range p.WaitingGlobalVariables {
+		p.GlobalVariables = append(p.GlobalVariables, p.ParseVariable(varAST))
+	}
+}
+
+func (p *Parser) ParseVariable(varAST ast.VariableAST) ast.VariableAST {
+	if varAST.Type.Code != jane.Void {
+		value := p.computeExpression(varAST.Value)
+		if varAST.Type.Code != value.Type {
+			if !jane.TypesAreCompatible(varAST.Type.Code, value.Type, true) {
+				p.PushErrorToken(varAST.Token, "incompatible_datatype")
+			}
+		}
+	}
+	return varAST
+}
+
+func (p *Parser) checkFunctionAttributes(attributes []ast.AttributeAST) {
+	for _, attribute := range attributes {
+		switch attribute.Token.Value {
+		case "inline":
 		default:
-			cp.PushErrorToken(tag.Token, "invalid_tag")
+			p.PushErrorToken(attribute.Token, "invalid_attribute")
 		}
 	}
 }
 
-func variablesFromParameters(params []ast.ParameterAST) []*variable {
-	var vars []*variable
+func variablesFromParameters(params []ast.ParameterAST) []ast.VariableAST {
+	var vars []ast.VariableAST
 	for _, param := range params {
-		variable := new(variable)
+		var variable ast.VariableAST
 		variable.Name = param.Name
 		variable.Token = param.Token
-		variable.Type = param.Type.Type
+		variable.Type = param.Type
 	}
 	return vars
 }
@@ -145,15 +174,15 @@ func (cp *Parser) checkFunctionReturn(fun *function) {
 		if s.Type == ast.StatementReturn {
 			retAST := s.Value.(ast.ReturnAST)
 			if len(retAST.Expression.Tokens) == 0 {
-				if fun.ReturnType.Type != jane.Void {
+				if fun.ReturnType.Code != jane.Void {
 					cp.PushErrorToken(retAST.Token, "require_return_value")
 				}
 			} else {
-				if fun.ReturnType.Type == jane.Void {
+				if fun.ReturnType.Code == jane.Void {
 					cp.PushErrorToken(retAST.Token, "void_function_return_value")
 				} else {
 					value := cp.computeExpression(retAST.Expression)
-					if !jane.TypesAreCompatible(value.Type, fun.ReturnType.Type, true) {
+					if !jane.TypesAreCompatible(value.Type, fun.ReturnType.Code, true) {
 						cp.PushErrorToken(retAST.Token, "incompatible_type")
 					}
 				}
@@ -161,7 +190,7 @@ func (cp *Parser) checkFunctionReturn(fun *function) {
 			miss = false
 		}
 	}
-	if miss && fun.ReturnType.Type != jane.Void {
+	if miss && fun.ReturnType.Code != jane.Void {
 		cp.PushErrorToken(fun.Token, "missing_return")
 	}
 }
@@ -180,37 +209,52 @@ func (cp *Parser) functionByName(name string) *function {
 	return nil
 }
 
-func (cp *Parser) variableByName(name string) *variable {
+func (cp *Parser) variableByName(name string) *ast.VariableAST {
 	for _, variable := range cp.BlockVariables {
 		if variable.Name == name {
-			return variable
+			return &variable
 		}
 	}
 	for _, variable := range cp.GlobalVariables {
 		if variable.Name == name {
-			return variable
+			return &variable
 		}
 	}
 	return nil
 }
 
-func (cp *Parser) existName(name string) lexer.Token {
-	fun := cp.functionByName(name)
+func (p *Parser) existName(name string) lexer.Token {
+	fun := p.functionByName(name)
 	if fun != nil {
 		return fun.Token
+	}
+	variable := p.variableByName(name)
+	if variable != nil {
+		return variable.Token
+	}
+	for _, varAST := range p.WaitingGlobalVariables {
+		if varAST.Name == name {
+			return varAST.Token
+		}
 	}
 	return lexer.Token{}
 }
 
-func (cp *Parser) finalCheck() {
-	if cp.functionByName(jane.EntryPoint) == nil {
-		cp.PushError("no_entry_point")
+func (p *Parser) finalCheck() {
+	if p.functionByName(jane.EntryPoint) == nil {
+		p.PushError("no_entry_point")
 	}
-	for _, fun := range cp.Functions {
-		cp.BlockVariables = variablesFromParameters(fun.Params)
-		cp.checkFunction(fun)
-		cp.checkBlock(fun.Block)
-		cp.checkFunctionReturn(fun)
+	p.ParseWaitingGlobalVariables()
+	p.WaitingGlobalVariables = nil
+	p.checkFunctions()
+}
+
+func (p *Parser) checkFunctions() {
+	for _, fun := range p.Functions {
+		p.BlockVariables = variablesFromParameters(fun.Params)
+		p.checkFunction(fun)
+		p.checkBlock(fun.Block)
+		p.checkFunctionReturn(fun)
 	}
 }
 
@@ -345,19 +389,19 @@ type arithmeticProcess struct {
 	operator lexer.Token
 }
 
-func (p arithmeticProcess) solveString() (value ast.ValueAST) {
-	if p.leftVal.Type != p.rightVal.Type {
-		p.cp.PushErrorToken(p.operator, "invalid_datatype")
+func (ap arithmeticProcess) solveString() (value ast.ValueAST) {
+	if ap.leftVal.Type != ap.rightVal.Type {
+		ap.cp.PushErrorToken(ap.operator, "incompatible_datatype")
 		return
 	}
 	value.Type = jane.Str
-	switch p.operator.Value {
+	switch ap.operator.Value {
 	case "+":
 		value.Type = jane.Str
 	case "==", "!=":
 		value.Type = jane.Bool
 	default:
-		p.cp.PushErrorToken(p.operator, "operator_notfor_strings")
+		ap.cp.PushErrorToken(ap.operator, "operator_notfor_strings")
 	}
 	return
 }
@@ -524,7 +568,7 @@ func (cp *Parser) processSingleValuePart(token lexer.Token) (result ast.ValueAST
 			result.Type = functionName
 		} else if variable := cp.variableByName(token.Value); variable != nil {
 			result.Value = token.Value
-			result.Type = variable.Type
+			result.Type = variable.Type.Code
 		} else {
 			cp.PushErrorToken(token, "name_not_defined")
 		}
@@ -622,7 +666,7 @@ func (cp *Parser) processParenthesesValuePart(tokens []lexer.Token) ast.ValueAST
 	case functionName:
 		fun := cp.functionByName(value.Value)
 		cp.parseFunctionCallStatement(fun, tokens[len(valueTokens):])
-		value.Type = fun.ReturnType.Type
+		value.Type = fun.ReturnType.Code
 	default:
 		cp.PushErrorToken(tokens[len(valueTokens)], "invalid_syntax")
 	}
@@ -659,9 +703,9 @@ func (cp *Parser) parseArg(fun *function, index int, arg ast.ArgAST) {
 	}
 	value := cp.computeExpression(arg.Expression)
 	param := fun.Params[index]
-	if !jane.TypesAreCompatible(value.Type, param.Type.Type, false) {
-		value.Type = param.Type.Type
-		if !checkIntBit(value, jnbits.BitsizeOfType(param.Type.Type)) {
+	if !jane.TypesAreCompatible(value.Type, param.Type.Code, false) {
+		value.Type = param.Type.Code
+		if !checkIntBit(value, jnbits.BitsizeOfType(param.Type.Code)) {
 			cp.PushErrorToken(arg.Token, "incompatible_type")
 		}
 	}
@@ -694,20 +738,22 @@ func (cp *Parser) checkFunction(fun *function) {
 		if len(fun.Params) > 0 {
 			cp.PushErrorToken(fun.Token, "entrypoint_have_parameters")
 		}
-		if fun.ReturnType.Type != jane.Void {
+		if fun.ReturnType.Code != jane.Void {
 			cp.PushErrorToken(fun.ReturnType.Token, "entrypoint_have_return")
 		}
 	}
 }
 
-func (cp *Parser) checkBlock(b ast.BlockAST) {
+func (p *Parser) checkBlock(b ast.BlockAST) {
 	for _, model := range b.Content {
 		switch model.Type {
 		case ast.StatementFunctionCall:
-			cp.checkFunctionCallStatement(model.Value.(ast.FunctionCallAST))
+			p.checkFunctionCallStatement(model.Value.(ast.FunctionCallAST))
+		case ast.StatementVariable:
+			p.checkVariableStatement(model.Value.(ast.VariableAST))
 		case ast.StatementReturn:
 		default:
-			cp.PushErrorToken(model.Token, "invalid_syntax")
+			p.PushErrorToken(model.Token, "invalid_syntax")
 		}
 	}
 }
@@ -719,6 +765,16 @@ func (cp *Parser) checkFunctionCallStatement(cs ast.FunctionCallAST) {
 		return
 	}
 	cp.parseArgs(fun, cs.Args, cs.Token)
+}
+
+func (p *Parser) checkVariableStatement(varAST ast.VariableAST) {
+	for _, variable := range p.BlockVariables {
+		if varAST.Name == variable.Name {
+			p.PushErrorToken(varAST.Token, "exist_name")
+			break
+		}
+	}
+	p.BlockVariables = append(p.BlockVariables, p.ParseVariable(varAST))
 }
 
 func IsConstantNumeric(v string) bool {

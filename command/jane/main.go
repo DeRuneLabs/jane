@@ -130,7 +130,7 @@ func printErrors(errors []string) {
 }
 
 func appendStandards(code *string) {
-	*code = `
+	*code = `// testing jane
 #pragma region JANE_STANDARD_IMPORTS
 #include <iostream>
 #include <locale.h>
