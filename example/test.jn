@@ -1,3 +1,10 @@
-function main() int32 {
-  return 0
+type int32 i32
+
+test_string() {
+  ("khairanabilla" + " you are awesome")
+}
+
+main() {
+  test_string();
+  displn("waduh kenapa tuh kira kira");
 }

@@ -2,33 +2,38 @@ package parser
 
 import (
 	"github.com/De-Rune/jane/ast"
-	"github.com/De-Rune/jane/package/jane"
+	"github.com/De-Rune/jane/package/jn"
 )
 
 var builtinFunctions = []*function{
 	{
-		Name: "print",
-		ReturnType: ast.TypeAST{
-			Code: jane.Void,
-		},
-		Params: []ast.ParameterAST{{
-			Name: "v",
-			Type: ast.TypeAST{
-				Value: "any",
-				Code:  jane.Any,
+		Ast: ast.FunctionAST{
+			Name: "_disp",
+			ReturnType: ast.DataTypeAST{
+				Code: jn.Void,
 			},
-		}},
-	}, {
-		Name: "println",
-		ReturnType: ast.TypeAST{
-			Code: jane.Void,
+			Params: []ast.ParameterAST{{
+				Name: "v",
+				Type: ast.DataTypeAST{
+					Value: "any",
+					Code:  jn.Any,
+				},
+			}},
 		},
-		Params: []ast.ParameterAST{{
-			Name: "v",
-			Type: ast.TypeAST{
-				Value: "any",
-				Code:  jane.Any,
+	},
+	{
+		Ast: ast.FunctionAST{
+			Name: "_displn",
+			ReturnType: ast.DataTypeAST{
+				Code: jn.Void,
 			},
-		}},
+			Params: []ast.ParameterAST{{
+				Name: "v",
+				Type: ast.DataTypeAST{
+					Value: "any",
+					Code:  jn.Any,
+				},
+			}},
+		},
 	},
 }

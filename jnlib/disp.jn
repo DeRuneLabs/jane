@@ -1,0 +1,5 @@
+// print specified value to command line
+disp(v any)
+
+// disp prints specified avalue to comamnd line with new line
+displn(v any)

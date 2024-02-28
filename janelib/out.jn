@@ -1,6 +1,0 @@
-// print specified value
-function print(v any)
-
-// println specified value to command line with new line
-function println(v any)
-

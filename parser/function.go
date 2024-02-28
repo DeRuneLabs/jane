@@ -1,53 +1,36 @@
 package parser
 
 import (
-	"strings"
-
 	"github.com/De-Rune/jane/ast"
-	"github.com/De-Rune/jane/lexer"
-	"github.com/De-Rune/jane/package/jane"
+	"strings"
 )
 
-const entryPointStandard = `
-#pragma region JANE_ENTRY_POINT_STANDARD_CODES
-  setlocale(0x0, "");
-#pragma endregion
-
-`
-
 type function struct {
-	Token      lexer.Token
-	Name       string
-	ReturnType ast.TypeAST
-	Params     []ast.ParameterAST
+	Ast        ast.FunctionAST
 	Attributes []ast.AttributeAST
-	Block      ast.BlockAST
 }
 
 func (f function) String() string {
-	f.readyCxx()
-	var cxx string
-	cxx += attributeToString(f.Attributes)
-	cxx += jane.CxxTypeNameFromType(f.ReturnType.Code)
-	cxx += " "
-	cxx += f.Name
-	cxx += "("
-	cxx += paramsToCxx(f.Params)
-	cxx += ") {"
-	cxx += getFunctionStandardCode(f.Name)
-	cxx += f.Block.String()
-	cxx += "\n}"
-	return cxx
+	var cxx strings.Builder
+	prototype := f.Prototype()
+	cxx.WriteString(prototype[:len(prototype)-1])
+	cxx.WriteByte(' ')
+	cxx.WriteString(f.Ast.Block.String())
+	return cxx.String()
 }
 
-func (f *function) readyCxx() {
-	switch f.Name {
-	case jane.EntryPoint:
-		f.ReturnType.Code = jane.Int32
-	}
+func (f function) Prototype() string {
+	var cxx strings.Builder
+	cxx.WriteString(attributesToString(f.Attributes))
+	cxx.WriteString(f.Ast.ReturnType.String())
+	cxx.WriteByte(' ')
+	cxx.WriteString(f.Ast.Name)
+	cxx.WriteString(paramsToCxx(f.Ast.Params))
+	cxx.WriteByte(';')
+	return cxx.String()
 }
 
-func attributeToString(attributes []ast.AttributeAST) string {
+func attributesToString(attributes []ast.AttributeAST) string {
 	var cxx strings.Builder
 	for _, attribute := range attributes {
 		cxx.WriteString(attribute.String())
@@ -58,28 +41,13 @@ func attributeToString(attributes []ast.AttributeAST) string {
 
 func paramsToCxx(params []ast.ParameterAST) string {
 	if len(params) == 0 {
-		return ""
+		return "(void)"
 	}
-	var cxx string
-	any := false
+	var cxx strings.Builder
+	cxx.WriteByte('(')
 	for _, p := range params {
-		cxx += p.String()
-		cxx += ","
-		if !any {
-			any = p.Type.Code == jane.Any
-		}
+		cxx.WriteString(p.String())
+		cxx.WriteString(", ")
 	}
-	cxx = cxx[:len(cxx)-1]
-	if any {
-		cxx = "template <typename any>\n" + cxx
-	}
-	return cxx
-}
-
-func getFunctionStandardCode(name string) string {
-	switch name {
-	case jane.EntryPoint:
-		return entryPointStandard
-	}
-	return ""
+	return cxx.String()[:cxx.Len()-2] + ")"
 }

@@ -2,23 +2,24 @@ package lexer
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/De-Rune/jane/package/jane"
+	"github.com/De-Rune/jane/package/jn"
 )
 
-func (lexer *Lexer) pushError(err string) {
-	lexer.Errors = append(lexer.Errors, fmt.Sprintf("%s %d:%d %s", lexer.File.Path, lexer.Line, lexer.Column, jane.Errors[err]))
+func (lex *Lexer) pushError(err string) {
+	lex.Errors = append(lex.Errors, fmt.Sprintf("%s %d:%d %s", lex.File.Path, lex.Line, lex.Column, jn.Errors[err]))
 }
 
-func (lexer *Lexer) Tokenize() []Token {
+func (lex *Lexer) Tokenize() []Token {
 	var tokens []Token
-	lexer.Errors = nil
-	for lexer.Position < len(lexer.File.Content) {
-		token := lexer.Token()
-		if token.Type != NA {
+	lex.Errors = nil
+	for lex.Position < len(lex.File.Content) {
+		token := lex.Token()
+		if token.Id != NA {
 			tokens = append(tokens, token)
 		}
 	}
@@ -30,17 +31,14 @@ func isKeyword(lexerline, kw string) bool {
 		return false
 	}
 	lexerline = lexerline[len(kw):]
-	if lexerline == "" {
-		return true
-	} else if unicode.IsSpace(rune(lexerline[0])) {
-		return true
-	} else if unicode.IsPunct(rune(lexerline[0])) {
+	switch {
+	case lexerline == "", unicode.IsSpace(rune(lexerline[0])), unicode.IsPunct(rune(lexerline[0])):
 		return true
 	}
 	return false
 }
 
-func (lexer *Lexer) lexerName(lexerline string) string {
+func (lex *Lexer) lexName(lexerline string) string {
 	if lexerline[0] != '_' {
 		r, _ := utf8.DecodeRuneInString(lexerline)
 		if !unicode.IsLetter(r) {
@@ -53,32 +51,20 @@ func (lexer *Lexer) lexerName(lexerline string) string {
 			break
 		}
 		sb.WriteRune(run)
-		lexer.Position++
+		lex.Position++
 	}
 	return sb.String()
 }
 
-func (lexer *Lexer) lexNumeric(lexerline string) string {
-	for index, run := range lexerline {
-		if '0' <= run && '9' >= run {
-			lexer.Position++
-			continue
-		}
-		return lexerline[:index]
-	}
-	return ""
-}
-
-func (lexer *Lexer) resume() string {
+func (lex *Lexer) resume() string {
 	var lexerline string
-	runes := lexer.File.Content[lexer.Position:]
+	runes := lex.File.Content[lex.Position:]
 	for i, r := range runes {
 		if unicode.IsSpace(r) {
-			lexer.Column++
-			lexer.Position++
+			lex.Column++
+			lex.Position++
 			if r == '\n' {
-				lexer.Line++
-				lexer.Column = 1
+				lex.NewLine()
 			}
 			continue
 		}
@@ -88,222 +74,257 @@ func (lexer *Lexer) resume() string {
 	return lexerline
 }
 
-func (lexer *Lexer) Token() Token {
-	tk := Token{
-		File: lexer.File,
-		Type: NA,
+func (lex *Lexer) lexLineComment() {
+	lex.Position += 2
+	for ; lex.Position < len(lex.File.Content); lex.Position++ {
+		if lex.File.Content[lex.Position] == '\n' {
+			lex.Position++
+			lex.NewLine()
+			return
+		}
 	}
-	lexerline := lexer.resume()
-	if lexerline == "" {
-		return tk
+}
+
+func (lex *Lexer) lexBlockComment() {
+	lex.Position += 2
+	for ; lex.Position < len(lex.File.Content); lex.Position++ {
+		run := lex.File.Content[lex.Position]
+		if run == '\n' {
+			lex.NewLine()
+			continue
+		}
+		lex.Column += len(string(run))
+		if strings.HasPrefix(string(lex.File.Content[lex.Position:]), "*/") {
+			lex.Column += 2
+			lex.Position += 2
+			return
+		}
 	}
-	tk.Column = lexer.Column
-	tk.Line = lexer.Line
+	lex.pushError("missing_block_comment")
+}
+
+var numericRegexp = *regexp.MustCompile(`^((0x[[:xdigit:]]+)|(\d+((\.\d+)?((e|E)(\-|\+|)\d+)?|(\.\d+))))`)
+
+func (lex *Lexer) lexNumeric(content string) string {
+	value := numericRegexp.FindString(content)
+	lex.Position += len(value)
+	return value
+}
+
+var escapeSequenceRegexp = regexp.MustCompile(`^\\([\\'"abfnrtv]|U.{8}|u.{4}|x..|[0-7]{1,3})`)
+
+func (lex *Lexer) getEscapeSequence(content string) string {
+	seq := escapeSequenceRegexp.FindString(content)
+	if seq != "" {
+		lex.Position += len(seq)
+		return seq
+	}
+	lex.Position++
+	lex.pushError("invalid_escape_sequence")
+	return seq
+}
+
+func (lex *Lexer) getRune(content string) string {
+	if content[0] == '\\' {
+		return lex.getEscapeSequence(content)
+	}
+	run, _ := utf8.DecodeRuneInString(content)
+	lex.Position++
+	return string(run)
+}
+
+func (lex *Lexer) lexRune(content string) string {
+	var sb strings.Builder
+	sb.WriteByte('\'')
+	lex.Column++
+	content = content[1:]
+	count := 0
+	for index := 0; index < len(content); index++ {
+		if content[index] == '\n' {
+			lex.pushError("missing_rune_end")
+			lex.Position++
+			lex.NewLine()
+			return ""
+		}
+		run := lex.getRune(content[index:])
+		sb.WriteString(run)
+		length := len(run)
+		lex.Column += length
+		if run == "'" {
+			lex.Position++
+			break
+		}
+		if length > 1 {
+			index += length - 1
+		}
+		count++
+	}
+	if count == 0 {
+		lex.pushError("rune_empty")
+	} else if count > 1 {
+		lex.pushError("rune_overflow")
+	}
+	return sb.String()
+}
+
+func (lex *Lexer) lexString(content string) string {
+	var sb strings.Builder
+	sb.WriteByte('"')
+	lex.Column++
+	content = content[1:]
+	for index, run := range content {
+		if run == '\n' {
+			lex.pushError("missing_string_end")
+			lex.Position++
+			lex.NewLine()
+			return ""
+		}
+		run := lex.getRune(content[index:])
+		sb.WriteString(run)
+		length := len(run)
+		lex.Column += length
+		if run == `"` {
+			lex.Position++
+			break
+		}
+		if length > 1 {
+			index += length - 1
+		}
+	}
+	return sb.String()
+}
+
+func (lex *Lexer) NewLine() {
+	lex.Line++
+	lex.Column = 1
+}
+
+func (lex *Lexer) lexPunct(content, kind string, id uint8, token *Token) bool {
+	if !strings.HasPrefix(content, kind) {
+		return false
+	}
+	token.Kind = kind
+	token.Id = id
+	lex.Position += len([]rune(kind))
+	return true
+}
+
+func (lex *Lexer) lexKeyword(content, kind string, id uint8, token *Token) bool {
+	if !isKeyword(content, kind) {
+		return false
+	}
+	token.Kind = kind
+	token.Id = id
+	lex.Position += len([]rune(kind))
+	return true
+}
+
+func (lex *Lexer) Token() Token {
+	token := Token{
+		File: lex.File,
+		Id:   NA,
+	}
+	content := lex.resume()
+	if content == "" {
+		return token
+	}
+	token.Column = lex.Column
+	token.Row = lex.Line
+
 	switch {
-	case lexerline[0] == ';':
-		tk.Value = ";"
-		tk.Type = SemiColon
-		lexer.Position++
-	case lexerline[0] == ',':
-		tk.Value = ","
-		tk.Type = Comma
-		lexer.Position++
-	case lexerline[0] == '(':
-		tk.Value = "("
-		tk.Type = Brace
-		lexer.Position++
-	case lexerline[0] == ')':
-		tk.Value = ")"
-		tk.Type = Brace
-		lexer.Position++
-	case lexerline[0] == '{':
-		tk.Value = "{"
-		tk.Type = Brace
-		lexer.Position++
-	case lexerline[0] == '}':
-		tk.Value = "}"
-		tk.Type = Brace
-		lexer.Position++
-	case lexerline[0] == '[':
-		tk.Value = "["
-		tk.Type = Brace
-		lexer.Position++
-	case lexerline[0] == ']':
-		tk.Value = "]"
-		tk.Type = Brace
-		lexer.Position++
-	case strings.HasPrefix(lexerline, "<<"):
-		tk.Value = "<<"
-		tk.Type = Operator
-		lexer.Position += 2
-	case strings.HasPrefix(lexerline, ">>"):
-		tk.Value = ">>"
-		tk.Type = Operator
-		lexer.Position += 2
-	case strings.HasPrefix(lexerline, "=="):
-		tk.Value = "=="
-		tk.Type = Operator
-		lexer.Position += 2
-	case strings.HasPrefix(lexerline, "!="):
-		tk.Value = "!="
-		tk.Type = Operator
-		lexer.Position += 2
-	case strings.HasPrefix(lexerline, ">="):
-		tk.Value = ">="
-		tk.Type = Operator
-		lexer.Position += 2
-	case strings.HasPrefix(lexerline, "<="):
-		tk.Value = "<="
-		tk.Type = Operator
-		lexer.Position += 2
-	case strings.HasPrefix(lexerline, "&&"):
-		tk.Value = "&&"
-		tk.Type = Operator
-		lexer.Position += 2
-	case strings.HasPrefix(lexerline, "||"):
-		tk.Value = "||"
-		tk.Type = Operator
-		lexer.Position += 2
-	case lexerline[0] == '+':
-		tk.Value = "+"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '-':
-		tk.Value = "-"
-		tk.Type = Operator
-	case lexerline[0] == '*':
-		tk.Value = "*"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '/':
-		tk.Value = "/"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '%':
-		tk.Value = "%"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '~':
-		tk.Value = "~"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '&':
-		tk.Value = "&"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '|':
-		tk.Value = "|"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '^':
-		tk.Value = "^"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '!':
-		tk.Value = "!"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '<':
-		tk.Value = "<"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '>':
-		tk.Value = ">"
-		tk.Type = Operator
-		lexer.Position++
-	case lexerline[0] == '=':
-		tk.Value = "="
-		tk.Type = Operator
-		lexer.Position++
-	case isKeyword(lexerline, "fun"):
-		tk.Value = "function"
-		tk.Type = Function
-	case isKeyword(lexerline, "var"):
-		tk.Value = "var"
-		tk.Type = Var
-		lexer.Position += 3
-	case isKeyword(lexerline, "any"):
-		tk.Value = "any"
-		tk.Type = Type
-		lexer.Position += 3
-	case isKeyword(lexerline, "bool"):
-		tk.Value = "bool"
-		tk.Type = Type
-		lexer.Position += 4
-	case isKeyword(lexerline, "int8"):
-		tk.Value = "int8"
-		tk.Type = Type
-		lexer.Position += 4
-	case isKeyword(lexerline, "int16"):
-		tk.Value = "int16"
-		tk.Type = Type
-		lexer.Position += 5
-	case isKeyword(lexerline, "int32"):
-		tk.Value = "int32"
-		tk.Type = Type
-		lexer.Position += 5
-	case isKeyword(lexerline, "int64"):
-		tk.Value = "int64"
-		tk.Type = Type
-		lexer.Position += 5
-	case isKeyword(lexerline, "uint8"):
-		tk.Value = "uint8"
-		tk.Type = Type
-		lexer.Position += 5
-	case isKeyword(lexerline, "uint16"):
-		tk.Value = "uint16"
-		tk.Type = Type
-		lexer.Position += 6
-	case isKeyword(lexerline, "uint32"):
-		tk.Value = "uint32"
-		tk.Type = Type
-		lexer.Position += 6
-	case isKeyword(lexerline, "uint64"):
-		tk.Value = "uint64"
-		tk.Type = Type
-		lexer.Position += 6
-	case isKeyword(lexerline, "float32"):
-		tk.Value = "float32"
-		tk.Type = Type
-		lexer.Position += 7
-	case isKeyword(lexerline, "float64"):
-		tk.Value = "float64"
-		tk.Type = Type
-		lexer.Position += 7
-	case isKeyword(lexerline, "return"):
-		tk.Value = "return"
-		tk.Type = Return
-		lexer.Position += 6
-	case isKeyword(lexerline, "bool"):
-		tk.Value = "bool"
-		tk.Type = Type
-		lexer.Position += 4
-	case isKeyword(lexerline, "true"):
-		tk.Value = "true"
-		tk.Type = Value
-		lexer.Position += 4
-	case isKeyword(lexerline, "false"):
-		tk.Value = "false"
-		tk.Type = Value
-		lexer.Position += 5
+	case content[0] == '\'':
+		token.Kind = lex.lexRune(content)
+		token.Id = Value
+		return token
+	case content[0] == '"':
+		token.Kind = lex.lexString(content)
+		token.Id = Value
+		return token
+	case strings.HasPrefix(content, "//"):
+		lex.lexLineComment()
+		return token
+	case strings.HasPrefix(content, "/*"):
+		lex.lexBlockComment()
+		return token
+	case
+		lex.lexPunct(content, ":", Colon, &token),
+		lex.lexPunct(content, ";", SemiColon, &token),
+		lex.lexPunct(content, ",", Comma, &token),
+		lex.lexPunct(content, "@", At, &token),
+		lex.lexPunct(content, "(", Brace, &token),
+		lex.lexPunct(content, ")", Brace, &token),
+		lex.lexPunct(content, "{", Brace, &token),
+		lex.lexPunct(content, "}", Brace, &token),
+		lex.lexPunct(content, "[", Brace, &token),
+		lex.lexPunct(content, "]", Brace, &token),
+		lex.lexPunct(content, "+=", Operator, &token),
+		lex.lexPunct(content, "-=", Operator, &token),
+		lex.lexPunct(content, "*=", Operator, &token),
+		lex.lexPunct(content, "/=", Operator, &token),
+		lex.lexPunct(content, "%=", Operator, &token),
+		lex.lexPunct(content, "<<=", Operator, &token),
+		lex.lexPunct(content, ">>=", Operator, &token),
+		lex.lexPunct(content, "^=", Operator, &token),
+		lex.lexPunct(content, "&=", Operator, &token),
+		lex.lexPunct(content, "|=", Operator, &token),
+		lex.lexPunct(content, "==", Operator, &token),
+		lex.lexPunct(content, "!=", Operator, &token),
+		lex.lexPunct(content, ">=", Operator, &token),
+		lex.lexPunct(content, "<=", Operator, &token),
+		lex.lexPunct(content, "&&", Operator, &token),
+		lex.lexPunct(content, "||", Operator, &token),
+		lex.lexPunct(content, "<<", Operator, &token),
+		lex.lexPunct(content, ">>", Operator, &token),
+		lex.lexPunct(content, "+", Operator, &token),
+		lex.lexPunct(content, "-", Operator, &token),
+		lex.lexPunct(content, "*", Operator, &token),
+		lex.lexPunct(content, "/", Operator, &token),
+		lex.lexPunct(content, "%", Operator, &token),
+		lex.lexPunct(content, "~", Operator, &token),
+		lex.lexPunct(content, "&", Operator, &token),
+		lex.lexPunct(content, "|", Operator, &token),
+		lex.lexPunct(content, "^", Operator, &token),
+		lex.lexPunct(content, "!", Operator, &token),
+		lex.lexPunct(content, "<", Operator, &token),
+		lex.lexPunct(content, ">", Operator, &token),
+		lex.lexPunct(content, "=", Operator, &token),
+		lex.lexKeyword(content, "i8", DataType, &token),
+		lex.lexKeyword(content, "i16", DataType, &token),
+		lex.lexKeyword(content, "i32", DataType, &token),
+		lex.lexKeyword(content, "i64", DataType, &token),
+		lex.lexKeyword(content, "u8", DataType, &token),
+		lex.lexKeyword(content, "u16", DataType, &token),
+		lex.lexKeyword(content, "u32", DataType, &token),
+		lex.lexKeyword(content, "u64", DataType, &token),
+		lex.lexKeyword(content, "f32", DataType, &token),
+		lex.lexKeyword(content, "f64", DataType, &token),
+		lex.lexKeyword(content, "bool", DataType, &token),
+		lex.lexKeyword(content, "rune", DataType, &token),
+		lex.lexKeyword(content, "str", DataType, &token),
+		lex.lexKeyword(content, "true", Value, &token),
+		lex.lexKeyword(content, "false", Value, &token),
+		lex.lexKeyword(content, "nil", Value, &token),
+		lex.lexKeyword(content, "const", Const, &token),
+		lex.lexKeyword(content, "ret", Return, &token),
+		lex.lexKeyword(content, "type", Type, &token):
 	default:
-		lex := lexer.lexerName(lexerline)
-		if lex != "" {
-			tk.Value = lex
-			tk.Type = Name
+		l := lex.lexName(content)
+		if l != "" {
+			token.Kind = "_" + l
+			token.Id = Name
 			break
 		}
-		lex = lexer.lexNumeric(lexerline)
-		if lex != "" {
-			tk.Value = lex
-			tk.Type = Value
+		l = lex.lexNumeric(content)
+		if l != "" {
+			token.Kind = l
+			token.Id = Value
 			break
 		}
-		lexer.pushError("invalid_token")
-		lexer.Column++
-		lexer.Position++
-		return tk
+		lex.pushError("invalid_token")
+		lex.Column++
+		lex.Position++
+		return token
 	}
-	lexer.Column += len(tk.Value)
-	return tk
+	lex.Column += len(token.Kind)
+	return token
 }

@@ -4,15 +4,15 @@ import "github.com/De-Rune/jane/package/io"
 
 type Token struct {
 	File   *io.FILE
-	Line   int
+	Row    int
 	Column int
-	Value  string
-	Type   uint8
+	Kind   string
+	Id     uint8
 }
 
 const (
 	NA        uint8 = 0
-	Type      uint8 = 1
+	DataType  uint8 = 1
 	Name      uint8 = 2
 	Brace     uint8 = 3
 	Return    uint8 = 4
@@ -20,6 +20,8 @@ const (
 	Value     uint8 = 6
 	Operator  uint8 = 7
 	Comma     uint8 = 8
-	Function  uint8 = 9
-	Var       uint8 = 10
+	Const     uint8 = 9
+	Type      uint8 = 10
+	Colon     uint8 = 11
+	At        uint8 = 12
 )

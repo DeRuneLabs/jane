@@ -11,10 +11,10 @@ type Lexer struct {
 }
 
 func New(f *io.FILE) *Lexer {
-	lexer := new(Lexer)
-	lexer.File = f
-	lexer.Line = 1
-	lexer.Column = 1
-	lexer.Position = 1
-	return lexer
+	lex := new(Lexer)
+	lex.File = f
+	lex.Line = 1
+	lex.Column = 1
+	lex.Position = 0
+	return lex
 }

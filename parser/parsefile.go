@@ -17,10 +17,10 @@ type ParseFileInfo struct {
 func ParseFile(info *ParseFileInfo) {
 	defer info.Routines.Done()
 	info.JN_CXX = ""
-	lexer := lexer.New(info.File)
-	tokens := lexer.Tokenize()
-	if lexer.Errors != nil {
-		info.Errors = lexer.Errors
+	lex := lexer.New(info.File)
+	tokens := lex.Tokenize()
+	if lex.Errors != nil {
+		info.Errors = lex.Errors
 		return
 	}
 	parser := NewParser(tokens, info)

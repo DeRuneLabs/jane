@@ -1,8 +1,0 @@
-[inline]
-function printInteger(n int32) {
-    println(n);
-}
-
-function main() {
-    printInteger(20);
-}

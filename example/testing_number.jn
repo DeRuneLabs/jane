@@ -1,7 +1,0 @@
-function getNumber(number int32) int32 {
-  return a;
-}
-
-function main() int32 {
-  return getNumber(12)
-}
