@@ -172,19 +172,12 @@ public:
 #pragma endregion FIELDS
 
 #pragma region CONSTRUCTORS
-  str(const std::wstring& string) {
-    this->string = string;
-  }
-
-  str(const rune* string) {
-    this->string = string;
-  }
+  str(const std::wstring& string) { this->string = string; }
+  str(const rune* string) { this->string = string; }
 #pragma endregion CONSTRUCTORS
 
 #pragma region DESTRUCTOR
-  ~str() {
-    this->string.clear();
-  }
+  ~str() { this->string.clear(); }
 #pragma endregion DESTRUCTOR
 
 #pragma region OPERATOR_OVERFLOWS
@@ -237,7 +230,7 @@ public:
 
 #pragma region CONSTRUCTORS
   array() {
-    this->vector = {};
+    this->vector = { };
     this->heap = false;
   }
 
@@ -254,9 +247,7 @@ public:
 #pragma region DESTRUCTOR
   ~array() {
     this->vector.clear();
-    if (this->heap) {
-      delete this;
-    }
+    if (this->heap) { delete this; }
   }
 #pragma endregion DESTRUCTOR
 
@@ -264,13 +255,9 @@ public:
   bool operator==(const array& array) {
     const u32 vector_length = this->vector.size();
     const u32 array_vector_length = array.vector.size();
-    if (vector_length != array_vector_length) {
-      return false;
-    }
+    if (vector_length != array_vector_length) { return false; }
     for (int index = 0; index < vector_length; ++index) {
-      if (this->vector[index] != array.vector[index]) {
-        return false;
-      }
+      if (this->vector[index] != array.vector[index]) { return false; }
     }
     return true;
   }

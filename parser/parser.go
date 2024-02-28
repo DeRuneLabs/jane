@@ -890,7 +890,7 @@ func (p *singleOperatorProcessor) amper() value {
 		p.parser.PushErrorToken(p.token, "invalid_data_amper")
 	}
 	if typeIsArray(v.ast.Type) {
-		p.builder.current.nodes = append(p.builder.current.nodes[:nodeLen-1], arrayPointerExp{p.builder.current.nodes[nodeLen:]})
+		p.builder.current.nodes = append(p.builder.current.nodes[:nodeLen-1], arrayPointerExp{p.builder.current.nodes[nodeLen:], v.ast.Token.Id == lexer.Name, v})
 	}
 	v.ast.Type.Value = "*" + v.ast.Type.Value
 	return v
@@ -1327,6 +1327,9 @@ func (rc *returnChecker) pushValue(last, current int, errTk lexer.Token) {
 	value, model := rc.p.computeTokens(tokens)
 	rc.expModel.models = append(rc.expModel.models, model)
 	rc.values = append(rc.values, value)
+	if typeIsPointer(value.ast.Type) && !value.ast.Type.Heap {
+		rc.p.PushErrorToken(errTk, "returns_dangling_ptr")
+	}
 }
 
 func (rc *returnChecker) checkValues() {

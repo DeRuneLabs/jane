@@ -1,5 +1,7 @@
+type int32 i32
+
 tambah() {
-  angka: = 10;
+  angka:i32 = 10;
   displn(angka + 20);
 }
 
@@ -14,5 +16,5 @@ coba_array() {
 main() {
   tambah();
   coba_array();
-  displn("khairanabilla are awesome");
+  displn("khairanabilla " + "are awesome");
 }

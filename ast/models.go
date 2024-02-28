@@ -58,6 +58,7 @@ type DataTypeAST struct {
 	Code       uint8
 	Value      string
 	MultiTyped bool
+	Heap       bool
 	Tag        interface{}
 }
 
@@ -126,7 +127,7 @@ type TypeAST struct {
 }
 
 func (t TypeAST) String() string {
-	return "typedef" + t.Type.String() + " " + t.Name + ";"
+	return "typedef " + t.Type.String() + " " + t.Name + ";"
 }
 
 type FunctionAST struct {
