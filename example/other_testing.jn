@@ -1,0 +1,18 @@
+tambah() {
+  angka: = 10;
+  displn(angka + 20);
+}
+
+coba_array() {
+  anak_derune: = &[][]str {
+    []str{"saut", "arul"},
+    []str{"rafai", "ibal"},
+  };
+  displn((*anak_derune)[0])
+}
+
+main() {
+  tambah();
+  coba_array();
+  displn("khairanabilla are awesome");
+}

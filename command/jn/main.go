@@ -237,7 +237,7 @@ public:
 
 #pragma region CONSTRUCTORS
   array() {
-    this->vecotr = {};
+    this->vector = {};
     this->heap = false;
   }
 

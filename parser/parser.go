@@ -758,14 +758,14 @@ func (p *singleValueProcessor) numeric() value {
 	if strings.Contains(p.token.Kind, ".") ||
 		strings.ContainsAny(p.token.Kind, "eE") {
 		v.ast.Type.Code = jn.F64
-		v.ast.Type.Value = "float64"
+		v.ast.Type.Value = "f64"
 	} else {
 		v.ast.Type.Code = jn.I32
-		v.ast.Type.Value = "int32"
+		v.ast.Type.Value = "i32"
 		ok := jnbits.CheckBitInt(p.token.Kind, 32)
 		if !ok {
 			v.ast.Type.Code = jn.I64
-			v.ast.Type.Value = "int64"
+			v.ast.Type.Value = "i4"
 		}
 	}
 	v.ast.Value = p.token.Kind
@@ -1290,7 +1290,7 @@ func (p *Parser) checkBlock(b *ast.BlockAST) {
 			p.checkVariableStatement(&t, false)
 			model.Value = t
 		case ast.VariableSetAST:
-			p.checkVariableSetStatement(&t)
+			p.checkVarsetStatement(&t)
 			model.Value = t
 		case ast.ReturnAST:
 		default:
@@ -1474,11 +1474,6 @@ func (p *Parser) checkOneVarset(vsAST *ast.VariableSetAST) {
 	p.checkType(selected.ast.Type, value.ast.Type, false, vsAST.Setter)
 }
 
-type varsetValue struct {
-	value value
-	model expressionModel
-}
-
 func (p *Parser) parseVarsetSelections(vsAST *ast.VariableSetAST) {
 	for index, selector := range vsAST.SelectExpressions {
 		p.checkVariableStatement(&selector.Variable, false)
@@ -1486,44 +1481,26 @@ func (p *Parser) parseVarsetSelections(vsAST *ast.VariableSetAST) {
 	}
 }
 
-func (p *Parser) getVarsetValues(vsAST *ast.VariableSetAST) []varsetValue {
-	values := make([]varsetValue, len(vsAST.ValueExpressions))
+func (p *Parser) getVarsetTypes(vsAST *ast.VariableSetAST) []ast.DataTypeAST {
+	values := make([]ast.DataTypeAST, len(vsAST.ValueExpressions))
 	for index, expression := range vsAST.ValueExpressions {
 		val, model := p.computeExpression(expression)
 		vsAST.ValueExpressions[index].Model = model
-		values[index] = varsetValue{val, model}
+		values[index] = val.ast.Type
 	}
 	return values
-}
-
-func (p *Parser) processMultiVarset(vsAST *ast.VariableSetAST) {
-	values := p.getVarsetValues(vsAST)
-	for index := range vsAST.SelectExpressions {
-		selector := &vsAST.SelectExpressions[index]
-		val := values[index]
-		selector.Ignore = jn.IsIgnoreName(selector.Variable.Name)
-		if !selector.NewVariable {
-			if selector.Ignore {
-				continue
-			}
-			selected, _ := p.computeExpression(selector.Expression)
-			if !p.checkVarsetOperation(selected, vsAST.Setter) {
-				return
-			}
-			p.checkType(selected.ast.Type, val.value.ast.Type, false, vsAST.Setter)
-			continue
-		}
-		selector.Variable.Tag = val.value.ast.Type
-		p.checkVariableStatement(&selector.Variable, false)
-	}
 }
 
 func (p *Parser) processFuncMultiVarset(vsAST *ast.VariableSetAST, funcVal value) {
 	types := funcVal.ast.Type.Tag.([]ast.DataTypeAST)
 	if len(types) != len(vsAST.SelectExpressions) {
-		p.PushErrorToken(vsAST.Setter, "missing_multiassign_identifier")
+		p.PushErrorToken(vsAST.Setter, "missing_multiassign_identifiers")
 		return
 	}
+	p.processMultiVarset(vsAST, types)
+}
+
+func (p *Parser) processMultiVarset(vsAST *ast.VariableSetAST, types []ast.DataTypeAST) {
 	for index := range vsAST.SelectExpressions {
 		selector := &vsAST.SelectExpressions[index]
 		selector.Ignore = jn.IsIgnoreName(selector.Variable.Name)
@@ -1544,7 +1521,7 @@ func (p *Parser) processFuncMultiVarset(vsAST *ast.VariableSetAST, funcVal value
 	}
 }
 
-func (p *Parser) checkVariableSetStatement(vsAST *ast.VariableSetAST) {
+func (p *Parser) checkVarsetStatement(vsAST *ast.VariableSetAST) {
 	selectLength := len(vsAST.SelectExpressions)
 	valueLength := len(vsAST.ValueExpressions)
 	if vsAST.JustDeclare {
@@ -1573,5 +1550,5 @@ func (p *Parser) checkVariableSetStatement(vsAST *ast.VariableSetAST) {
 		p.PushErrorToken(vsAST.Setter, "missing_multiassign_identifiers")
 		return
 	}
-	p.processMultiVarset(vsAST)
+	p.processMultiVarset(vsAST, p.getVarsetTypes(vsAST))
 }
