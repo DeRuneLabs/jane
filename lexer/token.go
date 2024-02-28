@@ -24,4 +24,5 @@ const (
 	Type      uint8 = 10
 	Colon     uint8 = 11
 	At        uint8 = 12
+	New       uint8 = 13
 )

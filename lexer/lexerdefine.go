@@ -10,7 +10,7 @@ type Lexer struct {
 	Errors   []string
 }
 
-func New(f *io.FILE) *Lexer {
+func NewLexer(f *io.FILE) *Lexer {
 	lex := new(Lexer)
 	lex.File = f
 	lex.Line = 1

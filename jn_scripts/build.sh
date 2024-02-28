@@ -6,7 +6,7 @@ else
   MAIN_FILE="../command/jn/main.go"
 fi
 
-go build -o jn.out -v $MAIN_FILE
+go build -o jane -v $MAIN_FILE
 
 if [ $? -eq 0 ]; then
   echo "Compile is successful!"

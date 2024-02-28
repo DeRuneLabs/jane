@@ -285,7 +285,7 @@ end:
 	fn.Params = append(fn.Params, paramAST)
 }
 
-func (ast *AST) BuildDataType(tokens []lexer.Token, index *int, err bool) (dt DataTypeAST, _ bool) {
+func (ast *AST) BuildDataType(tokens []lexer.Token, index *int, err bool) (dt DataTypeAST, ok bool) {
 	first := *index
 	for ; *index < len(tokens); *index++ {
 		token := tokens[*index]
