@@ -1,10 +1,3 @@
-type int32 i32
-
-test_string() {
-  ("khairanabilla" + " you are awesome")
-}
-
 main() {
-  test_string();
-  displn("waduh kenapa tuh kira kira");
+  displn("khairanabilla are awesome");
 }

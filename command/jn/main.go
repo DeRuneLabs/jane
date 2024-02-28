@@ -140,6 +140,7 @@ func appendStandards(code *string) {
 #include <functional>
 #include <vector>
 #include <locale.h>
+#include <cstdint>
 #pragma endregion JN_STANDARD_IMPORTS
 
 #pragma region JN_RUNTIME_FUNCTIONS
@@ -205,7 +206,7 @@ public:
 
   rune& operator[](const int index) {
     const u32 length = this->string.length();
-    for (index < 0) {
+    if (index < 0) {
       throw_exception(L"ERR: stackoverflow exception:\n index is less than zero");
     } else if (index >= length) {
       throw_exception(L"ERR: stackoverflow exception:\nindex overflow" + std::to_wstring(index) + L":" + std::to_wstring(length));
@@ -296,7 +297,7 @@ public:
     return this->vector[index];
   }
 
-  friend std::wostream&<<(std::wostream &os, const array<T>& array) {
+  friend std::wostream& operator<<(std::wostream &os, const array<T>& array) {
     os << L"[";
     const u32 size = array.vector.size();
     for (int index = 0; index < size;) {
