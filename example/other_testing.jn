@@ -7,6 +7,5 @@ tambah() {
 
 main() {
   tambah();
-  coba_array();
   displn("khairanabilla " + "are awesome");
 }
