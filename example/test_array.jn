@@ -1,0 +1,13 @@
+array_testing() {
+  derune_new: = new[][]str
+  *derune_new = [][]str{
+    []str{"arul", "saut"},
+    []str{"pace", "ibal"},
+  };
+  displn((*derune_new)[0])
+}
+
+main() {
+  displn("testing array")
+  array_testing();
+}

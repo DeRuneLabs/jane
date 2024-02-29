@@ -1,0 +1,13 @@
+type int32 i32
+
+heap_allocation() {
+  x: = new i32;
+  *x = 2314;
+  displn(x);
+  displn(*x);
+}
+
+main() {
+  displn("testing heap allocation");
+  heap_allocation();
+}
