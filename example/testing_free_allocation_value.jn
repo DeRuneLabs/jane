@@ -1,0 +1,12 @@
+type int32 i32
+
+memory_free_allocation_testing() {
+  x: = new i32;
+  *x = 201;
+  free x;
+}
+
+main() {
+  displn("testing free allocation");
+  memory_free_allocation_testing();
+}

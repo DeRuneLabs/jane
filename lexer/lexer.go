@@ -310,7 +310,8 @@ func (lex *Lexer) Token() Token {
 		lex.lexKeyword(content, "const", Const, &token),
 		lex.lexKeyword(content, "ret", Return, &token),
 		lex.lexKeyword(content, "type", Type, &token),
-		lex.lexKeyword(content, "new", New, &token):
+		lex.lexKeyword(content, "new", New, &token),
+		lex.lexKeyword(content, "free", Free, &token):
 	default:
 		l := lex.lexName(content)
 		if l != "" {

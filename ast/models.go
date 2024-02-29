@@ -395,3 +395,12 @@ func (vs VariableSetAST) String() string {
 	}
 	return vs.cxxMultipleSet(&cxx)
 }
+
+type FreeAST struct {
+	Token      lexer.Token
+	Expression ExpressionAST
+}
+
+func (f FreeAST) String() string {
+	return "delete " + f.Expression.String() + ";"
+}
