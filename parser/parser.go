@@ -31,7 +31,10 @@ func NewParser(tokens []lexer.Token, PFI *ParseFileInfo) *Parser {
 
 func (p *Parser) PushErrorToken(token lexer.Token, err string) {
 	message := jn.Errors[err]
-	p.PFI.Errors = append(p.PFI.Errors, fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message))
+	p.PFI.Errors = append(
+		p.PFI.Errors,
+		fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message),
+	)
 }
 
 func (p *Parser) AppendErrors(errors ...string) {
@@ -588,7 +591,8 @@ func (ap arithmeticProcess) solveSigned() (v ast.ValueAST) {
 		}
 	case ">>", "<<":
 		v.Type = ap.leftVal.Type
-		if !jn.IsUnsignedNumericType(ap.rightVal.Type.Code) && !checkIntBit(ap.rightVal, jnbits.BitsizeOfType(jn.U64)) {
+		if !jn.IsUnsignedNumericType(ap.rightVal.Type.Code) &&
+			!checkIntBit(ap.rightVal, jnbits.BitsizeOfType(jn.U64)) {
 			ap.p.PushErrorToken(ap.rightVal.Token, "bitshift_must_unsigned")
 		}
 	default:
@@ -795,7 +799,10 @@ func (p *singleValueProcessor) name() (v value, ok bool) {
 	return
 }
 
-func (p *Parser) processSingleValPart(token lexer.Token, builder *expressionModelBuilder) (v value, ok bool) {
+func (p *Parser) processSingleValPart(
+	token lexer.Token,
+	builder *expressionModelBuilder,
+) (v value, ok bool) {
 	processor := singleValueProcessor{
 		token:   token,
 		builder: builder,
@@ -892,7 +899,10 @@ func (p *singleOperatorProcessor) amper() value {
 	return v
 }
 
-func (p *Parser) processSingleOperatorPart(tokens []lexer.Token, builder *expressionModelBuilder) value {
+func (p *Parser) processSingleOperatorPart(
+	tokens []lexer.Token,
+	builder *expressionModelBuilder,
+) value {
 	var v value
 	processor := singleOperatorProcessor{
 		token:   tokens[0],
@@ -932,7 +942,10 @@ func canGetPointer(v value) bool {
 	return v.ast.Token.Id == lexer.Name
 }
 
-func (p *Parser) computeNewHeapAllocation(tokens []lexer.Token, builder *expressionModelBuilder) (v value) {
+func (p *Parser) computeNewHeapAllocation(
+	tokens []lexer.Token,
+	builder *expressionModelBuilder,
+) (v value) {
 	if len(tokens) == 1 {
 		p.PushErrorToken(tokens[0], "invalid_syntax_keyword_new")
 		return
@@ -985,7 +998,10 @@ func (p *Parser) processValPart(tokens []lexer.Token, builder *expressionModelBu
 	return
 }
 
-func (p *Parser) processParenthesesValPart(tokens []lexer.Token, builder *expressionModelBuilder) (v value) {
+func (p *Parser) processParenthesesValPart(
+	tokens []lexer.Token,
+	builder *expressionModelBuilder,
+) (v value) {
 	var valueTokens []lexer.Token
 	j := len(tokens) - 1
 	braceCount := 0
@@ -1036,7 +1052,10 @@ func (p *Parser) processParenthesesValPart(tokens []lexer.Token, builder *expres
 	return
 }
 
-func (p *Parser) processBraceValPart(tokens []lexer.Token, builder *expressionModelBuilder) (v value) {
+func (p *Parser) processBraceValPart(
+	tokens []lexer.Token,
+	builder *expressionModelBuilder,
+) (v value) {
 	var valueTokens []lexer.Token
 	j := len(tokens) - 1
 	braceCount := 0
@@ -1099,7 +1118,10 @@ func (p *Parser) processBraceValPart(tokens []lexer.Token, builder *expressionMo
 	return
 }
 
-func (p *Parser) processBracketValPart(tokens []lexer.Token, builder *expressionModelBuilder) (v value) {
+func (p *Parser) processBracketValPart(
+	tokens []lexer.Token,
+	builder *expressionModelBuilder,
+) (v value) {
 	var valueTokens []lexer.Token
 	j := len(tokens) - 1
 	braceCount := 0
@@ -1200,7 +1222,11 @@ func (p *Parser) buildEnumerableParts(tokens []lexer.Token) []enumPart {
 	return parts
 }
 
-func (p *Parser) buildArray(parts []enumPart, dt ast.DataTypeAST, err lexer.Token) (value, expressionNode) {
+func (p *Parser) buildArray(
+	parts []enumPart,
+	dt ast.DataTypeAST,
+	err lexer.Token,
+) (value, expressionNode) {
 	var v value
 	v.ast.Type = dt
 	model := arrayExp{dataType: dt}
@@ -1223,7 +1249,11 @@ func (p *Parser) checkAnonymousFunction(fun *ast.FunctionAST) {
 	p.BlockVariables = blockVariables
 }
 
-func (p *Parser) parseFunctionCallStatement(fun ast.FunctionAST, tokens []lexer.Token, builder *expressionModelBuilder) {
+func (p *Parser) parseFunctionCallStatement(
+	fun ast.FunctionAST,
+	tokens []lexer.Token,
+	builder *expressionModelBuilder,
+) {
 	errToken := tokens[0]
 	tokens = p.getRangeTokens("(", ")", tokens)
 	if tokens == nil {
@@ -1240,7 +1270,12 @@ func (p *Parser) parseFunctionCallStatement(fun ast.FunctionAST, tokens []lexer.
 	}
 }
 
-func (p *Parser) parseArgs(fun ast.FunctionAST, args []ast.ArgAST, errToken lexer.Token, builder *expressionModelBuilder) {
+func (p *Parser) parseArgs(
+	fun ast.FunctionAST,
+	args []ast.ArgAST,
+	errToken lexer.Token,
+	builder *expressionModelBuilder,
+) {
 	if len(args) < len(fun.Params) {
 		p.PushErrorToken(errToken, "missing_argument")
 	}

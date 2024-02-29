@@ -26,7 +26,10 @@ func New(tokens []lexer.Token) *AST {
 
 func (ast *AST) PushErrorToken(token lexer.Token, err string) {
 	message := jn.Errors[err]
-	ast.Errors = append(ast.Errors, fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message))
+	ast.Errors = append(
+		ast.Errors,
+		fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message),
+	)
 }
 
 func (ast *AST) PushError(err string) {
@@ -285,7 +288,11 @@ end:
 	fn.Params = append(fn.Params, paramAST)
 }
 
-func (ast *AST) BuildDataType(tokens []lexer.Token, index *int, err bool) (dt DataTypeAST, ok bool) {
+func (ast *AST) BuildDataType(
+	tokens []lexer.Token,
+	index *int,
+	err bool,
+) (dt DataTypeAST, ok bool) {
 	first := *index
 	for ; *index < len(tokens); *index++ {
 		token := tokens[*index]
@@ -354,7 +361,12 @@ func buildNameType(token lexer.Token, dt *DataTypeAST) {
 	dt.Value += dt.Token.Kind
 }
 
-func (ast *AST) buildFunctionDataType(token lexer.Token, tokens []lexer.Token, index *int, dt *DataTypeAST) {
+func (ast *AST) buildFunctionDataType(
+	token lexer.Token,
+	tokens []lexer.Token,
+	index *int,
+	dt *DataTypeAST,
+) {
 	dt.Token = token
 	dt.Code = jn.Function
 	value, funAST := ast.buildFunctionDataTypeHead(tokens, index)
@@ -399,7 +411,10 @@ func (ast *AST) pushTypeToTypes(types *[]DataTypeAST, tokens []lexer.Token, errT
 	*types = append(*types, currentDt)
 }
 
-func (ast *AST) BuildFunctionReturnDataType(tokens []lexer.Token, index *int) (dt DataTypeAST, ok bool) {
+func (ast *AST) BuildFunctionReturnDataType(
+	tokens []lexer.Token,
+	index *int,
+) (dt DataTypeAST, ok bool) {
 	if *index >= len(tokens) {
 		goto end
 	}
@@ -623,20 +638,29 @@ func (ast *AST) variableSetInfo(tokens []lexer.Token) (info varsetInfo) {
 	return
 }
 
-func (ast *AST) pushVarsetSelector(selectors *[]VarsetSelector, last, current int, info varsetInfo) {
+func (ast *AST) pushVarsetSelector(
+	selectors *[]VarsetSelector,
+	last, current int,
+	info varsetInfo,
+) {
 	var selector VarsetSelector
 	selector.Expression.Tokens = info.selectorTokens[last:current]
 	if last-current == 0 {
 		ast.PushErrorToken(info.selectorTokens[current-1], "missing_value")
 		return
 	}
-	if selector.Expression.Tokens[0].Id == lexer.Name && current-last > 1 && selector.Expression.Tokens[1].Id == lexer.Colon {
+	if selector.Expression.Tokens[0].Id == lexer.Name && current-last > 1 &&
+		selector.Expression.Tokens[1].Id == lexer.Colon {
 		selector.NewVariable = true
 		selector.Variable.NameToken = selector.Expression.Tokens[0]
 		selector.Variable.Name = selector.Variable.NameToken.Kind
 		selector.Variable.SetterToken = info.setter
 		if current-last > 2 {
-			selector.Variable.Type, _ = ast.BuildDataType(selector.Expression.Tokens[2:], new(int), false)
+			selector.Variable.Type, _ = ast.BuildDataType(
+				selector.Expression.Tokens[2:],
+				new(int),
+				false,
+			)
 		}
 	} else {
 		if selector.Expression.Tokens[0].Id == lexer.Name {
@@ -929,7 +953,8 @@ func (ast *AST) getExpressionProcesses(tokens []lexer.Token) [][]lexer.Token {
 		}
 		if index > 0 && braceCount == 0 {
 			lt := tokens[index-1]
-			if (lt.Id == lexer.Name || lt.Id == lexer.Value) && (token.Id == lexer.Name || token.Id == lexer.Value) {
+			if (lt.Id == lexer.Name || lt.Id == lexer.Value) &&
+				(token.Id == lexer.Name || token.Id == lexer.Value) {
 				ast.PushErrorToken(token, "invalid_syntax")
 				pushedError = true
 			}

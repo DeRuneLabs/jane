@@ -11,7 +11,10 @@ import (
 )
 
 func (lex *Lexer) pushError(err string) {
-	lex.Errors = append(lex.Errors, fmt.Sprintf("%s %d:%d %s", lex.File.Path, lex.Line, lex.Column, jn.Errors[err]))
+	lex.Errors = append(
+		lex.Errors,
+		fmt.Sprintf("%s %d:%d %s", lex.File.Path, lex.Line, lex.Column, jn.Errors[err]),
+	)
 }
 
 func (lex *Lexer) Tokenize() []Token {

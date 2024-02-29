@@ -2,9 +2,10 @@ package io
 
 import (
 	"errors"
-	"github.com/De-Rune/jane/package/jn"
 	"os"
 	"path/filepath"
+
+	"github.com/De-Rune/jane/package/jn"
 )
 
 func GetJn(path string) (*FILE, error) {
