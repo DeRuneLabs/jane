@@ -1,5 +1,5 @@
 #!/usr/bin/sh
-#
+
 if [ -f command/jn/main.go ]; then
   MAIN_FILE="command/jn/main.go"
 else

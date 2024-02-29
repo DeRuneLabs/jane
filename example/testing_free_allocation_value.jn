@@ -1,9 +1,13 @@
 type int32 i32
 
 memory_free_allocation_testing() {
-  x: = new i32;
-  *x = 201;
-  free x;
+  x: = new *i32
+  *x = new i32
+  *(*x) = 61
+  displn(*(*x))
+  free *x
+  free x
+  x = nil
 }
 
 main() {

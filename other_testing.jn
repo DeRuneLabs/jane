@@ -1,0 +1,16 @@
+type int32 i32
+
+testing_free_allocation() {
+  x: = new *i32
+  *x = new i32
+  *(*x) = 90
+  displn(*(*x))
+  free *x
+  free x
+  x = nil
+}
+
+main() {
+  displn("testing free allocation data");
+  testing_free_allocation();
+}
