@@ -3,11 +3,11 @@ type int32 i32
 heap_allocation() {
   x: = new i32;
   *x = 2314;
-  displn(x);
-  displn(*x);
+  println(x);
+  println(*x);
 }
 
 main() {
-  displn("testing heap allocation");
+  println("testing heap allocation");
   heap_allocation();
 }

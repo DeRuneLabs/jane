@@ -10,6 +10,7 @@ type Token struct {
 	Id     uint8
 }
 
+// Token types.
 const (
 	NA        uint8 = 0
 	DataType  uint8 = 1
@@ -26,4 +27,10 @@ const (
 	At        uint8 = 12
 	New       uint8 = 13
 	Free      uint8 = 14
+	Iter      uint8 = 15
+	Break     uint8 = 16
+	Continue  uint8 = 17
+	In        uint8 = 18
+	If        uint8 = 19
+	Else      uint8 = 20
 )

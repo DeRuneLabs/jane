@@ -1,6 +1,9 @@
 package jnbits
 
-import "github.com/De-Rune/jane/package/jn"
+import (
+	"github.com/De-Rune/jane/package/jn"
+	"strconv"
+)
 
 func BitsizeOfType(t uint8) int {
 	switch t {
@@ -8,10 +11,12 @@ func BitsizeOfType(t uint8) int {
 		return 8
 	case jn.I16, jn.U16:
 		return 16
-	case jn.I32, jn.U32:
+	case jn.I32, jn.U32, jn.F32:
 		return 32
-	case jn.I64, jn.U64:
+	case jn.I64, jn.U64, jn.F64:
 		return 64
+	case jn.Size:
+		return strconv.IntSize
 	}
 	return 0
 }

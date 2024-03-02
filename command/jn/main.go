@@ -148,7 +148,23 @@ inline void panic(const std::wstring message) {
   std::wcout << message << std::endl;
   exit(1);
 }
-#pragma endregion JN_RUNTIME_FUNCTION
+
+template <typename ET, typename IT, typename ETET>
+static inline void foreach(ET enumerable, std::function<void(IT index, ETET element)> block) {
+  IT index = 0;
+  for (auto element : enumerable) {
+    block(index++, element);
+  }
+}
+
+template <typename ET, typename IT>
+static inline void foreach(ET enumerable, std::function<void(IT index)> block) {
+  IT index = 0;
+  for (auto element : enumerable) {
+    block(index++);
+  }
+}
+#pragma endregion JN_RUNTIME_FUNCTIONS
 
 #pragma region JN_BUILTIN_TYPES
 typedef int8_t i8;
@@ -162,8 +178,6 @@ typedef uint64_t u64;
 typedef float f32;
 typedef double f64;
 typedef wchar_t rune;
-
-#define function std::function
 
 class str {
 public:
@@ -179,6 +193,17 @@ public:
 #pragma region DESTRUCTOR
   ~str() { this->string.clear(); }
 #pragma endregion DESTRUCTOR
+
+#pragma region FOREACH_SUPPORT
+  typedef rune *iterator;
+  typedef const rune *const_iterator;
+  iterator begin() {
+    return &this->string[0];
+  }
+  const_iterator begin() const {return &this->string[0];}
+  iterator end() {return &this->string[this->string.size()];}
+  const_iterator end() const {return &this->string[this->string.size()];}
+#pragma endregion FOREACH_SUPPORT
 
 #pragma region OPERATOR_OVERFLOWS
   bool operator==(const str& string) {
@@ -225,31 +250,27 @@ class array {
 public:
 #pragma region FIELDS
   std::vector<T> vector;
-  bool heap;
 #pragma endregion FIELDS
 
 #pragma region CONSTRUCTORS
-  array() {
-    this->vector = { };
-    this->heap = false;
-  }
-
-  array(std::nullptr_t) : array() {}
-
-  array(const std::vector<T>& vector, bool heap) {
-    this->vector = vector;
-    this->heap = heap;
-  }
-
-  array(const std::vector<T>& vector) : array(vector, false) {}
+  array() {thos->vector = { }; }
+  array(const std::vector<t>& vector)  { this->vector = vector; }
+  array(std::nullptr_t) : array() { }
+  array(const array<T>& arr): array(std::vector<T>(arr.vector)) { }
 #pragma endregion CONSTRUCTORS
 
 #pragma region DESTRUCTOR
-  ~array() {
-    this->vector.clear();
-    if (this->heap) { delete this; }
-  }
+  ~array() { this->vector.clear(); }
 #pragma endregion DESTRUCTOR
+
+#pragma region FOREACH_SUPPORT
+  typedef T *iterator;
+  typedef const T *const_iterator;
+  iterator begin() { return &this->vector[0]; }
+  const_iterator begin() const { return &this->vector[0]; }
+  iterator end() { return &this->vector[this->vector.size()]; }
+  const_iterator end() const { return &this->vector[this->vector.size()]; }
+#pragme endregion FOREACH_SUPPORT
 
 #pragma region OPERATOR_OVERFLOWS
   bool operator==(const array& array) {
@@ -301,16 +322,8 @@ public:
 #pragma endregion JN_STRUCTURES
 
 #pragma region JN_BUILTIN_FUNCTIONS
-template<typename any>
-inline void _disp(any v) {
-  std::wcout << v;
-}
-
-template <typename any>
-inline void _displn(any v) {
-  _disp(v);
-  std::wcout << std::endl;
-}
+#define _print(v) std::wcout << v
+#define _println(v) _print(v); std::wcout << std::endl
 #pragma endregion JN_BUILTIN_FUNCTIONS
 
 #pragma region TRANSPILED_JN_CODE

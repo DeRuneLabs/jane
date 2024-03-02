@@ -2,10 +2,10 @@ type int32 i32
 
 tambah() {
   angka:i32 = 10;
-  displn(angka + 20);
+  println(angka + 20);
 }
 
 main() {
   tambah();
-  displn("khairanabilla " + "are awesome");
+  println("khairanabilla " + "are awesome");
 }

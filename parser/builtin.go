@@ -8,7 +8,7 @@ import (
 var builtinFunctions = []*function{
 	{
 		Ast: ast.FunctionAST{
-			Name: "_disp",
+			Name: "_print",
 			ReturnType: ast.DataTypeAST{
 				Code: jn.Void,
 			},
@@ -23,7 +23,7 @@ var builtinFunctions = []*function{
 	},
 	{
 		Ast: ast.FunctionAST{
-			Name: "_displn",
+			Name: "_println",
 			ReturnType: ast.DataTypeAST{
 				Code: jn.Void,
 			},

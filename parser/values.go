@@ -22,6 +22,21 @@ func IsNil(value string) bool {
 	return value == "nil"
 }
 
+func isConditionExpr(val value) bool {
+	return val.ast.Type.Code == jn.Bool && typeIsSingle(val.ast.Type)
+}
+
+func isForeachIterExpr(val value) bool {
+	switch {
+	case typeIsArray(val.ast.Type):
+		return true
+	case !typeIsSingle(val.ast.Type):
+		return false
+	}
+	code := val.ast.Type.Code
+	return code == jn.Str
+}
+
 func isConstantNumeric(v string) bool {
 	if v == "" {
 		return false
@@ -37,4 +52,11 @@ func checkIntBit(v ast.ValueAST, bit int) bool {
 		return jnbits.CheckBitInt(v.Value, bit)
 	}
 	return jnbits.CheckBitUint(v.Value, bit)
+}
+
+func checkFloatBit(v ast.ValueAST, bit int) bool {
+	if bit == 0 {
+		return false
+	}
+	return jnbits.CheckBitFloat(v.Value, bit)
 }

@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/De-Rune/jane/ast"
 	"github.com/De-Rune/jane/lexer"
@@ -12,11 +13,13 @@ import (
 
 type Parser struct {
 	attributes []ast.AttributeAST
+	loopCount  int
+	wg         sync.WaitGroup
 
 	Functions              []*function
 	GlobalVariables        []ast.VariableAST
 	Types                  []ast.TypeAST
-	WaitingGlobalVariables []ast.VariableAST
+	waitingGlobalVariables []ast.VariableAST
 	BlockVariables         []ast.VariableAST
 	Tokens                 []lexer.Token
 	PFI                    *ParseFileInfo
@@ -31,10 +34,7 @@ func NewParser(tokens []lexer.Token, PFI *ParseFileInfo) *Parser {
 
 func (p *Parser) PushErrorToken(token lexer.Token, err string) {
 	message := jn.Errors[err]
-	p.PFI.Errors = append(
-		p.PFI.Errors,
-		fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message),
-	)
+	p.PFI.Errors = append(p.PFI.Errors, fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message))
 }
 
 func (p *Parser) AppendErrors(errors ...string) {
@@ -56,13 +56,13 @@ func (p *Parser) CxxTypes() string {
 		cxx.WriteString(t.String())
 		cxx.WriteByte('\n')
 	}
-	cxx.WriteString("#pragma endregion TYPES\n")
+	cxx.WriteString("#pragma endregion TYPES")
 	return cxx.String()
 }
 
 func (p *Parser) CxxPrototypes() string {
 	var cxx strings.Builder
-	cxx.WriteString("#pragma endregion PROTOTYPES\n")
+	cxx.WriteString("#pragma region PROTOTYPES\n")
 	for _, fun := range p.Functions {
 		cxx.WriteString(fun.Prototype())
 		cxx.WriteByte('\n')
@@ -104,28 +104,30 @@ func (p *Parser) Cxx() string {
 }
 
 func (p *Parser) Parse() {
-	astModel := ast.New(p.Tokens)
-	astModel.Build()
-	if astModel.Errors != nil {
-		p.PFI.Errors = append(p.PFI.Errors, astModel.Errors...)
+	builder := ast.NewBuilder(p.Tokens)
+	builder.Build()
+	if len(builder.Errors) > 0 {
+		p.PFI.Errors = append(p.PFI.Errors, builder.Errors...)
 		return
 	}
-	for _, model := range astModel.Tree {
+	for _, model := range builder.Tree {
 		switch t := model.Value.(type) {
 		case ast.AttributeAST:
 			p.PushAttribute(t)
 		case ast.StatementAST:
-			p.ParseStatement(t)
+			p.Statement(t)
 		case ast.TypeAST:
-			p.ParseType(t)
+			p.Type(t)
 		default:
 			p.PushErrorToken(model.Token, "invalid_syntax")
 		}
 	}
-	p.finalCheck()
+	p.wg.Add(1)
+	go p.checkAsync()
+	p.wg.Wait()
 }
 
-func (p *Parser) ParseType(t ast.TypeAST) {
+func (p *Parser) Type(t ast.TypeAST) {
 	if p.existName(t.Name).Id != lexer.NA {
 		p.PushErrorToken(t.Token, "exist_name")
 		return
@@ -151,18 +153,18 @@ func (p *Parser) PushAttribute(attribute ast.AttributeAST) {
 	p.attributes = append(p.attributes, attribute)
 }
 
-func (p *Parser) ParseStatement(s ast.StatementAST) {
+func (p *Parser) Statement(s ast.StatementAST) {
 	switch t := s.Value.(type) {
 	case ast.FunctionAST:
-		p.ParseFunction(t)
+		p.Function(t)
 	case ast.VariableAST:
-		p.ParseGlobalVariable(t)
+		p.GlobalVariable(t)
 	default:
 		p.PushErrorToken(s.Token, "invalid_syntax")
 	}
 }
 
-func (p *Parser) ParseFunction(funAST ast.FunctionAST) {
+func (p *Parser) Function(funAST ast.FunctionAST) {
 	if p.existName(funAST.Name).Id != lexer.NA {
 		p.PushErrorToken(funAST.Token, "exist_name")
 	} else if jn.IsIgnoreName(funAST.Name) {
@@ -176,38 +178,31 @@ func (p *Parser) ParseFunction(funAST ast.FunctionAST) {
 	p.Functions = append(p.Functions, fun)
 }
 
-func (p *Parser) ParseGlobalVariable(varAST ast.VariableAST) {
+func (p *Parser) GlobalVariable(varAST ast.VariableAST) {
 	if p.existName(varAST.Name).Id != lexer.NA {
 		p.PushErrorToken(varAST.NameToken, "exist_name")
 		return
 	}
-	p.WaitingGlobalVariables = append(p.WaitingGlobalVariables, varAST)
+	p.waitingGlobalVariables = append(p.waitingGlobalVariables, varAST)
 }
 
-func (p *Parser) ParseWaitingGlobalVariables() {
-	for _, varAST := range p.WaitingGlobalVariables {
-		p.GlobalVariables = append(p.GlobalVariables, p.ParseVariable(varAST))
-	}
-}
-
-func (p *Parser) ParseVariable(varAST ast.VariableAST) ast.VariableAST {
+func (p *Parser) Variable(varAST ast.VariableAST) ast.VariableAST {
 	if jn.IsIgnoreName(varAST.Name) {
 		p.PushErrorToken(varAST.NameToken, "ignore_name_identifier")
 	}
-	var dt ast.DataTypeAST
+	var val value
 	switch t := varAST.Tag.(type) {
-	case ast.DataTypeAST:
-		dt = t
+	case value:
+		val = t
 	default:
 		if varAST.SetterToken.Id != lexer.NA {
-			var val value
-			val, varAST.Value.Model = p.computeExpression(varAST.Value)
-			dt = val.ast.Type
+			val, varAST.Value.Model = p.computeExpr(varAST.Value)
 		}
 	}
 	if varAST.Type.Code != jn.Void {
 		if varAST.SetterToken.Id != lexer.NA {
-			p.checkType(varAST.Type, dt, false, varAST.NameToken)
+			p.wg.Add(1)
+			go p.checkAssignTypeAsync(varAST.Type, val, false, varAST.NameToken)
 		} else {
 			var valueToken lexer.Token
 			valueToken.Id = lexer.Value
@@ -215,17 +210,20 @@ func (p *Parser) ParseVariable(varAST ast.VariableAST) ast.VariableAST {
 			if ok {
 				valueToken.Kind = p.defaultValueOfType(dt)
 				valueTokens := []lexer.Token{valueToken}
-				varAST.Value = ast.ExpressionAST{
+				processes := [][]lexer.Token{valueTokens}
+				varAST.Value = ast.ExprAST{
 					Tokens:    valueTokens,
-					Processes: [][]lexer.Token{valueTokens},
+					Processes: processes,
 				}
+			} else {
+				p.PushErrorToken(varAST.Type.Token, "invalid_type_source")
 			}
 		}
 	} else {
 		if varAST.SetterToken.Id == lexer.NA {
 			p.PushErrorToken(varAST.NameToken, "missing_autotype_value")
 		} else {
-			varAST.Type = dt
+			varAST.Type = val.ast.Type
 			p.checkValidityForAutoType(varAST.Type, varAST.SetterToken)
 		}
 	}
@@ -249,15 +247,22 @@ func (p *Parser) checkFunctionAttributes(attributes []ast.AttributeAST) {
 	}
 }
 
-func variablesFromParameters(params []ast.ParameterAST) []ast.VariableAST {
+func (p *Parser) variablesFromParameters(params []ast.ParameterAST) []ast.VariableAST {
 	var vars []ast.VariableAST
-	for _, param := range params {
+	length := len(params)
+	for index, param := range params {
 		var variable ast.VariableAST
 		variable.Name = param.Name
 		variable.NameToken = param.Token
 		variable.Type = param.Type
 		if param.Const {
 			variable.DefineToken.Id = lexer.Const
+		}
+		if param.Variadic {
+			if length-index > 1 {
+				p.PushErrorToken(param.Token, "variadic_parameter_notlast")
+			}
+			variable.Type.Value = "[]" + variable.Type.Value
 		}
 		vars = append(vars, variable)
 	}
@@ -301,7 +306,7 @@ func (p *Parser) variableByName(name string) *ast.VariableAST {
 	return nil
 }
 
-func (p *Parser) existName(name string) lexer.Token {
+func (p *Parser) existNamef(name string, exceptGlobals bool) lexer.Token {
 	t := p.typeByName(name)
 	if t != nil {
 		return t.Token
@@ -310,29 +315,46 @@ func (p *Parser) existName(name string) lexer.Token {
 	if fun != nil {
 		return fun.Ast.Token
 	}
-	variable := p.variableByName(name)
-	if variable != nil {
-		return variable.NameToken
+	for _, variable := range p.BlockVariables {
+		if variable.Name == name {
+			return variable.NameToken
+		}
 	}
-	for _, varAST := range p.WaitingGlobalVariables {
-		if varAST.Name == name {
-			return varAST.NameToken
+	if !exceptGlobals {
+		for _, variable := range p.GlobalVariables {
+			if variable.Name == name {
+				return variable.NameToken
+			}
+		}
+		for _, varAST := range p.waitingGlobalVariables {
+			if varAST.Name == name {
+				return varAST.NameToken
+			}
 		}
 	}
 	return lexer.Token{}
 }
 
-func (p *Parser) finalCheck() {
+func (p *Parser) existName(name string) lexer.Token {
+	return p.existNamef(name, false)
+}
+
+func (p *Parser) checkAsync() {
+	defer func() { p.wg.Done() }()
 	if p.FunctionByName("_"+jn.EntryPoint) == nil {
 		p.PushError("no_entry_point")
 	}
-	p.checkTypes()
-	p.ParseWaitingGlobalVariables()
-	p.WaitingGlobalVariables = nil
-	p.checkFunctions()
+	p.wg.Add(1)
+	go p.checkTypesAsync()
+	p.wg.Add(1)
+	go p.WaitingGlobalVariablesAsync()
+	p.waitingGlobalVariables = nil
+	p.wg.Add(1)
+	go p.checkFunctionsAsync()
 }
 
-func (p *Parser) checkTypes() {
+func (p *Parser) checkTypesAsync() {
+	defer func() { p.wg.Done() }()
 	for _, t := range p.Types {
 		_, ok := p.readyType(t.Type)
 		if !ok {
@@ -341,31 +363,51 @@ func (p *Parser) checkTypes() {
 	}
 }
 
-func (p *Parser) checkFunctions() {
+func (p *Parser) WaitingGlobalVariablesAsync() {
+	defer func() { p.wg.Done() }()
+	for _, varAST := range p.waitingGlobalVariables {
+		variable := p.Variable(varAST)
+		p.GlobalVariables = append(p.GlobalVariables, variable)
+	}
+}
+
+func (p *Parser) checkFunctionsAsync() {
+	defer func() { p.wg.Done() }()
 	for _, fun := range p.Functions {
-		p.BlockVariables = variablesFromParameters(fun.Ast.Params)
-		p.checkFunctionSpecialCases(fun)
+		p.BlockVariables = p.variablesFromParameters(fun.Ast.Params)
+		p.wg.Add(1)
+		go p.checkFunctionSpecialCasesAsync(fun)
 		p.checkFunction(&fun.Ast)
+	}
+}
+
+func (p *Parser) checkFunctionSpecialCasesAsync(fun *function) {
+	defer func() { p.wg.Done() }()
+	switch fun.Ast.Name {
+	case "_" + jn.EntryPoint:
+		p.checkEntryPointSpecialCases(fun)
 	}
 }
 
 type value struct {
 	ast      ast.ValueAST
 	constant bool
+	lvalue   bool
+	variadic bool
 }
 
-func (p *Parser) computeProcesses(processes [][]lexer.Token) (v value, e expressionModel) {
+func (p *Parser) computeProcesses(processes [][]lexer.Token) (v value, e exprModel) {
 	if processes == nil {
 		return
 	}
-	builder := newExpBuilder()
+	builder := newExprBuilder()
 	if len(processes) == 1 {
 		builder.setIndex(0)
-		v = p.processValPart(processes[0], builder)
+		v = p.computeValPart(processes[0], builder)
 		e = builder.build()
 		return
 	}
-	process := arithmeticProcess{p: p}
+	process := solver{p: p}
 	j := p.nextOperator(processes)
 	boolean := false
 	for j != -1 {
@@ -379,22 +421,22 @@ func (p *Parser) computeProcesses(processes [][]lexer.Token) (v value, e express
 			process.leftVal = v.ast
 			process.operator = processes[j][0]
 			builder.setIndex(j + 1)
-			builder.appendNode(tokenExpNode{process.operator})
+			builder.appendNode(tokenExprNode{process.operator})
 			process.right = processes[j+1]
 			builder.setIndex(j + 1)
-			process.rightVal = p.processValPart(process.right, builder).ast
-			v.ast = process.solve()
+			process.rightVal = p.computeValPart(process.right, builder).ast
+			v.ast = process.Solve()
 			processes = processes[2:]
 			goto end
 		} else if j == len(processes)-1 {
 			process.operator = processes[j][0]
 			process.left = processes[j-1]
 			builder.setIndex(j - 1)
-			process.leftVal = p.processValPart(process.left, builder).ast
+			process.leftVal = p.computeValPart(process.left, builder).ast
 			process.rightVal = v.ast
 			builder.setIndex(j)
-			builder.appendNode(tokenExpNode{process.operator})
-			v.ast = process.solve()
+			builder.appendNode(tokenExprNode{process.operator})
+			v.ast = process.Solve()
 			processes = processes[:j-1]
 			goto end
 		} else if prev := processes[j-1]; prev[0].Id == lexer.Operator &&
@@ -402,31 +444,31 @@ func (p *Parser) computeProcesses(processes [][]lexer.Token) (v value, e express
 			process.leftVal = v.ast
 			process.operator = processes[j][0]
 			builder.setIndex(j)
-			builder.appendNode(tokenExpNode{process.operator})
+			builder.appendNode(tokenExprNode{process.operator})
 			process.right = processes[j+1]
 			builder.setIndex(j + 1)
-			process.rightVal = p.processValPart(process.right, builder).ast
-			v.ast = process.solve()
+			process.rightVal = p.computeValPart(process.right, builder).ast
+			v.ast = process.Solve()
 			processes = append(processes[:j], processes[j+2:]...)
 			goto end
 		}
 		process.left = processes[j-1]
 		builder.setIndex(j - 1)
-		process.leftVal = p.processValPart(process.left, builder).ast
+		process.leftVal = p.computeValPart(process.left, builder).ast
 		process.operator = processes[j][0]
 		builder.setIndex(j)
-		builder.appendNode(tokenExpNode{process.operator})
+		builder.appendNode(tokenExprNode{process.operator})
 		process.right = processes[j+1]
 		builder.setIndex(j + 1)
-		process.rightVal = p.processValPart(process.right, builder).ast
+		process.rightVal = p.computeValPart(process.right, builder).ast
 		{
-			solvedValue := process.solve()
+			solvedValue := process.Solve()
 			if v.ast.Type.Code != jn.Void {
 				process.operator.Kind = "+"
 				process.leftVal = v.ast
 				process.right = processes[j+1]
 				process.rightVal = solvedValue
-				v.ast = process.solve()
+				v.ast = process.Solve()
 			} else {
 				v.ast = solvedValue
 			}
@@ -442,11 +484,11 @@ func (p *Parser) computeProcesses(processes [][]lexer.Token) (v value, e express
 	return
 }
 
-func (p *Parser) computeTokens(tokens []lexer.Token) (value, expressionModel) {
-	return p.computeProcesses(new(ast.AST).BuildExpression(tokens).Processes)
+func (p *Parser) computeTokens(tokens []lexer.Token) (value, exprModel) {
+	return p.computeExpr(new(ast.Builder).Expr(tokens))
 }
 
-func (p *Parser) computeExpression(ex ast.ExpressionAST) (value, expressionModel) {
+func (p *Parser) computeExpr(ex ast.ExprAST) (value, exprModel) {
 	processes := make([][]lexer.Token, len(ex.Processes))
 	copy(processes, ex.Processes)
 	return p.computeProcesses(processes)
@@ -491,273 +533,47 @@ func (p *Parser) nextOperator(tokens [][]lexer.Token) int {
 	return precedence1
 }
 
-type arithmeticProcess struct {
-	p        *Parser
-	left     []lexer.Token
-	leftVal  ast.ValueAST
-	right    []lexer.Token
-	rightVal ast.ValueAST
-	operator lexer.Token
-}
-
-func (ap arithmeticProcess) solvePointer() (v ast.ValueAST) {
-	if ap.leftVal.Type.Value != ap.rightVal.Type.Value {
-		ap.p.PushErrorToken(ap.operator, "incompatible_type")
-		return
-	}
-	switch ap.operator.Kind {
-	case "!=", "==":
-		v.Type.Code = jn.Bool
-	default:
-		ap.p.PushErrorToken(ap.operator, "operator_notfor_pointer")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solveString() (v ast.ValueAST) {
-	if ap.leftVal.Type.Code != ap.rightVal.Type.Code {
-		ap.p.PushErrorToken(ap.operator, "incompatible_type")
-		return
-	}
-	switch ap.operator.Kind {
-	case "+":
-		v.Type.Code = jn.Str
-	case "==", "!=":
-		v.Type.Code = jn.Bool
-	default:
-		ap.p.PushErrorToken(ap.operator, "operator_notfor_string")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solveAny() (v ast.ValueAST) {
-	switch ap.operator.Kind {
-	case "!=", "==":
-		v.Type.Code = jn.Bool
-	default:
-		ap.p.PushErrorToken(ap.operator, "operator_notfor_any")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solveBool() (v ast.ValueAST) {
-	if !typesAreCompatible(ap.leftVal.Type, ap.rightVal.Type, true) {
-		ap.p.PushErrorToken(ap.operator, "incompatible_type")
-	}
-	switch ap.operator.Kind {
-	case "!=", "==":
-		v.Type.Code = jn.Bool
-	default:
-		ap.p.PushErrorToken(ap.operator, "operator_notfor_bool")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solveFloat() (v ast.ValueAST) {
-	if !typesAreCompatible(ap.leftVal.Type, ap.rightVal.Type, true) {
-		if !isConstantNumeric(ap.leftVal.Value) && !isConstantNumeric(ap.rightVal.Value) {
-			ap.p.PushErrorToken(ap.operator, "incompatible_type")
-			return
-		}
-	}
-	switch ap.operator.Kind {
-	case "!=", "==", "<", ">", ">=", "<=":
-		v.Type.Code = jn.Bool
-	case "+", "-", "*", "/":
-		v.Type.Code = jn.F32
-		if ap.leftVal.Type.Code == jn.F64 || ap.rightVal.Type.Code == jn.F64 {
-			v.Type.Code = jn.F64
-		}
-	default:
-		ap.p.PushErrorToken(ap.operator, "operator_notfor_float")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solveSigned() (v ast.ValueAST) {
-	if !typesAreCompatible(ap.leftVal.Type, ap.rightVal.Type, true) {
-		if !isConstantNumeric(ap.leftVal.Value) && !isConstantNumeric(ap.rightVal.Value) {
-			ap.p.PushErrorToken(ap.operator, "incompatible_type")
-			return
-		}
-	}
-	switch ap.operator.Kind {
-	case "!=", "==", "<", ">", ">=", "<=":
-		v.Type.Code = jn.Bool
-	case "+", "-", "*", "/", "%", "&", "|", "^":
-		v.Type = ap.leftVal.Type
-		if jn.TypeGreaterThan(ap.rightVal.Type.Code, v.Type.Code) {
-			v.Type = ap.rightVal.Type
-		}
-	case ">>", "<<":
-		v.Type = ap.leftVal.Type
-		if !jn.IsUnsignedNumericType(ap.rightVal.Type.Code) &&
-			!checkIntBit(ap.rightVal, jnbits.BitsizeOfType(jn.U64)) {
-			ap.p.PushErrorToken(ap.rightVal.Token, "bitshift_must_unsigned")
-		}
-	default:
-		ap.p.PushErrorToken(ap.operator, "operator_notfor_int")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solveUnsigned() (v ast.ValueAST) {
-	if !typesAreCompatible(ap.leftVal.Type, ap.rightVal.Type, true) {
-		if !isConstantNumeric(ap.leftVal.Value) && !isConstantNumeric(ap.rightVal.Value) {
-			ap.p.PushErrorToken(ap.operator, "incompatible_type")
-			return
-		}
-		return
-	}
-	switch ap.operator.Kind {
-	case "!=", "==", "<", ">", ">=", "<=":
-		v.Type.Code = jn.Bool
-	case "+", "-", "*", "/", "%", "&", "|", "^":
-		v.Type = ap.leftVal.Type
-		if jn.TypeGreaterThan(ap.rightVal.Type.Code, v.Type.Code) {
-			v.Type = ap.rightVal.Type
-		}
-	default:
-		ap.p.PushErrorToken(ap.operator, "operator_notfor_uint")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solveLogical() (v ast.ValueAST) {
-	v.Type.Code = jn.Bool
-	if ap.leftVal.Type.Code != jn.Bool {
-		ap.p.PushErrorToken(ap.leftVal.Token, "logical_not_bool")
-	}
-	if ap.rightVal.Type.Code != jn.Bool {
-		ap.p.PushErrorToken(ap.rightVal.Token, "logical_not_bool")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solveRune() (v ast.ValueAST) {
-	if !typesAreCompatible(ap.leftVal.Type, ap.rightVal.Type, true) {
-		ap.p.PushErrorToken(ap.operator, "incompatible_type")
-		return
-	}
-	switch ap.operator.Kind {
-	case "!=", "==", ">", "<", ">=", "<=":
-		v.Type.Code = jn.Bool
-	case "+", "-", "*", "/", "^", "&", "%", "|":
-		v.Type.Code = jn.Rune
-	default:
-		ap.p.PushErrorToken(ap.operator, "operator_notfor_rune")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solveArray() (v ast.ValueAST) {
-	if !typesAreCompatible(ap.leftVal.Type, ap.rightVal.Type, true) {
-		ap.p.PushErrorToken(ap.operator, "incompatible_type")
-		return
-	}
-	switch ap.operator.Kind {
-	case "!=", "==":
-		v.Type.Code = jn.Bool
-	default:
-		ap.p.PushErrorToken(ap.operator, "operator_notfor_array")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solveNil() (v ast.ValueAST) {
-	if !typesAreCompatible(ap.leftVal.Type, ap.rightVal.Type, false) {
-		ap.p.PushErrorToken(ap.operator, "incompatible_type")
-		return
-	}
-	switch ap.operator.Kind {
-	case "!=", "==":
-		v.Type.Code = jn.Bool
-	default:
-		ap.p.PushErrorToken(ap.operator, "operator_notfor_nil")
-	}
-	return
-}
-
-func (ap arithmeticProcess) solve() (v ast.ValueAST) {
-	switch ap.operator.Kind {
-	case "+", "-", "*", "/", "%", ">>",
-		"<<", "&", "|", "^", "==", "!=",
-		">=", "<=", ">", "<":
-	case "&&", "||":
-		return ap.solveLogical()
-	default:
-		ap.p.PushErrorToken(ap.operator, "invalid_operator")
-	}
-	switch {
-	case typeIsArray(ap.leftVal.Type) || typeIsArray(ap.rightVal.Type):
-		return ap.solveArray()
-	case typeIsPointer(ap.leftVal.Type) || typeIsPointer(ap.rightVal.Type):
-		return ap.solvePointer()
-	case ap.leftVal.Type.Code == jn.Nil || ap.rightVal.Type.Code == jn.Nil:
-		return ap.solveNil()
-	case ap.leftVal.Type.Code == jn.Rune || ap.rightVal.Type.Code == jn.Rune:
-		return ap.solveRune()
-	case ap.leftVal.Type.Code == jn.Any || ap.rightVal.Type.Code == jn.Any:
-		return ap.solveAny()
-	case ap.leftVal.Type.Code == jn.Bool || ap.rightVal.Type.Code == jn.Bool:
-		return ap.solveBool()
-	case ap.leftVal.Type.Code == jn.Str || ap.rightVal.Type.Code == jn.Str:
-		return ap.solveString()
-	case jn.IsFloatType(ap.leftVal.Type.Code) ||
-		jn.IsFloatType(ap.rightVal.Type.Code):
-		return ap.solveFloat()
-	case jn.IsSignedNumericType(ap.leftVal.Type.Code) ||
-		jn.IsSignedNumericType(ap.rightVal.Type.Code):
-		return ap.solveSigned()
-	case jn.IsUnsignedNumericType(ap.leftVal.Type.Code) ||
-		jn.IsUnsignedNumericType(ap.rightVal.Type.Code):
-		return ap.solveUnsigned()
-	}
-	return
-}
-
-type singleValueProcessor struct {
+type valueProcessor struct {
 	token   lexer.Token
-	builder *expressionModelBuilder
+	builder *exprBuilder
 	parser  *Parser
 }
 
-func (p *singleValueProcessor) string() value {
+func (p *valueProcessor) string() value {
 	var v value
 	v.ast.Value = p.token.Kind
 	v.ast.Type.Code = jn.Str
-	v.ast.Type.Value = "str"
-	p.builder.appendNode(strExpNode{p.token})
+	p.builder.appendNode(strExprNode{p.token})
 	return v
 }
 
-func (p *singleValueProcessor) rune() value {
+func (p *valueProcessor) rune() value {
 	var v value
 	v.ast.Value = p.token.Kind
 	v.ast.Type.Code = jn.Rune
 	v.ast.Type.Value = "rune"
-	p.builder.appendNode(runeExpNode{p.token})
+	p.builder.appendNode(runeExprNode{p.token})
 	return v
 }
 
-func (p *singleValueProcessor) boolean() value {
+func (p *valueProcessor) boolean() value {
 	var v value
 	v.ast.Value = p.token.Kind
 	v.ast.Type.Code = jn.Bool
 	v.ast.Type.Value = "bool"
-	p.builder.appendNode(tokenExpNode{p.token})
+	p.builder.appendNode(tokenExprNode{p.token})
 	return v
 }
 
-func (p *singleValueProcessor) nil() value {
+func (p *valueProcessor) nil() value {
 	var v value
 	v.ast.Value = p.token.Kind
 	v.ast.Type.Code = jn.Nil
-	p.builder.appendNode(tokenExpNode{p.token})
+	p.builder.appendNode(tokenExprNode{p.token})
 	return v
 }
 
-func (p *singleValueProcessor) numeric() value {
+func (p *valueProcessor) numeric() value {
 	var v value
 	if strings.Contains(p.token.Kind, ".") ||
 		strings.ContainsAny(p.token.Kind, "eE") {
@@ -769,21 +585,22 @@ func (p *singleValueProcessor) numeric() value {
 		ok := jnbits.CheckBitInt(p.token.Kind, 32)
 		if !ok {
 			v.ast.Type.Code = jn.I64
-			v.ast.Type.Value = "i4"
+			v.ast.Type.Value = "i64"
 		}
 	}
 	v.ast.Value = p.token.Kind
-	p.builder.appendNode(tokenExpNode{p.token})
+	p.builder.appendNode(tokenExprNode{p.token})
 	return v
 }
 
-func (p *singleValueProcessor) name() (v value, ok bool) {
+func (p *valueProcessor) name() (v value, ok bool) {
 	if variable := p.parser.variableByName(p.token.Kind); variable != nil {
 		v.ast.Value = p.token.Kind
 		v.ast.Type = variable.Type
 		v.constant = variable.DefineToken.Id == lexer.Const
 		v.ast.Token = variable.NameToken
-		p.builder.appendNode(tokenExpNode{p.token})
+		v.lvalue = true
+		p.builder.appendNode(tokenExprNode{p.token})
 		ok = true
 	} else if fun := p.parser.FunctionByName(p.token.Kind); fun != nil {
 		v.ast.Value = p.token.Kind
@@ -791,7 +608,7 @@ func (p *singleValueProcessor) name() (v value, ok bool) {
 		v.ast.Type.Tag = fun.Ast
 		v.ast.Type.Value = fun.Ast.DataTypeString()
 		v.ast.Token = fun.Ast.Token
-		p.builder.appendNode(tokenExpNode{p.token})
+		p.builder.appendNode(tokenExprNode{p.token})
 		ok = true
 	} else {
 		p.parser.PushErrorToken(p.token, "name_not_defined")
@@ -799,15 +616,236 @@ func (p *singleValueProcessor) name() (v value, ok bool) {
 	return
 }
 
-func (p *Parser) processSingleValPart(
-	token lexer.Token,
-	builder *expressionModelBuilder,
-) (v value, ok bool) {
-	processor := singleValueProcessor{
-		token:   token,
-		builder: builder,
-		parser:  p,
+type solver struct {
+	p        *Parser
+	left     []lexer.Token
+	leftVal  ast.ValueAST
+	right    []lexer.Token
+	rightVal ast.ValueAST
+	operator lexer.Token
+}
+
+func (s solver) pointer() (v ast.ValueAST) {
+	if s.leftVal.Type.Value != s.rightVal.Type.Value {
+		s.p.PushErrorToken(s.operator, "incompatible_type")
+		return
 	}
+	switch s.operator.Kind {
+	case "!=", "==":
+		v.Type.Code = jn.Bool
+	default:
+		s.p.PushErrorToken(s.operator, "operator_notfor_pointer")
+	}
+	return
+}
+
+func (s solver) string() (v ast.ValueAST) {
+	if s.leftVal.Type.Code != s.rightVal.Type.Code {
+		s.p.PushErrorToken(s.operator, "incompatible_type")
+		return
+	}
+	switch s.operator.Kind {
+	case "+":
+		v.Type.Code = jn.Str
+	case "==", "!=":
+		v.Type.Code = jn.Bool
+	default:
+		s.p.PushErrorToken(s.operator, "operator_notfor_string")
+	}
+	return
+}
+
+func (s solver) any() (v ast.ValueAST) {
+	switch s.operator.Kind {
+	case "!=", "==":
+		v.Type.Code = jn.Bool
+	default:
+		s.p.PushErrorToken(s.operator, "operator_notfor_any")
+	}
+	return
+}
+
+func (s solver) bool() (v ast.ValueAST) {
+	if !typesAreCompatible(s.leftVal.Type, s.rightVal.Type, true) {
+		s.p.PushErrorToken(s.operator, "incompatible_type")
+		return
+	}
+	switch s.operator.Kind {
+	case "!=", "==":
+		v.Type.Code = jn.Bool
+	default:
+		s.p.PushErrorToken(s.operator, "operator_notfor_bool")
+	}
+	return
+}
+
+func (s solver) float() (v ast.ValueAST) {
+	if !typesAreCompatible(s.leftVal.Type, s.rightVal.Type, true) {
+		if !isConstantNumeric(s.leftVal.Value) &&
+			!isConstantNumeric(s.rightVal.Value) {
+			s.p.PushErrorToken(s.operator, "incompatible_type")
+			return
+		}
+	}
+	switch s.operator.Kind {
+	case "!=", "==", "<", ">", ">=", "<=":
+		v.Type.Code = jn.Bool
+	case "+", "-", "*", "/":
+		v.Type.Code = jn.F32
+		if s.leftVal.Type.Code == jn.F64 || s.rightVal.Type.Code == jn.F64 {
+			v.Type.Code = jn.F64
+		}
+	default:
+		s.p.PushErrorToken(s.operator, "operator_notfor_float")
+	}
+	return
+}
+
+func (s solver) signed() (v ast.ValueAST) {
+	if !typesAreCompatible(s.leftVal.Type, s.rightVal.Type, true) {
+		if !isConstantNumeric(s.leftVal.Value) &&
+			!isConstantNumeric(s.rightVal.Value) {
+			s.p.PushErrorToken(s.operator, "incompatible_type")
+			return
+		}
+	}
+	switch s.operator.Kind {
+	case "!=", "==", "<", ">", ">=", "<=":
+		v.Type.Code = jn.Bool
+	case "+", "-", "*", "/", "%", "&", "|", "^":
+		v.Type = s.leftVal.Type
+		if jn.TypeGreaterThan(s.rightVal.Type.Code, v.Type.Code) {
+			v.Type = s.rightVal.Type
+		}
+	case ">>", "<<":
+		v.Type = s.leftVal.Type
+		if !jn.IsUnsignedNumericType(s.rightVal.Type.Code) &&
+			!checkIntBit(s.rightVal, jnbits.BitsizeOfType(jn.U64)) {
+			s.p.PushErrorToken(s.rightVal.Token, "bitshift_must_unsigned")
+		}
+	default:
+		s.p.PushErrorToken(s.operator, "operator_notfor_int")
+	}
+	return
+}
+
+func (s solver) unsigned() (v ast.ValueAST) {
+	if !typesAreCompatible(s.leftVal.Type, s.rightVal.Type, true) {
+		if !isConstantNumeric(s.leftVal.Value) && !isConstantNumeric(s.rightVal.Value) {
+			s.p.PushErrorToken(s.operator, "incompatible_type")
+			return
+		}
+		return
+	}
+	switch s.operator.Kind {
+	case "!=", "==", "<", ">", ">=", "<=":
+		v.Type.Code = jn.Bool
+	case "+", "-", "*", "/", "%", "&", "|", "^":
+		v.Type = s.leftVal.Type
+		if jn.TypeGreaterThan(s.rightVal.Type.Code, v.Type.Code) {
+			v.Type = s.rightVal.Type
+		}
+	default:
+		s.p.PushErrorToken(s.operator, "operator_notfor_uint")
+	}
+	return
+}
+
+func (s solver) logical() (v ast.ValueAST) {
+	v.Type.Code = jn.Bool
+	if s.leftVal.Type.Code != jn.Bool {
+		s.p.PushErrorToken(s.leftVal.Token, "logical_not_bool")
+	}
+	if s.rightVal.Type.Code != jn.Bool {
+		s.p.PushErrorToken(s.rightVal.Token, "logical_not_bool")
+	}
+	return
+}
+
+func (s solver) rune() (v ast.ValueAST) {
+	if !typesAreCompatible(s.leftVal.Type, s.rightVal.Type, true) {
+		s.p.PushErrorToken(s.operator, "incompatible_type")
+		return
+	}
+	switch s.operator.Kind {
+	case "!=", "==", ">", "<", ">=", "<=":
+		v.Type.Code = jn.Bool
+	case "+", "-", "*", "/", "^", "&", "%", "|":
+		v.Type.Code = jn.Rune
+	default:
+		s.p.PushErrorToken(s.operator, "operator_notfor_rune")
+	}
+	return
+}
+
+func (s solver) array() (v ast.ValueAST) {
+	if !typesAreCompatible(s.leftVal.Type, s.rightVal.Type, true) {
+		s.p.PushErrorToken(s.operator, "incompatible_type")
+		return
+	}
+	switch s.operator.Kind {
+	case "!=", "==":
+		v.Type.Code = jn.Bool
+	default:
+		s.p.PushErrorToken(s.operator, "operator_notfor_array")
+	}
+	return
+}
+
+func (s solver) nil() (v ast.ValueAST) {
+	if !typesAreCompatible(s.leftVal.Type, s.rightVal.Type, false) {
+		s.p.PushErrorToken(s.operator, "incompatible_type")
+		return
+	}
+	switch s.operator.Kind {
+	case "!=", "==":
+		v.Type.Code = jn.Bool
+	default:
+		s.p.PushErrorToken(s.operator, "operator_notfor_nil")
+	}
+	return
+}
+
+func (s solver) Solve() (v ast.ValueAST) {
+	switch s.operator.Kind {
+	case "+", "-", "*", "/", "%", ">>",
+		"<<", "&", "|", "^", "==", "!=",
+		">=", "<=", ">", "<":
+	case "&&", "||":
+		return s.logical()
+	default:
+		s.p.PushErrorToken(s.operator, "invalid_operator")
+	}
+	switch {
+	case typeIsArray(s.leftVal.Type) || typeIsArray(s.rightVal.Type):
+		return s.array()
+	case typeIsPointer(s.leftVal.Type) || typeIsPointer(s.rightVal.Type):
+		return s.pointer()
+	case s.leftVal.Type.Code == jn.Nil || s.rightVal.Type.Code == jn.Nil:
+		return s.nil()
+	case s.leftVal.Type.Code == jn.Rune || s.rightVal.Type.Code == jn.Rune:
+		return s.rune()
+	case s.leftVal.Type.Code == jn.Any || s.rightVal.Type.Code == jn.Any:
+		return s.any()
+	case s.leftVal.Type.Code == jn.Bool || s.rightVal.Type.Code == jn.Bool:
+		return s.bool()
+	case s.leftVal.Type.Code == jn.Str || s.rightVal.Type.Code == jn.Str:
+		return s.string()
+	case jn.IsFloatType(s.leftVal.Type.Code) ||
+		jn.IsFloatType(s.rightVal.Type.Code):
+		return s.float()
+	case jn.IsSignedNumericType(s.leftVal.Type.Code) ||
+		jn.IsSignedNumericType(s.rightVal.Type.Code):
+		return s.signed()
+	case jn.IsUnsignedNumericType(s.leftVal.Type.Code) ||
+		jn.IsUnsignedNumericType(s.rightVal.Type.Code):
+		return s.unsigned()
+	}
+	return
+}
+
+func (p *Parser) computeVal(token lexer.Token, builder *exprBuilder) (v value, ok bool) {
+	processor := valueProcessor{token, builder, p}
 	v.ast.Type.Code = jn.Void
 	v.ast.Token = token
 	switch token.Id {
@@ -833,25 +871,28 @@ func (p *Parser) processSingleValPart(
 	return
 }
 
-type singleOperatorProcessor struct {
+type operatorProcessor struct {
 	token   lexer.Token
 	tokens  []lexer.Token
-	builder *expressionModelBuilder
+	builder *exprBuilder
 	parser  *Parser
 }
 
-func (p *singleOperatorProcessor) unary() value {
-	v := p.parser.processValPart(p.tokens, p.builder)
+func (p *operatorProcessor) unary() value {
+	v := p.parser.computeValPart(p.tokens, p.builder)
 	if !typeIsSingle(v.ast.Type) {
 		p.parser.PushErrorToken(p.token, "invalid_data_unary")
 	} else if !jn.IsNumericType(v.ast.Type.Code) {
 		p.parser.PushErrorToken(p.token, "invalid_data_unary")
 	}
+	if isConstantNumeric(v.ast.Value) {
+		v.ast.Value = "-" + v.ast.Value
+	}
 	return v
 }
 
-func (p *singleOperatorProcessor) plus() value {
-	v := p.parser.processValPart(p.tokens, p.builder)
+func (p *operatorProcessor) plus() value {
+	v := p.parser.computeValPart(p.tokens, p.builder)
 	if !typeIsSingle(v.ast.Type) {
 		p.parser.PushErrorToken(p.token, "invalid_data_plus")
 	} else if !jn.IsNumericType(v.ast.Type.Code) {
@@ -860,8 +901,8 @@ func (p *singleOperatorProcessor) plus() value {
 	return v
 }
 
-func (p *singleOperatorProcessor) tilde() value {
-	v := p.parser.processValPart(p.tokens, p.builder)
+func (p *operatorProcessor) tilde() value {
+	v := p.parser.computeValPart(p.tokens, p.builder)
 	if !typeIsSingle(v.ast.Type) {
 		p.parser.PushErrorToken(p.token, "invalid_data_tilde")
 	} else if !jn.IsIntegerType(v.ast.Type.Code) {
@@ -870,8 +911,8 @@ func (p *singleOperatorProcessor) tilde() value {
 	return v
 }
 
-func (p *singleOperatorProcessor) logicalNot() value {
-	v := p.parser.processValPart(p.tokens, p.builder)
+func (p *operatorProcessor) logicalNot() value {
+	v := p.parser.computeValPart(p.tokens, p.builder)
 	if !typeIsSingle(v.ast.Type) {
 		p.parser.PushErrorToken(p.token, "invalid_data_logical_not")
 	} else if v.ast.Type.Code != jn.Bool {
@@ -880,8 +921,9 @@ func (p *singleOperatorProcessor) logicalNot() value {
 	return v
 }
 
-func (p *singleOperatorProcessor) star() value {
-	v := p.parser.processValPart(p.tokens, p.builder)
+func (p *operatorProcessor) star() value {
+	v := p.parser.computeValPart(p.tokens, p.builder)
+	v.lvalue = true
 	if !typeIsPointer(v.ast.Type) {
 		p.parser.PushErrorToken(p.token, "invalid_data_star")
 	} else {
@@ -890,8 +932,9 @@ func (p *singleOperatorProcessor) star() value {
 	return v
 }
 
-func (p *singleOperatorProcessor) amper() value {
-	v := p.parser.processValPart(p.tokens, p.builder)
+func (p *operatorProcessor) amper() value {
+	v := p.parser.computeValPart(p.tokens, p.builder)
+	v.lvalue = true
 	if !canGetPointer(v) {
 		p.parser.PushErrorToken(p.token, "invalid_data_amper")
 	}
@@ -899,18 +942,11 @@ func (p *singleOperatorProcessor) amper() value {
 	return v
 }
 
-func (p *Parser) processSingleOperatorPart(
-	tokens []lexer.Token,
-	builder *expressionModelBuilder,
-) value {
+func (p *Parser) computeOperatorPart(tokens []lexer.Token, builder *exprBuilder) value {
 	var v value
-	processor := singleOperatorProcessor{
-		token:   tokens[0],
-		tokens:  tokens[1:],
-		builder: builder,
-		parser:  p,
-	}
-	builder.appendNode(tokenExpNode{processor.token})
+	exprTokens := tokens[1:]
+	processor := operatorProcessor{tokens[0], exprTokens, builder, p}
+	builder.appendNode(tokenExprNode{processor.token})
 	if processor.tokens == nil {
 		p.PushErrorToken(processor.token, "invalid_syntax")
 		return v
@@ -942,20 +978,18 @@ func canGetPointer(v value) bool {
 	return v.ast.Token.Id == lexer.Name
 }
 
-func (p *Parser) computeNewHeapAllocation(
-	tokens []lexer.Token,
-	builder *expressionModelBuilder,
-) (v value) {
+func (p *Parser) computeHeapAlloc(tokens []lexer.Token, builder *exprBuilder) (v value) {
 	if len(tokens) == 1 {
 		p.PushErrorToken(tokens[0], "invalid_syntax_keyword_new")
 		return
 	}
+	v.lvalue = true
 	v.ast.Token = tokens[0]
 	tokens = tokens[1:]
-	astb := new(ast.AST)
+	astb := new(ast.Builder)
 	index := new(int)
-	dt, ok := astb.BuildDataType(tokens, index, true)
-	builder.appendNode(newHeapAllocationExpModel{dt})
+	dt, ok := astb.DataType(tokens, index, true)
+	builder.appendNode(newHeapAllocationExprModel{dt})
 	dt.Value = "*" + dt.Value
 	v.ast.Type = dt
 	if !ok {
@@ -968,30 +1002,33 @@ func (p *Parser) computeNewHeapAllocation(
 	return
 }
 
-func (p *Parser) processValPart(tokens []lexer.Token, builder *expressionModelBuilder) (v value) {
+func (p *Parser) computeValPart(tokens []lexer.Token, builder *exprBuilder) (v value) {
 	if len(tokens) == 1 {
-		value, ok := p.processSingleValPart(tokens[0], builder)
+		val, ok := p.computeVal(tokens[0], builder)
 		if ok {
-			v = value
+			v = val
 			return
 		}
 	}
-	firstTok := tokens[0]
-	switch firstTok.Id {
+	token := tokens[0]
+	switch token.Id {
 	case lexer.Operator:
-		return p.processSingleOperatorPart(tokens, builder)
+		return p.computeOperatorPart(tokens, builder)
 	case lexer.New:
-		return p.computeNewHeapAllocation(tokens, builder)
+		return p.computeHeapAlloc(tokens, builder)
 	}
-	switch token := tokens[len(tokens)-1]; token.Id {
+	token = tokens[len(tokens)-1]
+	switch token.Id {
+	case lexer.Operator:
+		return p.computeOperatorPartRight(tokens, builder)
 	case lexer.Brace:
 		switch token.Kind {
 		case ")":
-			return p.processParenthesesValPart(tokens, builder)
+			return p.computeParenthesesRange(tokens, builder)
 		case "}":
-			return p.processBraceValPart(tokens, builder)
+			return p.computeBraceRange(tokens, builder)
 		case "]":
-			return p.processBracketValPart(tokens, builder)
+			return p.computeBracketRange(tokens, builder)
 		}
 	default:
 		p.PushErrorToken(tokens[0], "invalid_syntax")
@@ -999,10 +1036,34 @@ func (p *Parser) processValPart(tokens []lexer.Token, builder *expressionModelBu
 	return
 }
 
-func (p *Parser) processParenthesesValPart(
+func (p *Parser) computeOperatorPartRight(tokens []lexer.Token, b *exprBuilder) (v value) {
+	token := tokens[len(tokens)-1]
+	switch token.Kind {
+	case "...":
+		tokens = tokens[:len(tokens)-1]
+		return p.computeVariadicExprPart(tokens, b, token)
+	default:
+		p.PushErrorToken(token, "invalid_syntax")
+	}
+	return
+}
+
+func (p *Parser) computeVariadicExprPart(
 	tokens []lexer.Token,
-	builder *expressionModelBuilder,
+	b *exprBuilder,
+	errTok lexer.Token,
 ) (v value) {
+	v = p.computeValPart(tokens, b)
+	if !typeIsVariadicable(v.ast.Type) {
+		p.PushErrorToken(errTok, "variadic_with_nonvariadicable")
+		return
+	}
+	v.ast.Type.Value = v.ast.Type.Value[2:]
+	v.variadic = true
+	return
+}
+
+func (p *Parser) computeParenthesesRange(tokens []lexer.Token, b *exprBuilder) (v value) {
 	var valueTokens []lexer.Token
 	j := len(tokens) - 1
 	braceCount := 0
@@ -1024,8 +1085,9 @@ func (p *Parser) processParenthesesValPart(
 		break
 	}
 	if len(valueTokens) == 0 && braceCount == 0 {
-		builder.appendNode(tokenExpNode{lexer.Token{Kind: "("}})
-		defer builder.appendNode(tokenExpNode{lexer.Token{Kind: ")"}})
+
+		b.appendNode(tokenExprNode{lexer.Token{Kind: "("}})
+		defer b.appendNode(tokenExprNode{lexer.Token{Kind: ")"}})
 
 		tk := tokens[0]
 		tokens = tokens[1 : len(tokens)-1]
@@ -1034,29 +1096,26 @@ func (p *Parser) processParenthesesValPart(
 		}
 		value, model := p.computeTokens(tokens)
 		v = value
-		builder.appendNode(model)
+		b.appendNode(model)
 		return
 	}
-	v = p.processValPart(valueTokens, builder)
-
-	builder.appendNode(tokenExpNode{lexer.Token{Kind: "("}})
-	defer builder.appendNode(tokenExpNode{lexer.Token{Kind: ")"}})
+	v = p.computeValPart(valueTokens, b)
+	b.appendNode(tokenExprNode{lexer.Token{Kind: "("}})
+	defer b.appendNode(tokenExprNode{lexer.Token{Kind: ")"}})
 
 	switch v.ast.Type.Code {
 	case jn.Function:
 		fun := v.ast.Type.Tag.(ast.FunctionAST)
-		p.parseFunctionCallStatement(fun, tokens[len(valueTokens):], builder)
+		p.parseFunctionCall(fun, tokens[len(valueTokens):], b)
 		v.ast.Type = fun.ReturnType
+		v.lvalue = typeIsLvalue(v.ast.Type)
 	default:
 		p.PushErrorToken(tokens[len(valueTokens)], "invalid_syntax")
 	}
 	return
 }
 
-func (p *Parser) processBraceValPart(
-	tokens []lexer.Token,
-	builder *expressionModelBuilder,
-) (v value) {
+func (p *Parser) computeBraceRange(tokens []lexer.Token, b *exprBuilder) (v value) {
 	var valueTokens []lexer.Token
 	j := len(tokens) - 1
 	braceCount := 0
@@ -1086,20 +1145,20 @@ func (p *Parser) processBraceValPart(
 	case lexer.Brace:
 		switch valueTokens[0].Kind {
 		case "[":
-			ast := ast.New(nil)
-			dt, ok := ast.BuildDataType(valueTokens, new(int), true)
+			ast := ast.NewBuilder(nil)
+			dt, ok := ast.DataType(valueTokens, new(int), true)
 			if !ok {
 				p.AppendErrors(ast.Errors...)
 				return
 			}
 			valueTokens = tokens[len(valueTokens):]
-			var model expressionNode
+			var model IExprNode
 			v, model = p.buildArray(p.buildEnumerableParts(valueTokens), dt, valueTokens[0])
-			builder.appendNode(model)
+			b.appendNode(model)
 			return
 		case "(":
-			astBuilder := ast.New(tokens)
-			funAST := astBuilder.BuildFunction(true)
+			astBuilder := ast.NewBuilder(tokens)
+			funAST := astBuilder.Function(astBuilder.Tokens, true)
 			if len(astBuilder.Errors) > 0 {
 				p.AppendErrors(astBuilder.Errors...)
 				return
@@ -1108,7 +1167,7 @@ func (p *Parser) processBraceValPart(
 			v.ast.Type.Tag = funAST
 			v.ast.Type.Code = jn.Function
 			v.ast.Type.Value = funAST.DataTypeString()
-			builder.appendNode(anonymousFunctionExp{funAST})
+			b.appendNode(anonymousFunctionExpr{funAST})
 			return
 		default:
 			p.PushErrorToken(valueTokens[0], "invalid_syntax")
@@ -1119,10 +1178,7 @@ func (p *Parser) processBraceValPart(
 	return
 }
 
-func (p *Parser) processBracketValPart(
-	tokens []lexer.Token,
-	builder *expressionModelBuilder,
-) (v value) {
+func (p *Parser) computeBracketRange(tokens []lexer.Token, b *exprBuilder) (v value) {
 	var valueTokens []lexer.Token
 	j := len(tokens) - 1
 	braceCount := 0
@@ -1148,29 +1204,30 @@ func (p *Parser) processBracketValPart(
 		p.PushErrorToken(tokens[0], "invalid_syntax")
 		return
 	}
-	var model expressionNode
+	var model IExprNode
 	v, model = p.computeTokens(valueTokens)
-	builder.appendNode(model)
+	b.appendNode(model)
 	tokens = tokens[len(valueTokens)+1 : len(tokens)-1]
-	builder.appendNode(tokenExpNode{lexer.Token{Kind: "["}})
+	b.appendNode(tokenExprNode{lexer.Token{Kind: "["}})
 	selectv, model := p.computeTokens(tokens)
-	builder.appendNode(model)
-	builder.appendNode(tokenExpNode{lexer.Token{Kind: "]"}})
-	return p.processEnumerableSelect(v, selectv, tokens[0])
+	b.appendNode(model)
+	b.appendNode(tokenExprNode{lexer.Token{Kind: "]"}})
+	return p.computeEnumerableSelect(v, selectv, tokens[0])
 }
 
-func (p *Parser) processEnumerableSelect(enumv, selectv value, err lexer.Token) (v value) {
+func (p *Parser) computeEnumerableSelect(enumv, selectv value, err lexer.Token) (v value) {
 	switch {
 	case typeIsArray(enumv.ast.Type):
-		return p.processArraySelect(enumv, selectv, err)
+		return p.computeArraySelect(enumv, selectv, err)
 	case typeIsSingle(enumv.ast.Type):
-		return p.processStringSelect(enumv, selectv, err)
+		return p.computeStringSelect(enumv, selectv, err)
 	}
 	p.PushErrorToken(err, "not_enumerable")
 	return
 }
 
-func (p *Parser) processArraySelect(arrv, selectv value, err lexer.Token) value {
+func (p *Parser) computeArraySelect(arrv, selectv value, err lexer.Token) value {
+	arrv.lvalue = true
 	arrv.ast.Type = typeOfArrayElements(arrv.ast.Type)
 	if !typeIsSingle(selectv.ast.Type) || !jn.IsIntegerType(selectv.ast.Type.Code) {
 		p.PushErrorToken(err, "notint_array_select")
@@ -1178,7 +1235,8 @@ func (p *Parser) processArraySelect(arrv, selectv value, err lexer.Token) value 
 	return arrv
 }
 
-func (p *Parser) processStringSelect(strv, selectv value, err lexer.Token) value {
+func (p *Parser) computeStringSelect(strv, selectv value, err lexer.Token) value {
+	strv.lvalue = true
 	strv.ast.Type.Code = jn.Rune
 	if !typeIsSingle(selectv.ast.Type) || !jn.IsIntegerType(selectv.ast.Type.Code) {
 		p.PushErrorToken(err, "notint_string_select")
@@ -1186,15 +1244,11 @@ func (p *Parser) processStringSelect(strv, selectv value, err lexer.Token) value
 	return strv
 }
 
-type enumPart struct {
-	tokens []lexer.Token
-}
-
-func (p *Parser) buildEnumerableParts(tokens []lexer.Token) []enumPart {
+func (p *Parser) buildEnumerableParts(tokens []lexer.Token) [][]lexer.Token {
 	tokens = tokens[1 : len(tokens)-1]
 	braceCount := 0
-	lastcComma := -1
-	var parts []enumPart
+	lastComma := -1
+	var parts [][]lexer.Token
 	for index, token := range tokens {
 		if token.Id == lexer.Brace {
 			switch token.Kind {
@@ -1208,34 +1262,35 @@ func (p *Parser) buildEnumerableParts(tokens []lexer.Token) []enumPart {
 			continue
 		}
 		if token.Id == lexer.Comma {
-			if index-lastcComma-1 == 0 {
+			if index-lastComma-1 == 0 {
 				p.PushErrorToken(token, "missing_expression")
-				lastcComma = index
+				lastComma = index
 				continue
 			}
-			parts = append(parts, enumPart{tokens[lastcComma+1 : index]})
-			lastcComma = index
+			parts = append(parts, tokens[lastComma+1:index])
+			lastComma = index
 		}
 	}
-	if lastcComma+1 < len(tokens) {
-		parts = append(parts, enumPart{tokens[lastcComma+1:]})
+	if lastComma+1 < len(tokens) {
+		parts = append(parts, tokens[lastComma+1:])
 	}
 	return parts
 }
 
 func (p *Parser) buildArray(
-	parts []enumPart,
+	parts [][]lexer.Token,
 	dt ast.DataTypeAST,
 	err lexer.Token,
-) (value, expressionNode) {
+) (value, IExprNode) {
 	var v value
 	v.ast.Type = dt
-	model := arrayExp{dataType: dt}
+	model := arrayExpr{dataType: dt}
 	elementType := typeOfArrayElements(dt)
 	for _, part := range parts {
-		partValue, expModel := p.computeTokens(part.tokens)
-		model.expressions = append(model.expressions, expModel)
-		p.checkType(elementType, partValue.ast.Type, false, part.tokens[0])
+		partValue, expModel := p.computeTokens(part)
+		model.expr = append(model.expr, expModel)
+		p.wg.Add(1)
+		go p.checkAssignTypeAsync(elementType, partValue, false, part[0])
 	}
 	return v, model
 }
@@ -1244,63 +1299,112 @@ func (p *Parser) checkAnonymousFunction(fun *ast.FunctionAST) {
 	globalVariables := p.GlobalVariables
 	blockVariables := p.BlockVariables
 	p.GlobalVariables = append(blockVariables, p.GlobalVariables...)
-	p.BlockVariables = variablesFromParameters(fun.Params)
+	p.BlockVariables = p.variablesFromParameters(fun.Params)
 	p.checkFunction(fun)
 	p.GlobalVariables = globalVariables
 	p.BlockVariables = blockVariables
 }
 
-func (p *Parser) parseFunctionCallStatement(
+func (p *Parser) parseFunctionCall(
 	fun ast.FunctionAST,
 	tokens []lexer.Token,
-	builder *expressionModelBuilder,
+	builder *exprBuilder,
 ) {
 	errToken := tokens[0]
-	tokens, _ = p.getRangeTokens("(", ")", tokens)
+	tokens, _ = p.getRange("(", ")", tokens)
 	if tokens == nil {
 		tokens = make([]lexer.Token, 0)
 	}
-	ast := new(ast.AST)
-	args := ast.BuildArgs(tokens)
+	ast := new(ast.Builder)
+	args := ast.Args(tokens)
 	if len(ast.Errors) > 0 {
 		p.AppendErrors(ast.Errors...)
 	}
-	p.parseArgs(fun, args, errToken, builder)
+	p.parseArgs(fun.Params, &args, errToken, builder)
 	if builder != nil {
-		builder.appendNode(argsExp{args})
+		builder.appendNode(argsExpr{args})
 	}
 }
 
 func (p *Parser) parseArgs(
-	fun ast.FunctionAST,
-	args []ast.ArgAST,
-	errToken lexer.Token,
-	builder *expressionModelBuilder,
+	params []ast.ParameterAST,
+	args *[]ast.ArgAST,
+	errTok lexer.Token,
+	b *exprBuilder,
 ) {
-	if len(args) < len(fun.Params) {
-		p.PushErrorToken(errToken, "missing_argument")
+	parsedArgs := make([]ast.ArgAST, 0)
+	if len(params) > 0 && params[len(params)-1].Variadic {
+		if len(*args) == 0 && len(params) == 1 {
+			return
+		} else if len(*args) < len(params)-1 {
+			p.PushErrorToken(errTok, "missing_argument")
+			goto argParse
+		} else if len(*args) <= len(params)-1 {
+			goto argParse
+		}
+		variadicArgs := (*args)[len(params)-1:]
+		variadicParam := params[len(params)-1]
+		*args = (*args)[:len(params)-1]
+		params = params[:len(params)-1]
+		defer func() {
+			model := arrayExpr{variadicParam.Type, nil}
+			model.dataType.Value = "[]" + model.dataType.Value
+			variadiced := false
+			for _, arg := range variadicArgs {
+				p.parseArg(variadicParam, &arg, &variadiced)
+				model.expr = append(model.expr, arg.Expr.Model.(exprModel))
+			}
+			if variadiced && len(variadicArgs) > 1 {
+				p.PushErrorToken(errTok, "more_args_with_varidiced")
+			}
+			arg := ast.ArgAST{Expr: ast.ExprAST{Model: model}}
+			parsedArgs = append(parsedArgs, arg)
+			*args = parsedArgs
+		}()
 	}
-	for index, arg := range args {
-		p.parseArg(fun, index, &arg)
-		args[index] = arg
-	}
-}
-
-func (p *Parser) parseArg(fun ast.FunctionAST, index int, arg *ast.ArgAST) {
-	if index >= len(fun.Params) {
-		p.PushErrorToken(arg.Token, "argument_overflow")
+	if len(*args) == 0 && len(params) == 0 {
+		return
+	} else if len(*args) < len(params) {
+		p.PushErrorToken(errTok, "missing_argument")
+	} else if len(*args) > len(params) {
+		p.PushErrorToken(errTok, "argument_overflow")
 		return
 	}
-	value, model := p.computeExpression(arg.Expression)
-	arg.Expression.Model = model
-	param := fun.Params[index]
-	p.checkType(param.Type, value.ast.Type, false, arg.Token)
+argParse:
+	for index, arg := range *args {
+		p.parseArg(params[index], &arg, nil)
+		parsedArgs = append(parsedArgs, arg)
+	}
+	*args = parsedArgs
 }
 
-func (p *Parser) getRangeTokens(
-	open, close string,
-	tokens []lexer.Token,
-) (_ []lexer.Token, ok bool) {
+func (p *Parser) parseArg(param ast.ParameterAST, arg *ast.ArgAST, variadiced *bool) {
+	value, model := p.computeExpr(arg.Expr)
+	arg.Expr.Model = model
+	if variadiced != nil && !*variadiced {
+		*variadiced = value.variadic
+	}
+	p.wg.Add(1)
+	go p.checkArgTypeAsync(param, value, false, arg.Token)
+}
+
+func (p *Parser) checkArgTypeAsync(
+	param ast.ParameterAST,
+	val value,
+	ignoreAny bool,
+	errTok lexer.Token,
+) {
+	defer func() { p.wg.Done() }()
+	if param.Variadic {
+		p.wg.Add(1)
+		go p.checkAssignTypeAsync(param.Type, val, false, errTok)
+		return
+	}
+	p.wg.Add(1)
+	go p.checkAssignTypeAsync(param.Type, val, false, errTok)
+}
+
+func (p *Parser) getRange(open, close string, tokens []lexer.Token) (_ []lexer.Token, ok bool) {
 	braceCount := 0
 	start := 1
 	if tokens[0].Id != lexer.Brace {
@@ -1320,15 +1424,7 @@ func (p *Parser) getRangeTokens(
 		}
 		return tokens[start:index], true
 	}
-	p.PushErrorToken(tokens[0], "brace_not_closed")
 	return nil, false
-}
-
-func (p *Parser) checkFunctionSpecialCases(fun *function) {
-	switch fun.Ast.Name {
-	case "_" + jn.EntryPoint:
-		p.checkEntryPointSpecialCases(fun)
-	}
 }
 
 func (p *Parser) checkEntryPointSpecialCases(fun *function) {
@@ -1347,8 +1443,8 @@ func (p *Parser) checkBlock(b *ast.BlockAST) {
 	for index := 0; index < len(b.Statements); index++ {
 		model := &b.Statements[index]
 		switch t := model.Value.(type) {
-		case ast.BlockExpressionAST:
-			_, t.Expression.Model = p.computeExpression(t.Expression)
+		case ast.ExprStatementAST:
+			_, t.Expr.Model = p.computeExpr(t.Expr)
 			model.Value = t
 		case ast.VariableAST:
 			p.checkVariableStatement(&t, false)
@@ -1359,6 +1455,16 @@ func (p *Parser) checkBlock(b *ast.BlockAST) {
 		case ast.FreeAST:
 			p.checkFreeStatement(&t)
 			model.Value = t
+		case ast.IterAST:
+			p.checkIterExpr(&t)
+			model.Value = t
+		case ast.BreakAST:
+			p.checkBreakStatement(&t)
+		case ast.ContinueAST:
+			p.checkContinueStatement(&t)
+		case ast.IfAST:
+			p.checkIfExpr(&t, &index, b.Statements)
+			model.Value = t
 		case ast.ReturnAST:
 		default:
 			p.PushErrorToken(model.Token, "invalid_syntax")
@@ -1366,7 +1472,8 @@ func (p *Parser) checkBlock(b *ast.BlockAST) {
 	}
 }
 
-func (p *Parser) checkParameters(params []ast.ParameterAST) {
+func (p *Parser) checkParametersAsync(params []ast.ParameterAST) {
+	defer func() { p.wg.Done() }()
 	for _, param := range params {
 		if !param.Const {
 			continue
@@ -1380,8 +1487,8 @@ func (p *Parser) checkParameters(params []ast.ParameterAST) {
 type returnChecker struct {
 	p        *Parser
 	retAST   *ast.ReturnAST
-	fun      ast.FunctionAST
-	expModel multiReturnExpModel
+	fun      *ast.FunctionAST
+	expModel multiReturnExprModel
 	values   []value
 }
 
@@ -1390,7 +1497,7 @@ func (rc *returnChecker) pushValue(last, current int, errTk lexer.Token) {
 		rc.p.PushErrorToken(errTk, "missing_value")
 		return
 	}
-	tokens := rc.retAST.Expression.Tokens[last:current]
+	tokens := rc.retAST.Expr.Tokens[last:current]
 	value, model := rc.p.computeTokens(tokens)
 	rc.expModel.models = append(rc.expModel.models, model)
 	rc.values = append(rc.values, value)
@@ -1399,10 +1506,11 @@ func (rc *returnChecker) pushValue(last, current int, errTk lexer.Token) {
 func (rc *returnChecker) checkValues() {
 	braceCount := 0
 	last := 0
-	for index, token := range rc.retAST.Expression.Tokens {
+	for index, token := range rc.retAST.Expr.Tokens {
 		if token.Id == lexer.Brace {
 			switch token.Kind {
 			case "(", "{", "[":
+				braceCount++
 			default:
 				braceCount--
 			}
@@ -1413,30 +1521,33 @@ func (rc *returnChecker) checkValues() {
 		rc.pushValue(last, index, token)
 		last = index + 1
 	}
-	length := len(rc.retAST.Expression.Tokens)
+	length := len(rc.retAST.Expr.Tokens)
 	if last < length {
 		if last == 0 {
 			rc.pushValue(0, length, rc.retAST.Token)
 		} else {
-			rc.pushValue(last, length, rc.retAST.Expression.Tokens[last-1])
+			rc.pushValue(last, length, rc.retAST.Expr.Tokens[last-1])
 		}
 	}
 	if !typeIsVoidReturn(rc.fun.ReturnType) {
-		rc.checkValueTypes()
+		rc.p.wg.Add(1)
+		go rc.checkValueTypesAsync()
 	}
 }
 
-func (rc *returnChecker) checkValueTypes() {
+func (rc *returnChecker) checkValueTypesAsync() {
+	defer func() { rc.p.wg.Done() }()
 	valLength := len(rc.values)
 	if !rc.fun.ReturnType.MultiTyped {
-		rc.retAST.Expression.Model = rc.expModel.models[0]
+		rc.retAST.Expr.Model = rc.expModel.models[0]
 		if valLength > 1 {
 			rc.p.PushErrorToken(rc.retAST.Token, "overflow_return")
 		}
-		rc.p.checkType(rc.fun.ReturnType, rc.values[0].ast.Type, true, rc.retAST.Token)
+		rc.p.wg.Add(1)
+		go rc.p.checkAssignTypeAsync(rc.fun.ReturnType, rc.values[0], true, rc.retAST.Token)
 		return
 	}
-	rc.retAST.Expression.Model = rc.expModel
+	rc.retAST.Expr.Model = rc.expModel
 	types := rc.fun.ReturnType.Tag.([]ast.DataTypeAST)
 	if valLength == 1 {
 		rc.p.PushErrorToken(rc.retAST.Token, "missing_multi_return")
@@ -1447,12 +1558,13 @@ func (rc *returnChecker) checkValueTypes() {
 		if index >= valLength {
 			break
 		}
-		rc.p.checkType(t, rc.values[index].ast.Type, true, rc.retAST.Token)
+		rc.p.wg.Add(1)
+		go rc.p.checkAssignTypeAsync(t, rc.values[index], true, rc.retAST.Token)
 	}
 }
 
 func (rc *returnChecker) check() {
-	exprTokensLen := len(rc.retAST.Expression.Tokens)
+	exprTokensLen := len(rc.retAST.Expr.Tokens)
 	if exprTokensLen == 0 && !typeIsVoidReturn(rc.fun.ReturnType) {
 		rc.p.PushErrorToken(rc.retAST.Token, "require_return_value")
 		return
@@ -1463,7 +1575,7 @@ func (rc *returnChecker) check() {
 	rc.checkValues()
 }
 
-func (p *Parser) checkReturns(fun ast.FunctionAST) {
+func (p *Parser) checkReturns(fun *ast.FunctionAST) {
 	missed := true
 	for index, s := range fun.Block.Statements {
 		switch t := s.Value.(type) {
@@ -1481,120 +1593,129 @@ func (p *Parser) checkReturns(fun ast.FunctionAST) {
 
 func (p *Parser) checkFunction(fun *ast.FunctionAST) {
 	p.checkBlock(&fun.Block)
-	p.checkReturns(*fun)
-	p.checkParameters(fun.Params)
+	p.checkReturns(fun)
+	p.wg.Add(1)
+	go p.checkParametersAsync(fun.Params)
 }
 
 func (p *Parser) checkVariableStatement(varAST *ast.VariableAST, noParse bool) {
-	for _, t := range p.Types {
-		if varAST.Name == t.Name {
-			p.PushErrorToken(varAST.NameToken, "exist_name")
-			break
-		}
-	}
-	for _, variable := range p.BlockVariables {
-		if varAST.Name == variable.Name {
-			p.PushErrorToken(varAST.NameToken, "exist_name")
-			break
-		}
+	if p.existNamef(varAST.Name, true).Id != lexer.NA {
+		p.PushErrorToken(varAST.NameToken, "exist_name")
 	}
 	if !noParse {
-		*varAST = p.ParseVariable(*varAST)
+		*varAST = p.Variable(*varAST)
 	}
 	p.BlockVariables = append(p.BlockVariables, *varAST)
 }
 
 func (p *Parser) checkVarsetOperation(selected value, err lexer.Token) bool {
+	state := true
+	if !selected.lvalue {
+		p.PushErrorToken(err, "nonlvalue_update")
+		state = false
+	}
 	if selected.constant {
 		p.PushErrorToken(err, "const_value_update")
-		return false
+		state = false
 	}
 	switch selected.ast.Type.Tag.(type) {
 	case ast.FunctionAST:
 		if p.FunctionByName(selected.ast.Token.Kind) != nil {
 			p.PushErrorToken(err, "type_not_support_value_update")
-			return false
+			state = false
 		}
 	}
-	return true
+	return state
 }
 
 func (p *Parser) checkOneVarset(vsAST *ast.VariableSetAST) {
-	selected, _ := p.computeExpression(vsAST.SelectExpressions[0].Expression)
+	selected, _ := p.computeExpr(vsAST.SelectExprs[0].Expr)
 	if !p.checkVarsetOperation(selected, vsAST.Setter) {
 		return
 	}
-	value, model := p.computeExpression(vsAST.ValueExpressions[0])
-	vsAST.ValueExpressions[0] = model.ExpressionAST()
+	value, model := p.computeExpr(vsAST.ValueExprs[0])
+	vsAST.ValueExprs[0] = model.ExprAST()
 	if vsAST.Setter.Kind != "=" {
 		vsAST.Setter.Kind = vsAST.Setter.Kind[:len(vsAST.Setter.Kind)-1]
-		value.ast = arithmeticProcess{
+		solver := solver{
 			p:        p,
-			left:     vsAST.SelectExpressions[0].Expression.Tokens,
+			left:     vsAST.SelectExprs[0].Expr.Tokens,
 			leftVal:  selected.ast,
-			right:    vsAST.ValueExpressions[0].Tokens,
+			right:    vsAST.ValueExprs[0].Tokens,
 			rightVal: value.ast,
 			operator: vsAST.Setter,
-		}.solve()
+		}
+		value.ast = solver.Solve()
 		vsAST.Setter.Kind += "="
 	}
-	p.checkType(selected.ast.Type, value.ast.Type, false, vsAST.Setter)
+	p.wg.Add(1)
+	go p.checkAssignTypeAsync(selected.ast.Type, value, false, vsAST.Setter)
 }
 
 func (p *Parser) parseVarsetSelections(vsAST *ast.VariableSetAST) {
-	for index, selector := range vsAST.SelectExpressions {
+	for index, selector := range vsAST.SelectExprs {
 		p.checkVariableStatement(&selector.Variable, false)
-		vsAST.SelectExpressions[index] = selector
+		vsAST.SelectExprs[index] = selector
 	}
 }
 
-func (p *Parser) getVarsetTypes(vsAST *ast.VariableSetAST) []ast.DataTypeAST {
-	values := make([]ast.DataTypeAST, len(vsAST.ValueExpressions))
-	for index, expression := range vsAST.ValueExpressions {
-		val, model := p.computeExpression(expression)
-		vsAST.ValueExpressions[index].Model = model
-		values[index] = val.ast.Type
+func (p *Parser) getVarsetVals(vsAST *ast.VariableSetAST) []value {
+	values := make([]value, len(vsAST.ValueExprs))
+	for index, expr := range vsAST.ValueExprs {
+		val, model := p.computeExpr(expr)
+		vsAST.ValueExprs[index].Model = model
+		values[index] = val
 	}
 	return values
 }
 
 func (p *Parser) processFuncMultiVarset(vsAST *ast.VariableSetAST, funcVal value) {
 	types := funcVal.ast.Type.Tag.([]ast.DataTypeAST)
-	if len(types) != len(vsAST.SelectExpressions) {
+	if len(types) != len(vsAST.SelectExprs) {
 		p.PushErrorToken(vsAST.Setter, "missing_multiassign_identifiers")
 		return
 	}
-	p.processMultiVarset(vsAST, types)
+	values := make([]value, len(types))
+	for index, t := range types {
+		values[index] = value{
+			ast: ast.ValueAST{
+				Token: t.Token,
+				Type:  t,
+			},
+		}
+	}
+	p.processMultiVarset(vsAST, values)
 }
 
-func (p *Parser) processMultiVarset(vsAST *ast.VariableSetAST, types []ast.DataTypeAST) {
-	for index := range vsAST.SelectExpressions {
-		selector := &vsAST.SelectExpressions[index]
+func (p *Parser) processMultiVarset(vsAST *ast.VariableSetAST, vals []value) {
+	for index := range vsAST.SelectExprs {
+		selector := &vsAST.SelectExprs[index]
 		selector.Ignore = jn.IsIgnoreName(selector.Variable.Name)
-		dt := types[index]
+		val := vals[index]
 		if !selector.NewVariable {
 			if selector.Ignore {
 				continue
 			}
-			selected, _ := p.computeExpression(selector.Expression)
+			selected, _ := p.computeExpr(selector.Expr)
 			if !p.checkVarsetOperation(selected, vsAST.Setter) {
 				return
 			}
-			p.checkType(selected.ast.Type, dt, false, vsAST.Setter)
+			p.wg.Add(1)
+			go p.checkAssignTypeAsync(selected.ast.Type, val, false, vsAST.Setter)
 			continue
 		}
-		selector.Variable.Tag = dt
+		selector.Variable.Tag = val
 		p.checkVariableStatement(&selector.Variable, false)
 	}
 }
 
 func (p *Parser) checkVarsetStatement(vsAST *ast.VariableSetAST) {
-	selectLength := len(vsAST.SelectExpressions)
-	valueLength := len(vsAST.ValueExpressions)
+	selectLength := len(vsAST.SelectExprs)
+	valueLength := len(vsAST.ValueExprs)
 	if vsAST.JustDeclare {
 		p.parseVarsetSelections(vsAST)
 		return
-	} else if selectLength == 1 && !vsAST.SelectExpressions[0].NewVariable {
+	} else if selectLength == 1 && !vsAST.SelectExprs[0].NewVariable {
 		p.checkOneVarset(vsAST)
 		return
 	} else if vsAST.Setter.Kind != "=" {
@@ -1602,7 +1723,7 @@ func (p *Parser) checkVarsetStatement(vsAST *ast.VariableSetAST) {
 		return
 	}
 	if valueLength == 1 {
-		firstVal, _ := p.computeExpression(vsAST.ValueExpressions[0])
+		firstVal, _ := p.computeExpr(vsAST.ValueExprs[0])
 		if firstVal.ast.Type.MultiTyped {
 			vsAST.MultipleReturn = true
 			p.processFuncMultiVarset(vsAST, firstVal)
@@ -1617,13 +1738,316 @@ func (p *Parser) checkVarsetStatement(vsAST *ast.VariableSetAST) {
 		p.PushErrorToken(vsAST.Setter, "missing_multiassign_identifiers")
 		return
 	}
-	p.processMultiVarset(vsAST, p.getVarsetTypes(vsAST))
+	p.processMultiVarset(vsAST, p.getVarsetVals(vsAST))
 }
 
 func (p *Parser) checkFreeStatement(freeAST *ast.FreeAST) {
-	val, model := p.computeExpression(freeAST.Expression)
-	freeAST.Expression.Model = model
+	val, model := p.computeExpr(freeAST.Expr)
+	freeAST.Expr.Model = model
 	if !typeIsPointer(val.ast.Type) {
 		p.PushErrorToken(freeAST.Token, "free_nonpointer")
+	}
+}
+
+func (p *Parser) checkWhileProfile(iter *ast.IterAST) {
+	profile := iter.Profile.(ast.WhileProfile)
+	val, model := p.computeExpr(profile.Expr)
+	profile.Expr.Model = model
+	iter.Profile = profile
+	if !isConditionExpr(val) {
+		p.PushErrorToken(iter.Token, "iter_while_notbool_expr")
+	}
+	p.checkBlock(&iter.Block)
+}
+
+type foreachTypeChecker struct {
+	p       *Parser
+	profile *ast.ForeachProfile
+	value   value
+}
+
+func (frc *foreachTypeChecker) array() {
+	if !jn.IsIgnoreName(frc.profile.KeyA.Name) {
+		keyA := &frc.profile.KeyA
+		if keyA.Type.Code == jn.Void {
+			keyA.Type.Code = jn.Size
+			keyA.Type.Value = jn.CxxTypeNameFromType(keyA.Type.Code)
+		} else {
+			var ok bool
+			keyA.Type, ok = frc.p.readyType(keyA.Type)
+			if !ok {
+				frc.p.PushErrorToken(keyA.Type.Token, "invalid_type_source")
+			} else {
+				if !typeIsSingle(keyA.Type) || !jn.IsNumericType(keyA.Type.Code) {
+					frc.p.PushErrorToken(keyA.NameToken, "incompatible_datatype")
+				}
+			}
+		}
+	}
+	if !jn.IsIgnoreName(frc.profile.KeyB.Name) {
+		elementType := frc.profile.ExprType
+		elementType.Value = elementType.Value[2:]
+		keyB := &frc.profile.KeyB
+		if keyB.Type.Code == jn.Void {
+			keyB.Type = elementType
+		} else {
+			frc.p.wg.Add(1)
+			go frc.p.checkTypeAsync(elementType, frc.profile.KeyB.Type, true, frc.profile.InToken)
+		}
+	}
+}
+
+func (frc *foreachTypeChecker) string() {
+	if !jn.IsIgnoreName(frc.profile.KeyA.Name) {
+		keyA := &frc.profile.KeyA
+		if keyA.Type.Code == jn.Void {
+			keyA.Type.Code = jn.Size
+			keyA.Type.Value = jn.CxxTypeNameFromType(keyA.Type.Code)
+		} else {
+			var ok bool
+			keyA.Type, ok = frc.p.readyType(keyA.Type)
+			if !ok {
+				frc.p.PushErrorToken(keyA.Type.Token, "invalid_type_source")
+			} else {
+				if !typeIsSingle(keyA.Type) || !jn.IsNumericType(keyA.Type.Code) {
+					frc.p.PushErrorToken(keyA.NameToken, "incompatible_datatype")
+				}
+			}
+		}
+	}
+	if !jn.IsIgnoreName(frc.profile.KeyB.Name) {
+		runeType := ast.DataTypeAST{
+			Code:  jn.Rune,
+			Value: jn.CxxTypeNameFromType(jn.Rune),
+		}
+		keyB := &frc.profile.KeyB
+		if keyB.Type.Code == jn.Void {
+			keyB.Type = runeType
+		} else {
+			frc.p.wg.Add(1)
+			go frc.p.checkTypeAsync(runeType, frc.profile.KeyB.Type, true, frc.profile.InToken)
+		}
+	}
+}
+
+func (ftc *foreachTypeChecker) check() {
+	switch {
+	case typeIsArray(ftc.value.ast.Type):
+		ftc.array()
+	case ftc.value.ast.Type.Code == jn.Str:
+		ftc.string()
+	}
+}
+
+func (p *Parser) checkForeachProfile(iter *ast.IterAST) {
+	profile := iter.Profile.(ast.ForeachProfile)
+	val, model := p.computeExpr(profile.Expr)
+	profile.Expr.Model = model
+	profile.ExprType = val.ast.Type
+	if !isForeachIterExpr(val) {
+		p.PushErrorToken(iter.Token, "iter_foreach_nonenumerable_expr")
+	} else {
+		checker := foreachTypeChecker{p, &profile, val}
+		checker.check()
+	}
+	iter.Profile = profile
+	blockVariables := p.BlockVariables
+	if profile.KeyA.New {
+		if jn.IsIgnoreName(profile.KeyA.Name) {
+			p.PushErrorToken(profile.KeyA.NameToken, "ignore_name_identifier")
+		}
+		p.checkVariableStatement(&profile.KeyA, true)
+	}
+	if profile.KeyB.New {
+		if jn.IsIgnoreName(profile.KeyB.Name) {
+			p.PushErrorToken(profile.KeyB.NameToken, "ignore_name_identifier")
+		}
+		p.checkVariableStatement(&profile.KeyB, true)
+	}
+	p.checkBlock(&iter.Block)
+	p.BlockVariables = blockVariables
+}
+
+func (p *Parser) checkIterExpr(iter *ast.IterAST) {
+	p.loopCount++
+	if iter.Profile != nil {
+		switch iter.Profile.(type) {
+		case ast.WhileProfile:
+			p.checkWhileProfile(iter)
+		case ast.ForeachProfile:
+			p.checkForeachProfile(iter)
+		}
+	}
+	p.loopCount--
+}
+
+func (p *Parser) checkIfExpr(ifast *ast.IfAST, index *int, statements []ast.StatementAST) {
+	val, model := p.computeExpr(ifast.Expr)
+	ifast.Expr.Model = model
+	statement := statements[*index]
+	if !isConditionExpr(val) {
+		p.PushErrorToken(ifast.Token, "if_notbool_expr")
+	}
+	p.checkBlock(&ifast.Block)
+node:
+	if statement.WithTerminator {
+		return
+	}
+	*index++
+	if *index >= len(statements) {
+		*index--
+		return
+	}
+	statement = statements[*index]
+	switch t := statement.Value.(type) {
+	case ast.ElseIfAST:
+		val, model := p.computeExpr(t.Expr)
+		t.Expr.Model = model
+		if !isConditionExpr(val) {
+			p.PushErrorToken(t.Token, "if_notbool_expr")
+		}
+		p.checkBlock(&t.Block)
+		goto node
+	case ast.ElseAST:
+		p.checkElseBlock(&t)
+		statement.Value = t
+	default:
+		*index--
+	}
+}
+
+func (p *Parser) checkElseBlock(elseast *ast.ElseAST) {
+	p.checkBlock(&elseast.Block)
+}
+
+func (p *Parser) checkBreakStatement(breakAST *ast.BreakAST) {
+	if p.loopCount == 0 {
+		p.PushErrorToken(breakAST.Token, "break_at_outiter")
+	}
+}
+
+func (p *Parser) checkContinueStatement(continueAST *ast.ContinueAST) {
+	if p.loopCount == 0 {
+		p.PushErrorToken(continueAST.Token, "continue_at_outiter")
+	}
+}
+
+func (p *Parser) checkValidityForAutoType(t ast.DataTypeAST, err lexer.Token) {
+	switch t.Code {
+	case jn.Nil:
+		p.PushErrorToken(err, "nil_for_autotype")
+	case jn.Void:
+		p.PushErrorToken(err, "void_for_autotype")
+	}
+}
+
+func (p *Parser) defaultValueOfType(t ast.DataTypeAST) string {
+	if typeIsPointer(t) || typeIsArray(t) {
+		return "nil"
+	}
+	return jn.DefaultValueOfType(t.Code)
+}
+
+func (p *Parser) readyType(dt ast.DataTypeAST) (_ ast.DataTypeAST, ok bool) {
+	if dt.Value == "" {
+		return dt, true
+	}
+	switch dt.Code {
+	case jn.Name:
+		t := p.typeByName(dt.Token.Kind)
+		if t == nil {
+			return dt, false
+		}
+		t.Type.Value = dt.Value[:len(dt.Value)-len(dt.Token.Kind)] + t.Type.Value
+		return p.readyType(t.Type)
+	case jn.Function:
+		funAST := dt.Tag.(ast.FunctionAST)
+		for index, param := range funAST.Params {
+			funAST.Params[index].Type, _ = p.readyType(param.Type)
+		}
+		funAST.ReturnType, _ = p.readyType(funAST.ReturnType)
+		dt.Value = dt.Tag.(ast.FunctionAST).DataTypeString()
+	}
+	return dt, true
+}
+
+func (p *Parser) checkMultiTypeAsync(real, check ast.DataTypeAST, ignoreAny bool, errToken lexer.Token) {
+	defer func() { p.wg.Done() }()
+	if real.MultiTyped != check.MultiTyped {
+		p.PushErrorToken(errToken, "incompatible_datatype")
+		return
+	}
+	realTypes := real.Tag.([]ast.DataTypeAST)
+	checkTypes := real.Tag.([]ast.DataTypeAST)
+	if len(realTypes) != len(checkTypes) {
+		p.PushErrorToken(errToken, "incompatible_datatype")
+		return
+	}
+	for index := 0; index < len(realTypes); index++ {
+		realType := realTypes[index]
+		checkType := checkTypes[index]
+		p.checkTypeAsync(realType, checkType, ignoreAny, errToken)
+	}
+}
+
+func (p *Parser) checkAssignTypeAsync(t ast.DataTypeAST, val value, ignoreAny bool, errToken lexer.Token) {
+	defer func() { p.wg.Done() }()
+	if typeIsSingle(t) && isConstantNumeric(val.ast.Value) {
+		switch {
+		case jn.IsSignedIntegerType(t.Code):
+			if jnbits.CheckBitInt(val.ast.Value, jnbits.BitsizeOfType(t.Code)) {
+				return
+			}
+			p.PushErrorToken(errToken, "incompatible_datatype")
+			return
+		case jn.IsFloatType(t.Code):
+			if checkFloatBit(val.ast, jnbits.BitsizeOfType(t.Code)) {
+				return
+			}
+			p.PushErrorToken(errToken, "incompatible_datatype")
+			return
+		case jn.IsUnsignedNumericType(t.Code):
+			if jnbits.CheckBitUint(val.ast.Value, jnbits.BitsizeOfType(t.Code)) {
+				return
+			}
+			p.PushErrorToken(errToken, "incompatible_datatype")
+			return
+		}
+	}
+	p.wg.Add(1)
+	go p.checkTypeAsync(t, val.ast.Type, ignoreAny, errToken)
+}
+
+func (p *Parser) checkTypeAsync(real, check ast.DataTypeAST, ignoreAny bool, errToken lexer.Token) {
+	defer func() { p.wg.Done() }()
+	real, ok := p.readyType(real)
+	if !ok {
+		p.PushErrorToken(errToken, "incompatible_datatype")
+		return
+	}
+	check, ok = p.readyType(check)
+	if !ok {
+		p.PushErrorToken(errToken, "incompatible_datatype")
+		return
+	}
+	if !ignoreAny && real.Code == jn.Any {
+		return
+	}
+	if real.MultiTyped || check.MultiTyped {
+		p.wg.Add(1)
+		go p.checkMultiTypeAsync(real, check, ignoreAny, errToken)
+		return
+	}
+	if typeIsSingle(real) && typeIsSingle(check) {
+		if !typesAreCompatible(real, check, ignoreAny) {
+			p.PushErrorToken(errToken, "incompatible_datatype")
+		}
+		return
+	}
+	if (typeIsPointer(real) || typeIsArray(real)) && check.Code == jn.Nil {
+		return
+	}
+	if real.Value != check.Value {
+		p.PushErrorToken(errToken, "incompatible_datatype")
 	}
 }

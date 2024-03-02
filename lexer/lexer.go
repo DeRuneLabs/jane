@@ -4,16 +4,46 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/De-Rune/jane/package/io"
 	"github.com/De-Rune/jane/package/jn"
 )
+
+type Lexer struct {
+	wg sync.WaitGroup
+
+	File     *io.FILE
+	Position int
+	Column   int
+	Line     int
+	Errors   []string
+
+	braces []Token
+}
+
+func NewLexer(f *io.FILE) *Lexer {
+	lex := new(Lexer)
+	lex.File = f
+	lex.Line = 1
+	lex.Column = 1
+	lex.Position = 0
+	return lex
+}
 
 func (lex *Lexer) pushError(err string) {
 	lex.Errors = append(
 		lex.Errors,
 		fmt.Sprintf("%s %d:%d %s", lex.File.Path, lex.Line, lex.Column, jn.Errors[err]),
+	)
+}
+
+func (lex *Lexer) pushErrorToken(tok Token, err string) {
+	lex.Errors = append(
+		lex.Errors,
+		fmt.Sprintf("%s %d:%d %s", lex.File.Path, tok.Row, tok.Column, jn.Errors[err]),
 	)
 }
 
@@ -26,7 +56,24 @@ func (lex *Lexer) Tokenize() []Token {
 			tokens = append(tokens, token)
 		}
 	}
+	lex.wg.Add(1)
+	go lex.checkParenthesesAsync()
+	lex.wg.Wait()
 	return tokens
+}
+
+func (lex *Lexer) checkParenthesesAsync() {
+	defer func() { lex.wg.Done() }()
+	for _, token := range lex.braces {
+		switch token.Kind {
+		case "(":
+			lex.pushErrorToken(token, "wait_close_parentheses")
+		case "{":
+			lex.pushErrorToken(token, "wait_close_brace")
+		case "[":
+			lex.pushErrorToken(token, "wait_close_bracket")
+		}
+	}
 }
 
 func isKeyword(lexerline, kw string) bool {
@@ -34,11 +81,8 @@ func isKeyword(lexerline, kw string) bool {
 		return false
 	}
 	lexerline = lexerline[len(kw):]
-	switch {
-	case lexerline == "", unicode.IsSpace(rune(lexerline[0])), unicode.IsPunct(rune(lexerline[0])):
-		return true
-	}
-	return false
+	return lexerline == "" || unicode.IsSpace(rune(lexerline[0])) ||
+		unicode.IsPunct(rune(lexerline[0]))
 }
 
 func (lex *Lexer) lexName(lexerline string) string {
@@ -106,18 +150,18 @@ func (lex *Lexer) lexBlockComment() {
 	lex.pushError("missing_block_comment")
 }
 
-var numericRegexp = *regexp.MustCompile(`^((0x[[:xdigit:]]+)|(\d+((\.\d+)?((e|E)(\-|\+|)\d+)?|(\.\d+))))`)
+var numRegexp = *regexp.MustCompile(`^((0x[[:xdigit:]]+)|(\d+((\.\d+)?((e|E)(\-|\+|)\d+)?|(\.\d+))))`)
 
 func (lex *Lexer) lexNumeric(content string) string {
-	value := numericRegexp.FindString(content)
+	value := numRegexp.FindString(content)
 	lex.Position += len(value)
 	return value
 }
 
-var escapeSequenceRegexp = regexp.MustCompile(`^\\([\\'"abfnrtv]|U.{8}|u.{4}|x..|[0-7]{1,3})`)
+var escSeqRegexp = regexp.MustCompile(`^\\([\\'"abfnrtv]|U.{8}|u.{4}|x..|[0-7]{1,3})`)
 
 func (lex *Lexer) getEscapeSequence(content string) string {
-	seq := escapeSequenceRegexp.FindString(content)
+	seq := escSeqRegexp.FindString(content)
 	if seq != "" {
 		lex.Position += len(seq)
 		return seq
@@ -249,17 +293,36 @@ func (lex *Lexer) Token() Token {
 	case strings.HasPrefix(content, "/*"):
 		lex.lexBlockComment()
 		return token
+	case lex.lexPunct(content, "(", Brace, &token):
+		lex.braces = append(lex.braces, token)
+	case lex.lexPunct(content, ")", Brace, &token):
+		length := len(lex.braces)
+		if length == 0 {
+			lex.pushErrorToken(token, "extra_closed_parentheses")
+			break
+		} else if lex.braces[length-1].Kind != "(" {
+			lex.wg.Add(1)
+			go lex.pushWrongOrderCloseErrorrAsync(token)
+		}
+		lex.removeBrace(length-1, token.Kind)
+	case lex.lexPunct(content, "[", Brace, &token):
+		lex.braces = append(lex.braces, token)
+	case lex.lexPunct(content, "]", Brace, &token):
+		length := len(lex.braces)
+		if length == 0 {
+			lex.pushErrorToken(token, "extra_closed_brackets")
+			break
+		} else if lex.braces[length-1].Kind != "[" {
+			lex.wg.Add(1)
+			go lex.pushWrongOrderCloseErrorrAsync(token)
+		}
+		lex.removeBrace(length-1, token.Kind)
 	case
 		lex.lexPunct(content, ":", Colon, &token),
 		lex.lexPunct(content, ";", SemiColon, &token),
 		lex.lexPunct(content, ",", Comma, &token),
 		lex.lexPunct(content, "@", At, &token),
-		lex.lexPunct(content, "(", Brace, &token),
-		lex.lexPunct(content, ")", Brace, &token),
-		lex.lexPunct(content, "{", Brace, &token),
-		lex.lexPunct(content, "}", Brace, &token),
-		lex.lexPunct(content, "[", Brace, &token),
-		lex.lexPunct(content, "]", Brace, &token),
+		lex.lexPunct(content, "...", Operator, &token),
 		lex.lexPunct(content, "+=", Operator, &token),
 		lex.lexPunct(content, "-=", Operator, &token),
 		lex.lexPunct(content, "*=", Operator, &token),
@@ -301,6 +364,7 @@ func (lex *Lexer) Token() Token {
 		lex.lexKeyword(content, "u64", DataType, &token),
 		lex.lexKeyword(content, "f32", DataType, &token),
 		lex.lexKeyword(content, "f64", DataType, &token),
+		lex.lexKeyword(content, "size", DataType, &token),
 		lex.lexKeyword(content, "bool", DataType, &token),
 		lex.lexKeyword(content, "rune", DataType, &token),
 		lex.lexKeyword(content, "str", DataType, &token),
@@ -311,7 +375,13 @@ func (lex *Lexer) Token() Token {
 		lex.lexKeyword(content, "ret", Return, &token),
 		lex.lexKeyword(content, "type", Type, &token),
 		lex.lexKeyword(content, "new", New, &token),
-		lex.lexKeyword(content, "free", Free, &token):
+		lex.lexKeyword(content, "free", Free, &token),
+		lex.lexKeyword(content, "iter", Iter, &token),
+		lex.lexKeyword(content, "break", Break, &token),
+		lex.lexKeyword(content, "continue", Continue, &token),
+		lex.lexKeyword(content, "in", In, &token),
+		lex.lexKeyword(content, "if", If, &token),
+		lex.lexKeyword(content, "else", Else, &token):
 	default:
 		l := lex.lexName(content)
 		if l != "" {
@@ -332,4 +402,38 @@ func (lex *Lexer) Token() Token {
 	}
 	lex.Column += len(token.Kind)
 	return token
+}
+
+func (lex *Lexer) removeBrace(index int, kind string) {
+	var close string
+	switch kind {
+	case ")":
+		close = "("
+	case "}":
+		close = "{"
+	case "]":
+		close = "["
+	}
+	for ; index >= 0; index-- {
+		token := lex.braces[index]
+		if token.Kind != close {
+			continue
+		}
+		lex.braces = append(lex.braces[:index], lex.braces[index+1:]...)
+		break
+	}
+}
+
+func (lex *Lexer) pushWrongOrderCloseErrorrAsync(token Token) {
+	defer func() { lex.wg.Done() }()
+	var message string
+	switch lex.braces[len(lex.braces)-1].Kind {
+	case "(":
+		message = "expected_parentheses_close"
+	case "{":
+		message = "expected_brace_close"
+	case "[":
+		message = "expected_bracket_close"
+	}
+	lex.pushErrorToken(token, message)
 }

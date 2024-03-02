@@ -1,5 +1,5 @@
 // print specified value to command line
-disp(v any)
+print(v any)
 
 // disp prints specified avalue to comamnd line with new line
-displn(v any)
+println(v any)

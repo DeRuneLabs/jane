@@ -1,48 +1,50 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/De-Rune/jane/ast"
 	"github.com/De-Rune/jane/lexer"
-	"strings"
 )
 
-type expressionBuildNode struct {
+type IExprNode interface {
+	String() string
+}
+
+type exprBuildNode struct {
 	index int
-	node  expressionModel
+	node  exprModel
 }
 
-type expressionModelBuilder struct {
+type exprBuilder struct {
 	index   int
-	current expressionModel
-	nodes   []expressionBuildNode
+	current exprModel
+	nodes   []exprBuildNode
 }
 
-func newExpBuilder() *expressionModelBuilder {
-	builder := new(expressionModelBuilder)
+func newExprBuilder() *exprBuilder {
+	builder := new(exprBuilder)
 	builder.index = -1
 	return builder
 }
 
-func (b *expressionModelBuilder) setIndex(index int) {
+func (b *exprBuilder) setIndex(index int) {
 	if b.index != -1 {
-		b.appendBuildNode(expressionBuildNode{
-			index: b.index,
-			node:  b.current,
-		})
+		b.appendBuildNode(exprBuildNode{b.index, b.current})
 	}
 	b.index = index
-	b.current = expressionModel{}
+	b.current = exprModel{}
 }
 
-func (b *expressionModelBuilder) appendBuildNode(node expressionBuildNode) {
+func (b *exprBuilder) appendBuildNode(node exprBuildNode) {
 	b.nodes = append(b.nodes, node)
 }
 
-func (b *expressionModelBuilder) appendNode(node expressionNode) {
+func (b *exprBuilder) appendNode(node IExprNode) {
 	b.current.nodes = append(b.current.nodes, node)
 }
 
-func (b *expressionModelBuilder) build() (e expressionModel) {
+func (b *exprBuilder) build() (e exprModel) {
 	b.setIndex(-1)
 	for index := range b.nodes {
 		for _, buildNode := range b.nodes {
@@ -55,15 +57,11 @@ func (b *expressionModelBuilder) build() (e expressionModel) {
 	return
 }
 
-type expressionNode interface {
-	String() string
+type exprModel struct {
+	nodes []IExprNode
 }
 
-type expressionModel struct {
-	nodes []expressionNode
-}
-
-func (model expressionModel) String() string {
+func (model exprModel) String() string {
 	var sb strings.Builder
 	for _, node := range model.nodes {
 		sb.WriteString(node.String())
@@ -71,72 +69,73 @@ func (model expressionModel) String() string {
 	return sb.String()
 }
 
-func (model expressionModel) ExpressionAST() ast.ExpressionAST {
-	return ast.ExpressionAST{Model: model}
+func (model exprModel) ExprAST() ast.ExprAST {
+	return ast.ExprAST{Model: model}
 }
 
-type tokenExpNode struct {
+type tokenExprNode struct {
 	token lexer.Token
 }
 
-func (node tokenExpNode) String() string {
+func (node tokenExprNode) String() string {
 	return node.token.Kind
 }
 
-type runeExpNode struct {
+type runeExprNode struct {
 	token lexer.Token
 }
 
-func (run runeExpNode) String() string {
+func (run runeExprNode) String() string {
 	return "L" + run.token.Kind
 }
 
-type strExpNode struct {
+type strExprNode struct {
 	token lexer.Token
 }
 
-func (str strExpNode) String() string {
+func (str strExprNode) String() string {
 	return "str(L" + str.token.Kind + ")"
 }
 
-type anonymousFunctionExp struct {
+type anonymousFunctionExpr struct {
 	ast ast.FunctionAST
 }
 
-func (af anonymousFunctionExp) String() string {
+func (af anonymousFunctionExpr) String() string {
 	var cxx strings.Builder
-	cxx.WriteString("[&]")
+	cxx.WriteString("[=]")
 	cxx.WriteString(paramsToCxx(af.ast.Params))
-	ast.Indent++
-	cxx.WriteString(ast.ParseBlock(af.ast.Block, ast.Indent))
-	ast.Indent--
+	cxx.WriteString(" mutable -> ")
+	cxx.WriteString(af.ast.ReturnType.String())
+	cxx.WriteByte(' ')
+	cxx.WriteString(af.ast.Block.String())
 	return cxx.String()
 }
 
-type arrayExp struct {
-	dataType    ast.DataTypeAST
-	expressions []expressionModel
+type arrayExpr struct {
+	dataType ast.DataTypeAST
+	expr     []exprModel
 }
 
-func (a arrayExp) String() string {
+func (a arrayExpr) String() string {
 	var cxx strings.Builder
 	cxx.WriteString(a.dataType.String())
-	cxx.WriteString("({")
-	if len(a.expressions) == 0 {
-		return cxx.String() + "})"
+	cxx.WriteString("{{")
+	if len(a.expr) == 0 {
+		return cxx.String() + "}}"
 	}
-	for _, exp := range a.expressions {
+	for _, exp := range a.expr {
 		cxx.WriteString(exp.String())
 		cxx.WriteString(", ")
 	}
-	return cxx.String()[:cxx.Len()-2] + "})"
+	return cxx.String()[:cxx.Len()-2] + "}}"
 }
 
-type argsExp struct {
+type argsExpr struct {
 	args []ast.ArgAST
 }
 
-func (a argsExp) String() string {
+func (a argsExpr) String() string {
 	if a.args == nil {
 		return ""
 	}
@@ -148,11 +147,11 @@ func (a argsExp) String() string {
 	return cxx.String()[:cxx.Len()-1]
 }
 
-type multiReturnExpModel struct {
-	models []expressionModel
+type multiReturnExprModel struct {
+	models []exprModel
 }
 
-func (mre multiReturnExpModel) String() string {
+func (mre multiReturnExprModel) String() string {
 	var cxx strings.Builder
 	cxx.WriteString("std::make_tuple(")
 	for _, model := range mre.models {
@@ -162,10 +161,10 @@ func (mre multiReturnExpModel) String() string {
 	return cxx.String()[:cxx.Len()-1] + ")"
 }
 
-type newHeapAllocationExpModel struct {
+type newHeapAllocationExprModel struct {
 	typeAST ast.DataTypeAST
 }
 
-func (nha newHeapAllocationExpModel) String() string {
+func (nha newHeapAllocationExprModel) String() string {
 	return "new(std::nothrow) " + nha.typeAST.String()
 }

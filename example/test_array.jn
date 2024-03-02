@@ -4,10 +4,10 @@ array_testing() {
     []str{"arul", "saut"},
     []str{"pace", "ibal"},
   };
-  displn((*derune_new)[0])
+  println((*derune_new)[0])
 }
 
 main() {
-  displn("testing array")
+  println("testing array")
   array_testing();
 }
