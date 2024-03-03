@@ -51,6 +51,9 @@ func (p Parser) String() string {
 }
 
 func (p *Parser) CxxTypes() string {
+	if len(p.Types) == 0 {
+		return ""
+	}
 	var cxx strings.Builder
 	cxx.WriteString("#pragma region TYPES\n")
 	for _, t := range p.Types {
@@ -62,6 +65,9 @@ func (p *Parser) CxxTypes() string {
 }
 
 func (p *Parser) CxxPrototypes() string {
+	if len(p.Functions) == 0 {
+		return ""
+	}
 	var cxx strings.Builder
 	cxx.WriteString("#pragma region PROTOTYPES\n")
 	for _, fun := range p.Functions {
@@ -73,6 +79,9 @@ func (p *Parser) CxxPrototypes() string {
 }
 
 func (p *Parser) CxxGlobalVariables() string {
+	if len(p.GlobalVariables) == 0 {
+		return ""
+	}
 	var cxx strings.Builder
 	cxx.WriteString("#pragma region GLOBAL_VARIABLES\n")
 	for _, va := range p.GlobalVariables {
@@ -228,7 +237,7 @@ func (p *Parser) Variable(varAST ast.VariableAST) ast.VariableAST {
 			p.checkValidityForAutoType(varAST.Type, varAST.SetterToken)
 		}
 	}
-	if varAST.DefineToken.Kind == "const" {
+	if varAST.Const {
 		if varAST.SetterToken.Id == lexer.NA {
 			p.PushErrorToken(varAST.NameToken, "missing_const_value")
 		} else if !checkValidityConstantDataType(varAST.Type) {
@@ -256,9 +265,8 @@ func (p *Parser) variablesFromParameters(params []ast.ParameterAST) []ast.Variab
 		variable.Name = param.Name
 		variable.NameToken = param.Token
 		variable.Type = param.Type
-		if param.Const {
-			variable.DefineToken.Id = lexer.Const
-		}
+		variable.Const = param.Const
+		variable.Volatile = param.Volatile
 		if param.Variadic {
 			if length-index > 1 {
 				p.PushErrorToken(param.Token, "variadic_parameter_notlast")
@@ -347,8 +355,7 @@ func (p *Parser) checkAsync() {
 	}
 	p.wg.Add(1)
 	go p.checkTypesAsync()
-	p.wg.Add(1)
-	go p.WaitingGlobalVariablesAsync()
+	p.WaitingGlobalVariables()
 	p.waitingGlobalVariables = nil
 	p.wg.Add(1)
 	go p.checkFunctionsAsync()
@@ -364,8 +371,7 @@ func (p *Parser) checkTypesAsync() {
 	}
 }
 
-func (p *Parser) WaitingGlobalVariablesAsync() {
-	defer func() { p.wg.Done() }()
+func (p *Parser) WaitingGlobalVariables() {
 	for _, varAST := range p.waitingGlobalVariables {
 		variable := p.Variable(varAST)
 		p.GlobalVariables = append(p.GlobalVariables, variable)
@@ -393,6 +399,7 @@ func (p *Parser) checkFunctionSpecialCasesAsync(fun *function) {
 type value struct {
 	ast      ast.ValueAST
 	constant bool
+	volatile bool
 	lvalue   bool
 	variadic bool
 }
@@ -599,8 +606,8 @@ func (p *valueProcessor) name() (v value, ok bool) {
 	if variable := p.parser.variableByName(p.token.Kind); variable != nil {
 		v.ast.Value = p.token.Kind
 		v.ast.Type = variable.Type
-		v.constant = variable.DefineToken.Id == lexer.Const
-		v.ast.Token = variable.NameToken
+		v.constant = variable.Const
+		v.volatile = variable.Volatile
 		v.lvalue = true
 		p.builder.appendNode(exprNode{p.token.Kind})
 		ok = true

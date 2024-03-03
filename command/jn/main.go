@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,11 +56,12 @@ func initProject(cmd string) {
 		println("this module can only by used as a single")
 		return
 	}
-	err := io.WriteFileTruncate(jn.SettingsFile, []byte(`{
+	content := []byte(`{
 		"cxx_out_dir": "./dist/",
 		"cxx_out_name": "jn.cxx",
 		"out_name": "main"
-	  }`))
+	  }`)
+	err := ioutil.WriteFile(jn.SettingsFile, content, 0666)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
@@ -149,6 +151,11 @@ func appendStandards(code *string) {
 #include <cstdint>
 #pragma endregion JN_STANDARD_IMPORTS
 
+
+#pragma region JN_BUILTIN_VALUES
+#define nil nullptr
+#pragma endregion JN_BUILTIN_VALUES
+
 #pragma region JN_RUNTIME_FUNCTIONS
 static inline void panic(const std::wstring message) {
 	std::wcout << message << std::endl;
@@ -189,21 +196,22 @@ public:
 #pragma endregion FIELDS
 
 #pragma region CONSTRUCTORS
+  str(void) { this->string = {L""}; }
 	str(const std::wstring& string) { this->string = string; }
 	str(const rune* string) { this->string = string; }
 #pragma endregion CONSTRUCTORS
 
 #pragma region DESTRUCTOR
-	~str() { this->string.clear(); }
+	~str(void) { this->string.clear(); }
 #pragma endregion DESTRUCTOR
 
 #pragma region FOREACH_SUPPORT
 	typedef rune *iterator;
 	typedef const rune *const_iterator;
-	iterator begin() { return &this->string[0]; }
-	const_iterator begin() const { return &this->string[0]; }
-	iterator end() { return &this->string[this->string.size()]; }
-	const_iterator end() const { return &this->string[this->string.size()]; }
+	iterator begin(void) { return &this->string[0]; }
+	const_iterator begin(void) const { return &this->string[0]; }
+	iterator end(void) { return &this->string[this->string.size()]; }
+	const_iterator end(void) const { return &this->string[this->string.size()]; }
 #pragma endregion FOREACH_SUPPORT
 
 #pragma region OPERATOR_OVERFLOWS
@@ -230,10 +238,6 @@ public:
 };
 #pragma endregion JN_BUILTIN_TYPES
 
-#pragma region JN_BUILTIN_VALUES
-#define nil nullptr
-#pragma endregion JN_BUILTIN_VALUES
-
 #pragma region JN_STRUCTURES
 template <typename T>
 class array {
@@ -243,22 +247,22 @@ public:
 #pragma endregion FIELDS
 
 #pragma region CONSTRUCTORS
-	array() { this->vector = { }; }
+	array(void) { this->vector = { }; }
 	array(const std::vector<T>& vector) { this->vector = vector; }
 	array(std::nullptr_t) : array() { }
 	array(const array<T>& arr): array(std::vector<T>(arr.vector)) { }
 #pragma endregion CONSTRUCTORS
 
 #pragma region DESTRUCTOR
-	~array() { this->vector.clear(); }
+	~array(void) { this->vector.clear(); }
 #pragma endregion DESTRUCTOR
 
 #pragma region FOREACH_SUPPORT
 	typedef T *iterator;
 	typedef const T *const_iterator;
-	iterator begin() { return &this->vector[0]; }
-	iterator end() { return &this->vector[this->vector.size()]; }
-	const_iterator end() const { return &this->vector[this->vector.size()]; }
+	iterator begin(void) { return &this->vector[0]; }
+	iterator end(void) { return &this->vector[this->vector.size()]; }
+	const_iterator end(void) const { return &this->vector[this->vector.size()]; }
 #pragma endregion FOREACH_SUPPORT
 
 #pragma region OPERATOR_OVERFLOWS
@@ -326,12 +330,13 @@ int main() {
 
 func writeCxxOutput(info *parser.ParseFileInfo) {
 	path := filepath.Join(jn.JnSet.CxxOutDir, jn.JnSet.CxxOutName)
-	err := os.MkdirAll(jn.JnSet.CxxOutDir, 0511)
+	err := os.MkdirAll(jn.JnSet.CxxOutDir, 0777)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
 	}
-	err = io.WriteFileTruncate(path, []byte(info.JN_CXX))
+	content := []byte(info.JN_CXX)
+	err = os.WriteFile(path, content, 0666)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)

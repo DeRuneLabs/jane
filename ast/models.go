@@ -144,6 +144,7 @@ type ParameterAST struct {
 	Token    lexer.Token
 	Name     string
 	Const    bool
+	Volatile bool
 	Variadic bool
 	Type     DataTypeAST
 }
@@ -165,6 +166,9 @@ func (p ParameterAST) String() string {
 
 func (p ParameterAST) Prototype() string {
 	var cxx strings.Builder
+	if p.Volatile {
+		cxx.WriteString("volatile ")
+	}
 	if p.Const {
 		cxx.WriteString("const ")
 	}
@@ -290,14 +294,18 @@ type VariableAST struct {
 	Name        string
 	Type        DataTypeAST
 	Value       ExprAST
+	Const       bool
+	Volatile    bool
 	New         bool
 	Tag         interface{}
 }
 
 func (v VariableAST) String() string {
 	var sb strings.Builder
-	switch v.DefineToken.Id {
-	case lexer.Const:
+	if v.Volatile {
+		sb.WriteString("volatile ")
+	}
+	if v.Const {
 		sb.WriteString("const ")
 	}
 	sb.WriteString(v.Type.String())

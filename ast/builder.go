@@ -29,7 +29,10 @@ func NewBuilder(tokens []lexer.Token) *Builder {
 
 func (b *Builder) PushError(token lexer.Token, err string) {
 	message := jn.Errors[err]
-	b.Errors = append(b.Errors, fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message))
+	b.Errors = append(
+		b.Errors,
+		fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message),
+	)
 }
 
 func (ast *Builder) Ended() bool {
@@ -45,7 +48,7 @@ func (b *Builder) Build() {
 			b.Attribute(tokens)
 		case lexer.Name:
 			b.Name(tokens)
-		case lexer.Const:
+		case lexer.Const, lexer.Volatile:
 			b.GlobalVariable(tokens)
 		case lexer.Type:
 			b.Type(tokens)
@@ -227,6 +230,12 @@ func (b *Builder) pushParameter(fn *FunctionAST, tokens []lexer.Token, err lexer
 				continue
 			}
 			paramAST.Const = true
+		case lexer.Volatile:
+			if paramAST.Volatile {
+				b.PushError(token, "already_volatile")
+				continue
+			}
+			paramAST.Volatile = true
 		case lexer.Operator:
 			if token.Kind != "..." {
 				b.PushError(token, "invalid_syntax")
@@ -349,7 +358,12 @@ func nameType(token lexer.Token, dt *DataTypeAST) {
 	dt.Value += dt.Token.Kind
 }
 
-func (b *Builder) functionDataType(token lexer.Token, tokens []lexer.Token, index *int, dt *DataTypeAST) {
+func (b *Builder) functionDataType(
+	token lexer.Token,
+	tokens []lexer.Token,
+	index *int,
+	dt *DataTypeAST,
+) {
 	dt.Token = token
 	dt.Code = jn.Function
 	value, fun := b.FunctionDataTypeHead(tokens, index)
@@ -386,7 +400,11 @@ func (b *Builder) FunctionDataTypeHead(tokens []lexer.Token, index *int) (string
 	return "", funAST
 }
 
-func (b *Builder) pushTypeToTypes(types *[]DataTypeAST, tokens []lexer.Token, errToken lexer.Token) {
+func (b *Builder) pushTypeToTypes(
+	types *[]DataTypeAST,
+	tokens []lexer.Token,
+	errToken lexer.Token,
+) {
 	if len(tokens) == 0 {
 		b.PushError(errToken, "missing_value")
 		return
@@ -395,7 +413,10 @@ func (b *Builder) pushTypeToTypes(types *[]DataTypeAST, tokens []lexer.Token, er
 	*types = append(*types, currentDt)
 }
 
-func (b *Builder) FunctionReturnDataType(tokens []lexer.Token, index *int) (dt DataTypeAST, ok bool) {
+func (b *Builder) FunctionReturnDataType(
+	tokens []lexer.Token,
+	index *int,
+) (dt DataTypeAST, ok bool) {
 	if *index >= len(tokens) {
 		return
 	}
@@ -660,7 +681,11 @@ func (b *Builder) variableSetInfo(tokens []lexer.Token) (info varsetInfo) {
 	return
 }
 
-func (b *Builder) pushVarsetSelector(selectors *[]VarsetSelector, last, current int, info varsetInfo) {
+func (b *Builder) pushVarsetSelector(
+	selectors *[]VarsetSelector,
+	last, current int,
+	info varsetInfo,
+) {
 	var selector VarsetSelector
 	selector.Expr.Tokens = info.selectorTokens[last:current]
 	if last-current == 0 {
@@ -841,9 +866,31 @@ func (b *Builder) pushArg(args *[]ArgAST, tokens []lexer.Token, err lexer.Token)
 func (b *Builder) VariableStatement(tokens []lexer.Token) (s StatementAST) {
 	var varAST VariableAST
 	position := 0
-	if tokens[position].Id != lexer.Name {
-		varAST.DefineToken = tokens[position]
-		position++
+	varAST.DefineToken = tokens[position]
+	for ; position < len(tokens); position++ {
+		token := tokens[position]
+		if token.Id == lexer.Name {
+			break
+		}
+		switch token.Id {
+		case lexer.Const:
+			if varAST.Const {
+				b.PushError(token, "invalid_constant")
+				break
+			}
+			varAST.Const = true
+		case lexer.Volatile:
+			if varAST.Volatile {
+				b.PushError(token, "invalid_volatile")
+				break
+			}
+			varAST.Volatile = true
+		default:
+			b.PushError(token, "invalid_syntax")
+		}
+	}
+	if position >= len(tokens) {
+		return
 	}
 	varAST.NameToken = tokens[position]
 	if varAST.NameToken.Id != lexer.Name {
@@ -936,7 +983,11 @@ func (b *Builder) getWhileIterProfile(tokens []lexer.Token) WhileProfile {
 	return WhileProfile{b.Expr(tokens)}
 }
 
-func (b *Builder) pushVarsTokensPart(vars *[][]lexer.Token, part []lexer.Token, errTok lexer.Token) {
+func (b *Builder) pushVarsTokensPart(
+	vars *[][]lexer.Token,
+	part []lexer.Token,
+	errTok lexer.Token,
+) {
 	if len(part) == 0 {
 		b.PushError(errTok, "missing_value")
 	}
@@ -1008,7 +1059,10 @@ func (b *Builder) getForeachIterVars(varsTokens [][]lexer.Token) []VariableAST {
 	return vars
 }
 
-func (b *Builder) getForeachIterProfile(varTokens, exprTokens []lexer.Token, inTok lexer.Token) ForeachProfile {
+func (b *Builder) getForeachIterProfile(
+	varTokens, exprTokens []lexer.Token,
+	inTok lexer.Token,
+) ForeachProfile {
 	var profile ForeachProfile
 	profile.InToken = inTok
 	profile.Expr = b.Expr(exprTokens)
