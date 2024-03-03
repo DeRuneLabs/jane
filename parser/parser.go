@@ -422,7 +422,7 @@ func (p *Parser) computeProcesses(processes [][]lexer.Token) (v value, e exprMod
 			process.leftVal = v.ast
 			process.operator = processes[j][0]
 			builder.setIndex(j + 1)
-			builder.appendNode(tokenExprNode{process.operator})
+			builder.appendNode(exprNode{process.operator.Kind})
 			process.right = processes[j+1]
 			builder.setIndex(j + 1)
 			process.rightVal = p.computeValPart(process.right, builder).ast
@@ -436,7 +436,7 @@ func (p *Parser) computeProcesses(processes [][]lexer.Token) (v value, e exprMod
 			process.leftVal = p.computeValPart(process.left, builder).ast
 			process.rightVal = v.ast
 			builder.setIndex(j)
-			builder.appendNode(tokenExprNode{process.operator})
+			builder.appendNode(exprNode{process.operator.Kind})
 			v.ast = process.Solve()
 			processes = processes[:j-1]
 			goto end
@@ -445,7 +445,7 @@ func (p *Parser) computeProcesses(processes [][]lexer.Token) (v value, e exprMod
 			process.leftVal = v.ast
 			process.operator = processes[j][0]
 			builder.setIndex(j)
-			builder.appendNode(tokenExprNode{process.operator})
+			builder.appendNode(exprNode{process.operator.Kind})
 			process.right = processes[j+1]
 			builder.setIndex(j + 1)
 			process.rightVal = p.computeValPart(process.right, builder).ast
@@ -458,7 +458,7 @@ func (p *Parser) computeProcesses(processes [][]lexer.Token) (v value, e exprMod
 		process.leftVal = p.computeValPart(process.left, builder).ast
 		process.operator = processes[j][0]
 		builder.setIndex(j)
-		builder.appendNode(tokenExprNode{process.operator})
+		builder.appendNode(exprNode{process.operator.Kind})
 		process.right = processes[j+1]
 		builder.setIndex(j + 1)
 		process.rightVal = p.computeValPart(process.right, builder).ast
@@ -563,7 +563,7 @@ func (p *valueProcessor) boolean() value {
 	v.ast.Value = p.token.Kind
 	v.ast.Type.Code = jn.Bool
 	v.ast.Type.Value = "bool"
-	p.builder.appendNode(tokenExprNode{p.token})
+	p.builder.appendNode(exprNode{p.token.Kind})
 	return v
 }
 
@@ -571,7 +571,7 @@ func (p *valueProcessor) nil() value {
 	var v value
 	v.ast.Value = p.token.Kind
 	v.ast.Type.Code = jn.Nil
-	p.builder.appendNode(tokenExprNode{p.token})
+	p.builder.appendNode(exprNode{p.token.Kind})
 	return v
 }
 
@@ -591,7 +591,7 @@ func (p *valueProcessor) numeric() value {
 		}
 	}
 	v.ast.Value = p.token.Kind
-	p.builder.appendNode(tokenExprNode{p.token})
+	p.builder.appendNode(exprNode{p.token.Kind})
 	return v
 }
 
@@ -602,7 +602,7 @@ func (p *valueProcessor) name() (v value, ok bool) {
 		v.constant = variable.DefineToken.Id == lexer.Const
 		v.ast.Token = variable.NameToken
 		v.lvalue = true
-		p.builder.appendNode(tokenExprNode{p.token})
+		p.builder.appendNode(exprNode{p.token.Kind})
 		ok = true
 	} else if fun := p.parser.FunctionByName(p.token.Kind); fun != nil {
 		v.ast.Value = p.token.Kind
@@ -610,7 +610,7 @@ func (p *valueProcessor) name() (v value, ok bool) {
 		v.ast.Type.Tag = fun.Ast
 		v.ast.Type.Value = fun.Ast.DataTypeString()
 		v.ast.Token = fun.Ast.Token
-		p.builder.appendNode(tokenExprNode{p.token})
+		p.builder.appendNode(exprNode{p.token.Kind})
 		ok = true
 	} else {
 		p.parser.PushErrorToken(p.token, "name_not_defined")
@@ -949,7 +949,7 @@ func (p *Parser) computeOperatorPart(tokens []lexer.Token, builder *exprBuilder)
 	var v value
 	exprTokens := tokens[1:]
 	processor := operatorProcessor{tokens[0], exprTokens, builder, p}
-	builder.appendNode(tokenExprNode{processor.token})
+	builder.appendNode(exprNode{processor.token.Kind})
 	if processor.tokens == nil {
 		p.PushErrorToken(processor.token, "invalid_syntax")
 		return v
@@ -1084,8 +1084,8 @@ func (p *Parser) computeParenthesesRange(tokens []lexer.Token, b *exprBuilder) (
 		break
 	}
 	if len(valueTokens) == 0 && braceCount == 0 {
-		b.appendNode(tokenExprNode{lexer.Token{Kind: "("}})
-		defer b.appendNode(tokenExprNode{lexer.Token{Kind: ")"}})
+		b.appendNode(exprNode{"("})
+		defer b.appendNode(exprNode{")"})
 
 		tk := tokens[0]
 		tokens = tokens[1 : len(tokens)-1]
@@ -1099,8 +1099,8 @@ func (p *Parser) computeParenthesesRange(tokens []lexer.Token, b *exprBuilder) (
 	}
 	v = p.computeValPart(valueTokens, b)
 
-	b.appendNode(tokenExprNode{lexer.Token{Kind: "("}})
-	defer b.appendNode(tokenExprNode{lexer.Token{Kind: ")"}})
+	b.appendNode(exprNode{"("})
+	defer b.appendNode(exprNode{")"})
 
 	switch v.ast.Type.Code {
 	case jn.Function:
@@ -1207,10 +1207,10 @@ func (p *Parser) computeBracketRange(tokens []lexer.Token, b *exprBuilder) (v va
 	v, model = p.computeTokens(valueTokens)
 	b.appendNode(model)
 	tokens = tokens[len(valueTokens)+1 : len(tokens)-1]
-	b.appendNode(tokenExprNode{lexer.Token{Kind: "["}})
+	b.appendNode(exprNode{"["})
 	selectv, model := p.computeTokens(tokens)
 	b.appendNode(model)
-	b.appendNode(tokenExprNode{lexer.Token{Kind: "]"}})
+	b.appendNode(exprNode{"]"})
 	return p.computeEnumerableSelect(v, selectv, tokens[0])
 }
 
@@ -1590,17 +1590,17 @@ func (p *Parser) checkVariableStatement(varAST *ast.VariableAST, noParse bool) {
 func (p *Parser) checkVarsetOperation(selected value, err lexer.Token) bool {
 	state := true
 	if !selected.lvalue {
-		p.PushErrorToken(err, "nonlvalue_update")
+		p.PushErrorToken(err, "assign_nonlvalue")
 		state = false
 	}
 	if selected.constant {
-		p.PushErrorToken(err, "const_value_update")
+		p.PushErrorToken(err, "assign_const")
 		state = false
 	}
 	switch selected.ast.Type.Tag.(type) {
 	case ast.FunctionAST:
 		if p.FunctionByName(selected.ast.Token.Kind) != nil {
-			p.PushErrorToken(err, "type_not_support_value_update")
+			p.PushErrorToken(err, "assign_type_not_support_value")
 			state = false
 		}
 	}
