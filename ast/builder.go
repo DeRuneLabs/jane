@@ -590,7 +590,7 @@ func (b *Builder) Statement(bs *blockStatement) (s StatementAST) {
 	switch token.Id {
 	case lexer.Name:
 		return b.NameStatement(bs.tokens)
-	case lexer.Const:
+	case lexer.Const, lexer.Volatile:
 		return b.VariableStatement(bs.tokens)
 	case lexer.Return:
 		return b.ReturnStatement(bs.tokens)
@@ -614,7 +614,14 @@ func (b *Builder) Statement(bs *blockStatement) (s StatementAST) {
 	return b.ExprStatement(bs.tokens)
 }
 
+func isVariableStatementToken(token lexer.Token) bool {
+	return token.Id == lexer.Const || token.Id == lexer.Volatile
+}
+
 func checkVariableSetStatementTokens(tokens []lexer.Token) bool {
+	if isVariableStatementToken(tokens[0]) {
+		return false
+	}
 	braceCount := 0
 	for _, token := range tokens {
 		if token.Id == lexer.Brace {

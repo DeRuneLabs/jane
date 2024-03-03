@@ -216,7 +216,7 @@ func (p *Parser) Variable(varAST ast.VariableAST) ast.VariableAST {
 		} else {
 			var valueToken lexer.Token
 			valueToken.Id = lexer.Value
-			dt, ok := p.readyType(varAST.Type)
+			dt, ok := p.readyType(varAST.Type, true)
 			if ok {
 				valueToken.Kind = p.defaultValueOfType(dt)
 				valueTokens := []lexer.Token{valueToken}
@@ -225,8 +225,6 @@ func (p *Parser) Variable(varAST ast.VariableAST) ast.VariableAST {
 					Tokens:    valueTokens,
 					Processes: processes,
 				}
-			} else {
-				p.PushErrorToken(varAST.Type.Token, "invalid_type_source")
 			}
 		}
 	} else {
@@ -240,8 +238,6 @@ func (p *Parser) Variable(varAST ast.VariableAST) ast.VariableAST {
 	if varAST.Const {
 		if varAST.SetterToken.Id == lexer.NA {
 			p.PushErrorToken(varAST.NameToken, "missing_const_value")
-		} else if !checkValidityConstantDataType(varAST.Type) {
-			p.PushErrorToken(varAST.NameToken, "invalid_const_data_type")
 		}
 	}
 	return varAST
@@ -364,10 +360,7 @@ func (p *Parser) checkAsync() {
 func (p *Parser) checkTypesAsync() {
 	defer func() { p.wg.Done() }()
 	for _, t := range p.Types {
-		_, ok := p.readyType(t.Type)
-		if !ok {
-			p.PushErrorToken(t.Token, "invalid_type_source")
-		}
+		_, _ = p.readyType(t.Type, true)
 	}
 }
 
@@ -829,7 +822,7 @@ func (s solver) Solve() (v ast.ValueAST) {
 	switch {
 	case typeIsArray(s.leftVal.Type) || typeIsArray(s.rightVal.Type):
 		return s.array()
-	case typeIsPointer(s.leftVal.Type) || typeIsPointer(s.rightVal.Type):
+	case typeIsPtr(s.leftVal.Type) || typeIsPtr(s.rightVal.Type):
 		return s.pointer()
 	case s.leftVal.Type.Code == jn.Nil || s.rightVal.Type.Code == jn.Nil:
 		return s.nil()
@@ -934,7 +927,7 @@ func (p *operatorProcessor) logicalNot() value {
 func (p *operatorProcessor) star() value {
 	v := p.parser.computeValPart(p.tokens, p.builder)
 	v.lvalue = true
-	if !typeIsPointer(v.ast.Type) {
+	if !typeIsPtr(v.ast.Type) {
 		p.parser.PushErrorToken(p.token, "invalid_data_star")
 	} else {
 		v.ast.Type.Value = v.ast.Type.Value[1:]
@@ -1026,6 +1019,15 @@ func (p *Parser) computeValPart(tokens []lexer.Token, builder *exprBuilder) (v v
 		return p.computeOperatorPart(tokens, builder)
 	case lexer.New:
 		return p.computeHeapAlloc(tokens, builder)
+	case lexer.Brace:
+		switch token.Kind {
+		case "(":
+			val, ok := p.computeTryCast(tokens, builder)
+			if ok {
+				v = val
+				return
+			}
+		}
 	}
 	token = tokens[len(tokens)-1]
 	switch token.Id {
@@ -1046,6 +1048,65 @@ func (p *Parser) computeValPart(tokens []lexer.Token, builder *exprBuilder) (v v
 	return
 }
 
+func (p *Parser) computeTryCast(tokens []lexer.Token, builder *exprBuilder) (v value, _ bool) {
+	braceCount := 0
+	errToken := tokens[0]
+	for index, token := range tokens {
+		if token.Id == lexer.Brace {
+			switch token.Kind {
+			case "(", "[", "{":
+				braceCount++
+				continue
+			default:
+				braceCount--
+			}
+		}
+		if braceCount > 0 {
+			continue
+		}
+		typeTokens := tokens[1:index]
+		astb := ast.NewBuilder(typeTokens)
+		dtindex := 0
+		dt, ok := astb.DataType(typeTokens, &dtindex, false)
+		if !ok {
+			return
+		}
+		_, ok = p.readyType(dt, false)
+		if !ok {
+			return
+		}
+		if dtindex+1 < len(typeTokens) {
+			return
+		}
+		if index+1 >= len(tokens) {
+			p.PushErrorToken(token, "casting_missing_expr")
+			return
+		}
+		exprTokens := tokens[index+1:]
+		builder.appendNode(exprNode{"(" + dt.String() + ")"})
+		val := p.computeValPart(exprTokens, builder)
+		val = p.computeCast(val, dt, errToken)
+		return val, true
+	}
+	return
+}
+
+func (p *Parser) computeCast(v value, t ast.DataTypeAST, errToken lexer.Token) value {
+	v.ast.Type = t
+	v.constant = false
+	v.volatile = false
+	switch {
+	case typeIsPtr(t) && p.checkCastPtr(v.ast.Type, t, errToken):
+	default:
+		p.PushErrorToken(errToken, "type_notsupports_casting")
+	}
+	return v
+}
+
+func (p *Parser) checkCastPtr(vt, dt ast.DataTypeAST, errToken lexer.Token) bool {
+	return typeIsPtr(vt) || jn.IsIntegerType(dt.Code)
+}
+
 func (p *Parser) computeOperatorPartRight(tokens []lexer.Token, b *exprBuilder) (v value) {
 	token := tokens[len(tokens)-1]
 	switch token.Kind {
@@ -1058,7 +1119,11 @@ func (p *Parser) computeOperatorPartRight(tokens []lexer.Token, b *exprBuilder) 
 	return
 }
 
-func (p *Parser) computeVariadicExprPart(tokens []lexer.Token, b *exprBuilder, errTok lexer.Token) (v value) {
+func (p *Parser) computeVariadicExprPart(
+	tokens []lexer.Token,
+	b *exprBuilder,
+	errTok lexer.Token,
+) (v value) {
 	v = p.computeValPart(tokens, b)
 	if !typeIsVariadicable(v.ast.Type) {
 		p.PushErrorToken(errTok, "variadic_with_nonvariadicable")
@@ -1283,7 +1348,11 @@ func (p *Parser) buildEnumerableParts(tokens []lexer.Token) [][]lexer.Token {
 	return parts
 }
 
-func (p *Parser) buildArray(parts [][]lexer.Token, dt ast.DataTypeAST, err lexer.Token) (value, IExprNode) {
+func (p *Parser) buildArray(
+	parts [][]lexer.Token,
+	dt ast.DataTypeAST,
+	err lexer.Token,
+) (value, IExprNode) {
 	var v value
 	v.ast.Type = dt
 	model := arrayExpr{dataType: dt}
@@ -1307,7 +1376,11 @@ func (p *Parser) checkAnonymousFunction(fun *ast.FunctionAST) {
 	p.BlockVariables = blockVariables
 }
 
-func (p *Parser) parseFunctionCall(fun ast.FunctionAST, tokens []lexer.Token, builder *exprBuilder) {
+func (p *Parser) parseFunctionCall(
+	fun ast.FunctionAST,
+	tokens []lexer.Token,
+	builder *exprBuilder,
+) {
 	errToken := tokens[0]
 	tokens, _ = p.getRange("(", ")", tokens)
 	if tokens == nil {
@@ -1324,7 +1397,12 @@ func (p *Parser) parseFunctionCall(fun ast.FunctionAST, tokens []lexer.Token, bu
 	}
 }
 
-func (p *Parser) parseArgs(params []ast.ParameterAST, args *[]ast.ArgAST, errTok lexer.Token, b *exprBuilder) {
+func (p *Parser) parseArgs(
+	params []ast.ParameterAST,
+	args *[]ast.ArgAST,
+	errTok lexer.Token,
+	b *exprBuilder,
+) {
 	parsedArgs := make([]ast.ArgAST, 0)
 	if len(params) > 0 && params[len(params)-1].Variadic {
 		if len(*args) == 0 && len(params) == 1 {
@@ -1381,8 +1459,16 @@ func (p *Parser) parseArg(param ast.ParameterAST, arg *ast.ArgAST, variadiced *b
 	go p.checkArgTypeAsync(param, value, false, arg.Token)
 }
 
-func (p *Parser) checkArgTypeAsync(param ast.ParameterAST, val value, ignoreAny bool, errTok lexer.Token) {
+func (p *Parser) checkArgTypeAsync(
+	param ast.ParameterAST,
+	val value,
+	ignoreAny bool,
+	errTok lexer.Token,
+) {
 	defer func() { p.wg.Done() }()
+	if typeIsMut(param.Type) && val.constant && !param.Const {
+		p.PushErrorToken(errTok, "constant_pushed_nonconstant_parameter")
+	}
 	if param.Variadic {
 		p.wg.Add(1)
 		go p.checkAssignTypeAsync(param.Type, val, false, errTok)
@@ -1456,18 +1542,6 @@ func (p *Parser) checkBlock(b *ast.BlockAST) {
 		case ast.ReturnAST:
 		default:
 			p.PushErrorToken(model.Token, "invalid_syntax")
-		}
-	}
-}
-
-func (p *Parser) checkParametersAsync(params []ast.ParameterAST) {
-	defer func() { p.wg.Done() }()
-	for _, param := range params {
-		if !param.Const {
-			continue
-		}
-		if !checkValidityConstantDataType(param.Type) {
-			p.PushErrorToken(param.Type.Token, "invalid_const_data_type")
 		}
 	}
 }
@@ -1580,8 +1654,6 @@ func (p *Parser) checkReturns(fun *ast.FunctionAST) {
 func (p *Parser) checkFunction(fun *ast.FunctionAST) {
 	p.checkBlock(&fun.Block)
 	p.checkReturns(fun)
-	p.wg.Add(1)
-	go p.checkParametersAsync(fun.Params)
 }
 
 func (p *Parser) checkVariableStatement(varAST *ast.VariableAST, noParse bool) {
@@ -1730,7 +1802,7 @@ func (p *Parser) checkVarsetStatement(vsAST *ast.VariableSetAST) {
 func (p *Parser) checkFreeStatement(freeAST *ast.FreeAST) {
 	val, model := p.computeExpr(freeAST.Expr)
 	freeAST.Expr.Model = model
-	if !typeIsPointer(val.ast.Type) {
+	if !typeIsPtr(val.ast.Type) {
 		p.PushErrorToken(freeAST.Token, "free_nonpointer")
 	}
 }
@@ -1760,10 +1832,8 @@ func (frc *foreachTypeChecker) array() {
 			keyA.Type.Value = jn.CxxTypeNameFromType(keyA.Type.Code)
 		} else {
 			var ok bool
-			keyA.Type, ok = frc.p.readyType(keyA.Type)
-			if !ok {
-				frc.p.PushErrorToken(keyA.Type.Token, "invalid_type_source")
-			} else {
+			keyA.Type, ok = frc.p.readyType(keyA.Type, true)
+			if ok {
 				if !typeIsSingle(keyA.Type) || !jn.IsNumericType(keyA.Type.Code) {
 					frc.p.PushErrorToken(keyA.NameToken, "incompatible_datatype")
 				}
@@ -1791,10 +1861,8 @@ func (frc *foreachTypeChecker) string() {
 			keyA.Type.Value = jn.CxxTypeNameFromType(keyA.Type.Code)
 		} else {
 			var ok bool
-			keyA.Type, ok = frc.p.readyType(keyA.Type)
-			if !ok {
-				frc.p.PushErrorToken(keyA.Type.Token, "invalid_type_source")
-			} else {
+			keyA.Type, ok = frc.p.readyType(keyA.Type, true)
+			if ok {
 				if !typeIsSingle(keyA.Type) || !jn.IsNumericType(keyA.Type.Code) {
 					frc.p.PushErrorToken(keyA.NameToken, "incompatible_datatype")
 				}
@@ -1928,13 +1996,13 @@ func (p *Parser) checkValidityForAutoType(t ast.DataTypeAST, err lexer.Token) {
 }
 
 func (p *Parser) defaultValueOfType(t ast.DataTypeAST) string {
-	if typeIsPointer(t) || typeIsArray(t) {
+	if typeIsPtr(t) || typeIsArray(t) {
 		return "nil"
 	}
 	return jn.DefaultValueOfType(t.Code)
 }
 
-func (p *Parser) readyType(dt ast.DataTypeAST) (_ ast.DataTypeAST, ok bool) {
+func (p *Parser) readyType(dt ast.DataTypeAST, err bool) (_ ast.DataTypeAST, ok bool) {
 	if dt.Value == "" {
 		return dt, true
 	}
@@ -1942,22 +2010,29 @@ func (p *Parser) readyType(dt ast.DataTypeAST) (_ ast.DataTypeAST, ok bool) {
 	case jn.Name:
 		t := p.typeByName(dt.Token.Kind)
 		if t == nil {
+			if err {
+				p.PushErrorToken(dt.Token, "invalid_type_source")
+			}
 			return dt, false
 		}
 		t.Type.Value = dt.Value[:len(dt.Value)-len(dt.Token.Kind)] + t.Type.Value
-		return p.readyType(t.Type)
+		return p.readyType(t.Type, err)
 	case jn.Function:
 		funAST := dt.Tag.(ast.FunctionAST)
 		for index, param := range funAST.Params {
-			funAST.Params[index].Type, _ = p.readyType(param.Type)
+			funAST.Params[index].Type, _ = p.readyType(param.Type, err)
 		}
-		funAST.ReturnType, _ = p.readyType(funAST.ReturnType)
+		funAST.ReturnType, _ = p.readyType(funAST.ReturnType, err)
 		dt.Value = dt.Tag.(ast.FunctionAST).DataTypeString()
 	}
 	return dt, true
 }
 
-func (p *Parser) checkMultiTypeAsync(real, check ast.DataTypeAST, ignoreAny bool, errToken lexer.Token) {
+func (p *Parser) checkMultiTypeAsync(
+	real, check ast.DataTypeAST,
+	ignoreAny bool,
+	errToken lexer.Token,
+) {
 	defer func() { p.wg.Done() }()
 	if real.MultiTyped != check.MultiTyped {
 		p.PushErrorToken(errToken, "incompatible_datatype")
@@ -1976,7 +2051,12 @@ func (p *Parser) checkMultiTypeAsync(real, check ast.DataTypeAST, ignoreAny bool
 	}
 }
 
-func (p *Parser) checkAssignTypeAsync(t ast.DataTypeAST, val value, ignoreAny bool, errToken lexer.Token) {
+func (p *Parser) checkAssignTypeAsync(
+	t ast.DataTypeAST,
+	val value,
+	ignoreAny bool,
+	errToken lexer.Token,
+) {
 	defer func() { p.wg.Done() }()
 	if typeIsSingle(t) && isConstantNumeric(val.ast.Value) {
 		switch {
@@ -2006,12 +2086,12 @@ func (p *Parser) checkAssignTypeAsync(t ast.DataTypeAST, val value, ignoreAny bo
 
 func (p *Parser) checkTypeAsync(real, check ast.DataTypeAST, ignoreAny bool, errToken lexer.Token) {
 	defer func() { p.wg.Done() }()
-	real, ok := p.readyType(real)
+	real, ok := p.readyType(real, true)
 	if !ok {
 		p.PushErrorToken(errToken, "incompatible_datatype")
 		return
 	}
-	check, ok = p.readyType(check)
+	check, ok = p.readyType(check, true)
 	if !ok {
 		p.PushErrorToken(errToken, "incompatible_datatype")
 		return
@@ -2030,7 +2110,7 @@ func (p *Parser) checkTypeAsync(real, check ast.DataTypeAST, ignoreAny bool, err
 		}
 		return
 	}
-	if (typeIsPointer(real) || typeIsArray(real)) && check.Code == jn.Nil {
+	if (typeIsPtr(real) || typeIsArray(real)) && check.Code == jn.Nil {
 		return
 	}
 	if real.Value != check.Value {
