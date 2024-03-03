@@ -44,14 +44,14 @@ install_arch_family() {
 
 check_os() {
      . /etc/os-release
-    case $ID in 
+    case $ID in
         ubuntu)
         install_debian_family
         ;;
-        arch) 
+        arch)
         install_arch_family
         ;;
-        darwin) 
+        darwin)
         install_debian_family
         ;;
     esac
