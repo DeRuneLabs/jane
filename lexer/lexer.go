@@ -20,11 +20,10 @@ type Lexer struct {
 	Column   int
 	Line     int
 	Errors   []string
-
-	braces []Token
+	braces   []Token
 }
 
-func NewLexer(f *io.FILE) *Lexer {
+func NewLex(f *io.FILE) *Lexer {
 	lex := new(Lexer)
 	lex.File = f
 	lex.Line = 1
@@ -34,17 +33,11 @@ func NewLexer(f *io.FILE) *Lexer {
 }
 
 func (lex *Lexer) pushError(err string) {
-	lex.Errors = append(
-		lex.Errors,
-		fmt.Sprintf("%s %d:%d %s", lex.File.Path, lex.Line, lex.Column, jn.Errors[err]),
-	)
+	lex.Errors = append(lex.Errors, fmt.Sprintf("%s %d:%d %s", lex.File.Path, lex.Line, lex.Column, jn.Errors[err]))
 }
 
 func (lex *Lexer) pushErrorToken(tok Token, err string) {
-	lex.Errors = append(
-		lex.Errors,
-		fmt.Sprintf("%s %d:%d %s", lex.File.Path, tok.Row, tok.Column, jn.Errors[err]),
-	)
+	lex.Errors = append(lex.Errors, fmt.Sprintf("%s %d:%d %s", lex.File.Path, tok.Row, tok.Column, jn.Errors[err]))
 }
 
 func (lex *Lexer) Tokenize() []Token {
@@ -94,7 +87,9 @@ func (lex *Lexer) lexName(lexerline string) string {
 	}
 	var sb strings.Builder
 	for _, run := range lexerline {
-		if run != '_' && ('0' > run || '9' < run) && !unicode.IsLetter(run) {
+		if run != '_' &&
+			('0' > run || '9' < run) &&
+			!unicode.IsLetter(run) {
 			break
 		}
 		sb.WriteRune(run)
@@ -301,6 +296,18 @@ func (lex *Lexer) Token() Token {
 			lex.pushErrorToken(token, "extra_closed_parentheses")
 			break
 		} else if lex.braces[length-1].Kind != "(" {
+			lex.wg.Add(1)
+			go lex.pushWrongOrderCloseErrorrAsync(token)
+		}
+		lex.removeBrace(length-1, token.Kind)
+	case lex.lexPunct(content, "{", Brace, &token):
+		lex.braces = append(lex.braces, token)
+	case lex.lexPunct(content, "}", Brace, &token):
+		length := len(lex.braces)
+		if length == 0 {
+			lex.pushErrorToken(token, "extra_closed_braces")
+			break
+		} else if lex.braces[length-1].Kind != "{" {
 			lex.wg.Add(1)
 			go lex.pushWrongOrderCloseErrorrAsync(token)
 		}

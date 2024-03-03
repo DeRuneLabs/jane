@@ -1,3 +1,28 @@
+type TESTING_TYPEDEF i32
+TEST_GLOBAL_VARIABLE: = 10;
+
+testing_model_variable() {
+    a:size
+    x: = 10;
+    println(x);
+    x = 100
+    println(x);
+}
+
+testing_array_model() {
+    derune: = new [][]str
+    *derune = [][]str {
+        []str{"saut", "arul"},
+        []str{"pace", "ibal"},
+    };
+    println(
+        (*derune)[0]
+    )
+}
+
 main() {
-  println("khairanabilla are awesome");
+    println("testing");
+    testing_array_model();
+    testing_model_variable();
+    heap_allocation();
 }

@@ -97,7 +97,7 @@ func (dt DataTypeAST) String() string {
 }
 
 func (dt DataTypeAST) FunctionString() string {
-	cxx := "function<"
+	cxx := "std::function<"
 	fun := dt.Tag.(FunctionAST)
 	cxx += fun.ReturnType.String()
 	cxx += "("
@@ -166,7 +166,7 @@ func (p ParameterAST) String() string {
 func (p ParameterAST) Prototype() string {
 	var cxx strings.Builder
 	if p.Const {
-		cxx.WriteString("cont ")
+		cxx.WriteString("const ")
 	}
 	if p.Variadic {
 		cxx.WriteString("array<")
@@ -273,7 +273,7 @@ type ReturnAST struct {
 func (r ReturnAST) String() string {
 	switch r.Token.Id {
 	case lexer.Operator:
-		return "return " + r.Expr.String() + ";"
+		return "erturn " + r.Expr.String() + ";"
 	}
 	return "return " + r.Expr.String() + ";"
 }
@@ -494,7 +494,7 @@ type IterAST struct {
 
 func (iter IterAST) String() string {
 	if iter.Profile == nil {
-		return "whle (true) " + iter.Block.String()
+		return "while (true) " + iter.Block.String()
 	}
 	return iter.Profile.String(iter)
 }

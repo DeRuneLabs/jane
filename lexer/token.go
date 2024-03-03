@@ -10,7 +10,6 @@ type Token struct {
 	Id     uint8
 }
 
-// Token types.
 const (
 	NA        uint8 = 0
 	DataType  uint8 = 1

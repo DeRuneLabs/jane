@@ -4,6 +4,8 @@ import "github.com/De-Rune/jane/package/jn/jnset"
 
 const (
 	Version      = `@dev_beta 0.0.1`
+	Author       = `DeruneLabs`
+	License      = `MIT License`
 	Extension    = `.jn`
 	SettingsFile = "jn.set"
 	EntryPoint   = "main"

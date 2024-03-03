@@ -20,13 +20,6 @@ type Builder struct {
 	Position int
 }
 
-func New(tokens []lexer.Token) *Builder {
-	ast := new(Builder)
-	ast.Tokens = tokens
-	ast.Position = 0
-	return ast
-}
-
 func NewBuilder(tokens []lexer.Token) *Builder {
 	ast := new(Builder)
 	ast.Tokens = tokens
@@ -36,10 +29,7 @@ func NewBuilder(tokens []lexer.Token) *Builder {
 
 func (b *Builder) PushError(token lexer.Token, err string) {
 	message := jn.Errors[err]
-	b.Errors = append(
-		b.Errors,
-		fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message),
-	)
+	b.Errors = append(b.Errors, fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message))
 }
 
 func (ast *Builder) Ended() bool {
@@ -81,15 +71,10 @@ func (b *Builder) Type(tokens []lexer.Token) {
 		b.PushError(tokens[position-1], "invalid_syntax")
 		return
 	}
-	destinationType, _ := b.DataType(tokens[position:], new(int), true)
-	b.Tree = append(b.Tree, Object{
-		Token: tokens[1],
-		Value: TypeAST{
-			Token: tokens[1],
-			Name:  tokens[1].Kind,
-			Type:  destinationType,
-		},
-	})
+	destType, _ := b.DataType(tokens[position:], new(int), true)
+	token = tokens[1]
+	typeAST := TypeAST{token, token.Kind, destType}
+	b.Tree = append(b.Tree, Object{token, typeAST})
 }
 
 func (b *Builder) Name(tokens []lexer.Token) {
@@ -124,7 +109,8 @@ func (b *Builder) Attribute(tokens []lexer.Token) {
 		return
 	}
 	attribute.Tag = tokens[index]
-	if attribute.Tag.Id != lexer.Name || attribute.Token.Column+1 != attribute.Tag.Column {
+	if attribute.Tag.Id != lexer.Name ||
+		attribute.Token.Column+1 != attribute.Tag.Column {
 		b.PushError(attribute.Tag, "invalid_syntax")
 		return
 	}
@@ -363,12 +349,7 @@ func nameType(token lexer.Token, dt *DataTypeAST) {
 	dt.Value += dt.Token.Kind
 }
 
-func (b *Builder) functionDataType(
-	token lexer.Token,
-	tokens []lexer.Token,
-	index *int,
-	dt *DataTypeAST,
-) {
+func (b *Builder) functionDataType(token lexer.Token, tokens []lexer.Token, index *int, dt *DataTypeAST) {
 	dt.Token = token
 	dt.Code = jn.Function
 	value, fun := b.FunctionDataTypeHead(tokens, index)
@@ -405,11 +386,7 @@ func (b *Builder) FunctionDataTypeHead(tokens []lexer.Token, index *int) (string
 	return "", funAST
 }
 
-func (b *Builder) pushTypeToTypes(
-	types *[]DataTypeAST,
-	tokens []lexer.Token,
-	errToken lexer.Token,
-) {
+func (b *Builder) pushTypeToTypes(types *[]DataTypeAST, tokens []lexer.Token, errToken lexer.Token) {
 	if len(tokens) == 0 {
 		b.PushError(errToken, "missing_value")
 		return
@@ -418,15 +395,11 @@ func (b *Builder) pushTypeToTypes(
 	*types = append(*types, currentDt)
 }
 
-func (b *Builder) FunctionReturnDataType(
-	tokens []lexer.Token,
-	index *int,
-) (dt DataTypeAST, ok bool) {
+func (b *Builder) FunctionReturnDataType(tokens []lexer.Token, index *int) (dt DataTypeAST, ok bool) {
 	if *index >= len(tokens) {
 		return
 	}
 	token := tokens[*index]
-	// NOTE: multi typeindex
 	if token.Id == lexer.Brace && token.Kind == "[" {
 		*index++
 		if *index >= len(tokens) {
@@ -634,7 +607,8 @@ func checkVariableSetStatementTokens(tokens []lexer.Token) bool {
 		if braceCount > 0 {
 			continue
 		}
-		if token.Id == lexer.Operator && token.Kind[len(token.Kind)-1] == '=' {
+		if token.Id == lexer.Operator &&
+			token.Kind[len(token.Kind)-1] == '=' {
 			return true
 		}
 	}
@@ -664,7 +638,8 @@ func (b *Builder) variableSetInfo(tokens []lexer.Token) (info varsetInfo) {
 		if braceCount > 0 {
 			continue
 		}
-		if token.Id == lexer.Operator && token.Kind[len(token.Kind)-1] == '=' {
+		if token.Id == lexer.Operator &&
+			token.Kind[len(token.Kind)-1] == '=' {
 			info.selectorTokens = tokens[:index]
 			if info.selectorTokens == nil {
 				b.PushError(token, "invalid_syntax")
@@ -685,25 +660,23 @@ func (b *Builder) variableSetInfo(tokens []lexer.Token) (info varsetInfo) {
 	return
 }
 
-func (b *Builder) pushVarsetSelector(
-	selectors *[]VarsetSelector,
-	last, current int,
-	info varsetInfo,
-) {
+func (b *Builder) pushVarsetSelector(selectors *[]VarsetSelector, last, current int, info varsetInfo) {
 	var selector VarsetSelector
 	selector.Expr.Tokens = info.selectorTokens[last:current]
 	if last-current == 0 {
 		b.PushError(info.selectorTokens[current-1], "missing_value")
 		return
 	}
-	if selector.Expr.Tokens[0].Id == lexer.Name && current-last > 1 &&
+	if selector.Expr.Tokens[0].Id == lexer.Name &&
+		current-last > 1 &&
 		selector.Expr.Tokens[1].Id == lexer.Colon {
 		selector.NewVariable = true
 		selector.Variable.NameToken = selector.Expr.Tokens[0]
 		selector.Variable.Name = selector.Variable.NameToken.Kind
 		selector.Variable.SetterToken = info.setter
 		if current-last > 2 {
-			selector.Variable.Type, _ = b.DataType(selector.Expr.Tokens[2:], new(int), false)
+			selector.Variable.Type, _ = b.DataType(
+				selector.Expr.Tokens[2:], new(int), false)
 		}
 	} else {
 		if selector.Expr.Tokens[0].Id == lexer.Name {
@@ -715,7 +688,7 @@ func (b *Builder) pushVarsetSelector(
 	*selectors = append(*selectors, selector)
 }
 
-func (b *Builder) varsetSelectors(info varsetInfo) []VarsetSelector {
+func (b *Builder) VarsetSelectors(info varsetInfo) []VarsetSelector {
 	var selectors []VarsetSelector
 	braceCount := 0
 	lastIndex := 0
@@ -789,7 +762,7 @@ func (b *Builder) VariableSetStatement(tokens []lexer.Token) (s StatementAST, _ 
 	var varAST VariableSetAST
 	varAST.Setter = info.setter
 	varAST.JustDeclare = info.justDeclare
-	varAST.SelectExprs = b.varsetSelectors(info)
+	varAST.SelectExprs = b.VarsetSelectors(info)
 	if !info.justDeclare {
 		varAST.ValueExprs = b.varsetExprs(info)
 	}
@@ -963,11 +936,7 @@ func (b *Builder) getWhileIterProfile(tokens []lexer.Token) WhileProfile {
 	return WhileProfile{b.Expr(tokens)}
 }
 
-func (b *Builder) pushVarsTokensPart(
-	vars *[][]lexer.Token,
-	part []lexer.Token,
-	errTok lexer.Token,
-) {
+func (b *Builder) pushVarsTokensPart(vars *[][]lexer.Token, part []lexer.Token, errTok lexer.Token) {
 	if len(part) == 0 {
 		b.PushError(errTok, "missing_value")
 	}
@@ -1039,10 +1008,7 @@ func (b *Builder) getForeachIterVars(varsTokens [][]lexer.Token) []VariableAST {
 	return vars
 }
 
-func (b *Builder) getForeachIterProfile(
-	varTokens, exprTokens []lexer.Token,
-	inTok lexer.Token,
-) ForeachProfile {
+func (b *Builder) getForeachIterProfile(varTokens, exprTokens []lexer.Token, inTok lexer.Token) ForeachProfile {
 	var profile ForeachProfile
 	profile.InToken = inTok
 	profile.Expr = b.Expr(exprTokens)
@@ -1205,12 +1171,12 @@ func (b *Builder) BreakStatement(tokens []lexer.Token) StatementAST {
 }
 
 func (b *Builder) ContinueStatement(tokens []lexer.Token) StatementAST {
-	var ContinueAST ContinueAST
-	ContinueAST.Token = tokens[0]
+	var continueAST ContinueAST
+	continueAST.Token = tokens[0]
 	if len(tokens) > 1 {
 		b.PushError(tokens[1], "invalid_syntax")
 	}
-	return StatementAST{ContinueAST.Token, ContinueAST, false}
+	return StatementAST{continueAST.Token, continueAST, false}
 }
 
 func (b *Builder) Expr(tokens []lexer.Token) (e ExprAST) {
@@ -1327,7 +1293,8 @@ func requireOperatorForProcess(token lexer.Token, index, tokensLen int) bool {
 	case lexer.Comma:
 		return false
 	case lexer.Brace:
-		if token.Kind == "(" || token.Kind == "{" {
+		if token.Kind == "(" ||
+			token.Kind == "{" {
 			return false
 		}
 	}

@@ -15,7 +15,7 @@ func CheckBitInt(value string, bit int) bool {
 	return err == nil
 }
 
-func CheckBitUint(value string, bit int) bool {
+func CheckBitUInt(value string, bit int) bool {
 	var err error
 	if strings.HasPrefix(value, "0x") {
 		_, err = strconv.ParseUint(value[2:], 16, bit)

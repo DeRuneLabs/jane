@@ -34,7 +34,8 @@ func NewParser(tokens []lexer.Token, PFI *ParseFileInfo) *Parser {
 
 func (p *Parser) PushErrorToken(token lexer.Token, err string) {
 	message := jn.Errors[err]
-	p.PFI.Errors = append(p.PFI.Errors, fmt.Sprintf("%s:%d:%d %s", token.File.Path, token.Row, token.Column, message))
+	p.PFI.Errors = append(p.PFI.Errors, fmt.Sprintf(
+		"%s:%d:%d %s", token.File.Path, token.Row, token.Column, message))
 }
 
 func (p *Parser) AppendErrors(errors ...string) {
@@ -543,6 +544,7 @@ func (p *valueProcessor) string() value {
 	var v value
 	v.ast.Value = p.token.Kind
 	v.ast.Type.Code = jn.Str
+	v.ast.Type.Value = "str"
 	p.builder.appendNode(strExprNode{p.token})
 	return v
 }
@@ -641,7 +643,7 @@ func (s solver) pointer() (v ast.ValueAST) {
 
 func (s solver) string() (v ast.ValueAST) {
 	if s.leftVal.Type.Code != s.rightVal.Type.Code {
-		s.p.PushErrorToken(s.operator, "incompatible_type")
+		s.p.PushErrorToken(s.operator, "incompatible_datatype")
 		return
 	}
 	switch s.operator.Kind {
@@ -731,7 +733,8 @@ func (s solver) signed() (v ast.ValueAST) {
 
 func (s solver) unsigned() (v ast.ValueAST) {
 	if !typesAreCompatible(s.leftVal.Type, s.rightVal.Type, true) {
-		if !isConstantNumeric(s.leftVal.Value) && !isConstantNumeric(s.rightVal.Value) {
+		if !isConstantNumeric(s.leftVal.Value) &&
+			!isConstantNumeric(s.rightVal.Value) {
 			s.p.PushErrorToken(s.operator, "incompatible_type")
 			return
 		}
@@ -1048,11 +1051,7 @@ func (p *Parser) computeOperatorPartRight(tokens []lexer.Token, b *exprBuilder) 
 	return
 }
 
-func (p *Parser) computeVariadicExprPart(
-	tokens []lexer.Token,
-	b *exprBuilder,
-	errTok lexer.Token,
-) (v value) {
+func (p *Parser) computeVariadicExprPart(tokens []lexer.Token, b *exprBuilder, errTok lexer.Token) (v value) {
 	v = p.computeValPart(tokens, b)
 	if !typeIsVariadicable(v.ast.Type) {
 		p.PushErrorToken(errTok, "variadic_with_nonvariadicable")
@@ -1085,7 +1084,6 @@ func (p *Parser) computeParenthesesRange(tokens []lexer.Token, b *exprBuilder) (
 		break
 	}
 	if len(valueTokens) == 0 && braceCount == 0 {
-
 		b.appendNode(tokenExprNode{lexer.Token{Kind: "("}})
 		defer b.appendNode(tokenExprNode{lexer.Token{Kind: ")"}})
 
@@ -1100,6 +1098,7 @@ func (p *Parser) computeParenthesesRange(tokens []lexer.Token, b *exprBuilder) (
 		return
 	}
 	v = p.computeValPart(valueTokens, b)
+
 	b.appendNode(tokenExprNode{lexer.Token{Kind: "("}})
 	defer b.appendNode(tokenExprNode{lexer.Token{Kind: ")"}})
 
@@ -1277,11 +1276,7 @@ func (p *Parser) buildEnumerableParts(tokens []lexer.Token) [][]lexer.Token {
 	return parts
 }
 
-func (p *Parser) buildArray(
-	parts [][]lexer.Token,
-	dt ast.DataTypeAST,
-	err lexer.Token,
-) (value, IExprNode) {
+func (p *Parser) buildArray(parts [][]lexer.Token, dt ast.DataTypeAST, err lexer.Token) (value, IExprNode) {
 	var v value
 	v.ast.Type = dt
 	model := arrayExpr{dataType: dt}
@@ -1305,11 +1300,7 @@ func (p *Parser) checkAnonymousFunction(fun *ast.FunctionAST) {
 	p.BlockVariables = blockVariables
 }
 
-func (p *Parser) parseFunctionCall(
-	fun ast.FunctionAST,
-	tokens []lexer.Token,
-	builder *exprBuilder,
-) {
+func (p *Parser) parseFunctionCall(fun ast.FunctionAST, tokens []lexer.Token, builder *exprBuilder) {
 	errToken := tokens[0]
 	tokens, _ = p.getRange("(", ")", tokens)
 	if tokens == nil {
@@ -1326,12 +1317,7 @@ func (p *Parser) parseFunctionCall(
 	}
 }
 
-func (p *Parser) parseArgs(
-	params []ast.ParameterAST,
-	args *[]ast.ArgAST,
-	errTok lexer.Token,
-	b *exprBuilder,
-) {
+func (p *Parser) parseArgs(params []ast.ParameterAST, args *[]ast.ArgAST, errTok lexer.Token, b *exprBuilder) {
 	parsedArgs := make([]ast.ArgAST, 0)
 	if len(params) > 0 && params[len(params)-1].Variadic {
 		if len(*args) == 0 && len(params) == 1 {
@@ -1388,12 +1374,7 @@ func (p *Parser) parseArg(param ast.ParameterAST, arg *ast.ArgAST, variadiced *b
 	go p.checkArgTypeAsync(param, value, false, arg.Token)
 }
 
-func (p *Parser) checkArgTypeAsync(
-	param ast.ParameterAST,
-	val value,
-	ignoreAny bool,
-	errTok lexer.Token,
-) {
+func (p *Parser) checkArgTypeAsync(param ast.ParameterAST, val value, ignoreAny bool, errTok lexer.Token) {
 	defer func() { p.wg.Done() }()
 	if param.Variadic {
 		p.wg.Add(1)
@@ -2007,7 +1988,7 @@ func (p *Parser) checkAssignTypeAsync(t ast.DataTypeAST, val value, ignoreAny bo
 			p.PushErrorToken(errToken, "incompatible_datatype")
 			return
 		case jn.IsUnsignedNumericType(t.Code):
-			if jnbits.CheckBitUint(val.ast.Value, jnbits.BitsizeOfType(t.Code)) {
+			if jnbits.CheckBitUInt(val.ast.Value, jnbits.BitsizeOfType(t.Code)) {
 				return
 			}
 			p.PushErrorToken(errToken, "incompatible_datatype")

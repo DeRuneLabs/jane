@@ -29,7 +29,9 @@ func typeIsArray(t ast.DataTypeAST) bool {
 }
 
 func typeIsSingle(dt ast.DataTypeAST) bool {
-	return !typeIsPointer(dt) && !typeIsArray(dt) && dt.Code != jn.Function
+	return !typeIsPointer(dt) &&
+		!typeIsArray(dt) &&
+		dt.Code != jn.Function
 }
 
 func checkValidityConstantDataType(dt ast.DataTypeAST) bool {

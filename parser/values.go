@@ -51,7 +51,7 @@ func checkIntBit(v ast.ValueAST, bit int) bool {
 	if jn.IsSignedNumericType(v.Type.Code) {
 		return jnbits.CheckBitInt(v.Value, bit)
 	}
-	return jnbits.CheckBitUint(v.Value, bit)
+	return jnbits.CheckBitUInt(v.Value, bit)
 }
 
 func checkFloatBit(v ast.ValueAST, bit int) bool {

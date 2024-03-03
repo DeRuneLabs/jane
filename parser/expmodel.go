@@ -120,15 +120,15 @@ type arrayExpr struct {
 func (a arrayExpr) String() string {
 	var cxx strings.Builder
 	cxx.WriteString(a.dataType.String())
-	cxx.WriteString("{{")
+	cxx.WriteString("({")
 	if len(a.expr) == 0 {
-		return cxx.String() + "}}"
+		return cxx.String() + "})"
 	}
 	for _, exp := range a.expr {
 		cxx.WriteString(exp.String())
 		cxx.WriteString(", ")
 	}
-	return cxx.String()[:cxx.Len()-2] + "}}"
+	return cxx.String()[:cxx.Len()-2] + "})"
 }
 
 type argsExpr struct {

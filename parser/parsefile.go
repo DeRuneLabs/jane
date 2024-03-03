@@ -14,10 +14,10 @@ type ParseFileInfo struct {
 	Routines *sync.WaitGroup
 }
 
-func ParseFile(info *ParseFileInfo) {
+func ParseFileAsync(info *ParseFileInfo) {
 	defer info.Routines.Done()
 	info.JN_CXX = ""
-	lex := lexer.NewLexer(info.File)
+	lex := lexer.NewLex(info.File)
 	tokens := lex.Tokenize()
 	if lex.Errors != nil {
 		info.Errors = lex.Errors
