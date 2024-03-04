@@ -142,134 +142,158 @@ func appendStandards(code *string) {
 // generated code in this file provide cxx functions and structures corresponding to the definition
 // in the JN source files
 
-// #pragma region JN_STANDARD_IMPORTS
-#include <iostream>
-#include <string>
-#include <functional>
-#include <vector>
-#include <locale.h>
+// region JN_STANDARD_IMPORTS
 #include <cstdint>
-#include <stdint.h>
-#include <inttypes.h>
-// #pragma endregion JN_STANDARD_IMPORTS
+#include <functional>
+#include <iostream>
+#include <locale.h>
+#include <string>
+#include <vector>
+// endregion JN_STANDARD_IMPORTS
 
-
-// #pragma region JN_BUILTIN_VALUES
+// region JN_BUILTIN_VALUES
 #define nil nullptr
-// #pragma endregion JN_BUILTIN_VALUES
+// endregion JN_BUILTIN_VALUES
 
-// #pragma region JN_RUNTIME_FUNCTIONS
-static inline void panic(const std::wstring _Msg) {
-	std::wcout << _Msg << std::endl;
-	std::exit(EXIT_FAILURE);
-}
+// region JN_CXX_API
+#define JNALLOC(_Alloc) new (std::nothrow) _Alloc
+#define panic(_Msg)                                                            \
+  std::wcout << _Msg << std::endl;                                             \
+  std::exit(EXIT_FAILURE)
 
 template <typename _Enum_t, typename _Index_t, typename _Item_t>
-static inline void foreach(const _Enum_t _Enum, const std::function<void(_Index_t, _Item_t)> _Body) {
+static inline void foreach (
+    const _Enum_t _Enum, const std::function<void(_Index_t, _Item_t)> _Body) {
   _Index_t _index{0};
-  for (auto _item: _Enum) { _Body(_index++, _item); }
+  for (auto _item : _Enum) {
+    _Body(_index++, _item);
+  }
 }
 
 template <typename _Enum_t, typename _Index_t>
-  static inline void foreach(const _Enum_t _Enum, const std::function<void(_Index_t)> _Body) {
-  _Index_t index{0};
-  for (auto _: _Enum) { _Body(index++); }
+static inline void foreach (const _Enum_t _Enum,
+                            const std::function<void(_Index_t)> _Body) {
+  _Index_t _index{0};
+  for (auto _ : _Enum) {
+    _Body(_index++);
+  }
 }
-// #pragma endregion JN_RUNTIME_FUNCTIONS
+// endregion JN_CXX_API
 
-// #pragma region JN_BUILTIN_TYPES
-typedef size_t   size;
-typedef int8_t   i8;
-typedef int16_t  i16;
-typedef int32_t  i32;
-typedef int64_t  i64;
-typedef uint8_t  u8;
+// region JN_BUILTIN_TYPES
+typedef size_t size;
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
-typedef float    f32;
-typedef double   f64;
-typedef wchar_t  rune;
+typedef float f32;
+typedef double f64;
+typedef wchar_t rune;
 
 class str {
 public:
-// #pragma region FIELDS
-	std::wstring _buffer;
-// #pragma endregion FIELDS
+  // region FIELDS
+  rune *_buffer{nil};
+  size _length{0};
+  // endregion FIELDS
 
-// #pragma region CONSTRUCTORS
-  str(void) { this->_buffer = {L""}; }
-  str(const std::wstring &_Str) { this->_buffer = _Str; }
-// #pragma endregion CONSTRUCTORS
-
-// #pragma region DESTRUCTOR
-	~str(void) { this->_buffer.clear(); }
-// #pragma endregion DESTRUCTOR
-
-// #pragma region FOREACH_SUPPORT
-	typedef rune *iterator;
-	typedef const rune *const_iterator;
-	iterator begin(void) { return &this->_buffer[0]; }
-	const_iterator begin(void) const { return &this->_buffer[0]; }
-	iterator end(void) { return &this->_buffer[this->_buffer.size()]; }
-	const_iterator end(void) const { return &this->_buffer[this->_buffer.size()]; }
-// #pragma endregion FOREACH_SUPPORT
-
-// #pragma region OPERATOR_OVERFLOWS
-	bool operator==(const str &_Str) { return this->_buffer == _Str._buffer; }
-	bool operator!=(const str &_Str) { return !(this->_buffer == _Str._buffer); }
-	str operator+(const str &_Str) { return str(this->_buffer + _Str._buffer); }
-	void operator+=(const str &_Str) { this->_buffer += _Str._buffer; }
-
-	rune& operator[](const int _Index) {
-		const u32 _length = this->_buffer.length();
-		if (_Index > 0) {
-			panic(L"stackoverflow exception:\n index is less than zero");
-		} else if (_Index >= _length) {
-			panic(L"stackoverflow exception:\nindex overflow " + std::to_wstring(_Index) + L":" + std::to_wstring(_length));
-		}
-		return this->_buffer[_Index];
-	}
-
-	friend std::wostream& operator<<(std::wostream &_Stream, const str &_Str) {
-		_Stream << _Str._buffer;
-    return _Stream;
+  // region CONSTRUCTOR
+  str(void) {
+    this->_buffer = {JNALLOC(rune)};
+    if (!this->_buffer) {
+      panic(L"string memory allocation is failed");
+    }
   }
-// #pragma endregion OPERATOR_OVERFLOWS
-};
-// #pragma endregion JN_BUILTIN_TYPES
 
-// #pragma region JN_STRUCTURES
-template <typename T>
-class array {
-public:
-// #pragma region FIELDS
-	std::vector<T> _buffer;
-// #pragma endregion FIELDS
+  str(const rune *_Str) {
+    this->_buffer = wcsdup(_Str);
+    this->_length = wcslen(this->_buffer);
+  }
+  // endregion CONSTRUCTORS
 
-// #pragma region CONSTRUCTORS
-	array<T>(void) { this->_buffer = { }; }
-	array<T>(const std::vector<T>& _Src) { this->_buffer = _Src; }
-	array<T>(std::nullptr_t) : array<T>() { }
-	array<T>(const array<T>& _Src): array<T>(_Src._buffer) { }
-// #pragma endregion CONSTRUCTORS
+  // region DESTRUCTOR
+  ~str(void) {
+    delete this->_buffer;
+    this->_buffer = nil;
+  }
+  // endregion DESTRUCTOR
 
-// #pragma region DESTRUCTOR
-	~array(void) { this->_buffer.clear(); }
-// #pragma endregion DESTRUCTOR
-
-#pragma region FOREACH_SUPPORT
-	typedef T *iterator;
-	typedef const T *const_iterator;
-	iterator begin(void) { return &this->_buffer[0]; }
+  // region FOREACH_SUPPORT
+  typedef rune *iterator;
+  typedef const rune *const_iterator;
+  iterator begin(void) { return &this->_buffer[0]; }
   const_iterator begin(void) const { return &this->_buffer[0]; }
-	iterator end(void) { return &this->_buffer[this->_buffer.size()]; }
-	const_iterator end(void) const { return &this->vector[this->vector.size()]; }
-#pragma endregion FOREACH_SUPPORT
+  iterator end(void) { return &this->_buffer[this->_length]; }
+  const_iterator end(void) const { return &this->_buffer[this->_length]; }
+  // endregion FOREACH_SUPPORT
 
-#pragma region OPERATOR_OVERFLOWS
-	bool operator==(const array<T> & _Src) {
-		const size _length = this->_buffer.size();
+  // region OPERATOR_OVERFLOWS
+  bool operator==(const str &_Str) {
+    return wcscmp(this->_buffer, _Str._buffer) == 0;
+  }
+  bool operator!=(const str &_Str) {
+    return wcscmp(this->_buffer, _Str._buffer) != 0;
+  }
+  str operator+(const str &_Str) {
+    return str(wcscat(this->_buffer, _Str._buffer));
+  }
+  void operator+=(const str &_Str) {
+    this->_buffer = wcscat(this->_buffer, _Str._buffer);
+  }
+
+  rune &operator[](const int _Index) {
+    if (_Index < 0) {
+      panic(L"stackoverflow exception:\n index is less than zero");
+    } else if (_Index >= this->_length) {
+      panic(L"stackoverflow exception:\nindex overflow " +
+            std::to_wstring(_Index) + L":" + std::to_wstring(this->_length));
+    }
+    return this->_buffer[_Index];
+  }
+
+  friend std::wostream &operator<<(std::wostream &_Stream, const str &_Str) {
+    return _Stream << _Str._buffer;
+  }
+  // endregion OPERATOR_OVERFLOWS
+};
+// endregion JN_BUILTIN_TYPES
+
+// region JN_STRUCTURES
+template <typename _Item_t> class array {
+public:
+  // region FIELDS
+  std::vector<_Item_t> _buffer;
+  // endregion FIELDS
+
+  // region CONSTRUCTORS
+  array<_Item_t>(void) { this->_buffer = {}; }
+  array<_Item_t>(const std::vector<_Item_t> &_Src) { this->_buffer = _Src; }
+  array<_Item_t>(std::nullptr_t) : array<_Item_t>() {}
+  array<_Item_t>(const array<_Item_t> &_Src) : array<_Item_t>(_Src._buffer) {}
+  // endregion CONSTRUCTORS
+
+  // region DESTRUCTOR
+  ~array<_Item_t>(void) { this->_buffer.clear(); }
+  // endregion DESTRUCTOR
+
+  // region FOREACH_SUPPORT
+  typedef _Item_t *iterator;
+  typedef const _Item_t *const_iterator;
+  iterator begin(void) { return &this->_buffer[0]; }
+  const_iterator begin(void) const { return &this->_buffer[0]; }
+  iterator end(void) { return &this->_buffer[this->_buffer.size()]; }
+  const_iterator end(void) const {
+    return &this->_buffer[this->_buffer.size()];
+  }
+  // endregion FOREACH_SUPPORT
+
+  // region OPERATOR_OVERFLOWS
+  bool operator==(const array<_Item_t> &_Src) {
+    const size _length = this->_buffer.size();
     const size _Src_length = _Src._buffer.size();
     if (_length != _Src_length) {
       return false;
@@ -279,57 +303,64 @@ public:
         return false;
       }
     }
-		return true;
-	}
+    return true;
+  }
 
-	bool operator==(std::nullptr_t) { return this->_buffer.empty(); }
-	bool operator!=(const array<T> &_Src) { return !(*this == _Src); }
-	bool operator!=(std::nullptr_t) { return !this->_buffer.empty(); }
+  bool operator==(std::nullptr_t) { return this->_buffer.empty(); }
+  bool operator!=(const array<_Item_t> &_Src) { return !(*this == _Src); }
+  bool operator!=(std::nullptr_t) { return !this->_buffer.empty(); }
 
-	T& operator[](const int _Index) {
-		const size _length = this->_buffer.size();
-		if (_Index < 0) { panic(L"stackoverflow exception:\n index is less than zero"); }
-		else if (_Index >= _length) {
-  panic(L"stackoverflow exception:\nindex overflow " + std::to_wstring(_Index) + L":" + std::to_wstring(_length));
-		}
-		return this->_buffer[_Index];
-	}
+  _Item_t &operator[](const int _Index) {
+    const size _length = this->_buffer.size();
+    if (_Index < 0) {
+      panic(L"stackoverflow exception:\n index is less than zero");
+    } else if (_Index >= _length) {
+      panic(L"stackoverflow exception:\nindex overflow " +
+            std::to_wstring(_Index) + L":" + std::to_wstring(_length));
+    }
+    return this->_buffer[_Index];
+  }
 
-  friend std::wostream& operator<<(std::wostream &_Stream, const array<T> &_Src){
-		_Stream << L"[";
-		const size _length = _Src._buffer.size();
+  friend std::wostream &operator<<(std::wostream &_Stream,
+                                   const array<_Item_t> &_Src) {
+    _Stream << L"[";
+    const size _length = _Src._buffer.size();
     for (size _index = 0; _index < _length;) {
       _Stream << _Src._buffer[_index++];
-      if (_index < _length) { _Stream << L", "; }
+      if (_index < _length) {
+        _Stream << L", ";
+      }
     }
-		_Stream << L"]";
-		return _Stream;
-	}
-// #pragma endregion OPERATOR_OVERFLOWS
+    _Stream << L"]";
+    return _Stream;
+  }
+  // endregion OPERATOR_OVERFLOWS
 };
-// #pragma endregion JN_STRUCTURES
+// endregion JN_STRUCTURES
 
-// #pragma region JN_BUILTIN_FUNCTIONS
+// region JN_BUILTIN_FUNCTIONS
 #define _print(_Obj) std::wcout << _Obj
-#define _println(_Obj) _print(_Obj); std::wcout << std::endl
-// #pragma endregion JN_BUILTIN_FUNCTIONS
+#define _println(_Obj)                                                         \
+  _print(_Obj);                                                                \
+  std::wcout << std::endl
+// endregion JN_BUILTIN_FUNCTIONS
 
-// #pragma region TRANSPILED_JN_CODE
+// region TRANSPILED_JN_CODE
 ` + *code + `
-// #pragma endregion TRANSPILED_JN_CODE
+// endregion TRANSPILED_JN_CODE
 
-// #pragma region JN_ENTRY_POINT
+// region JN_ENTRY_POINT
 int main() {
-// #pragma region JN_ENTRY_POINT_STANDARD_CODES
-	setlocale(LC_ALL, "");
-// #pragma endregion JN_ENTRY_POINT_STANDARD_CODES
-	_main();
+  // region JN_ENTRY_POINT_STANDARD_CODES
+  std::setlocale(LC_ALL, "");
+  // endregion JN_ENTRY_POINT_STANDARD_CODES
+  _main();
 
-// #pragma region JN_ENTRY_POINT_END_STANDARD_CODES
-	return EXIT_SUCCESS;
-// #pragma endregion JN_ENTRY_POINT_END_STANDARD_CODES
+  // region JN_ENTRY_POINT_END_STANDARD_CODES
+  return EXIT_SUCCESS;
+  // endregion JN_ENTRY_POINT_END_STANDARD_CODES
 }
-// #pragma endergion JN_ENTRY_POINT`
+// endregion JN_ENTRY_POINT`
 }
 
 func writeCxxOutput(info *parser.ParseFileInfo) {
