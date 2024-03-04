@@ -55,12 +55,12 @@ func (p *Parser) CxxTypes() string {
 		return ""
 	}
 	var cxx strings.Builder
-	cxx.WriteString("#pragma region TYPES\n")
+	cxx.WriteString("// region TYPES\n")
 	for _, t := range p.Types {
 		cxx.WriteString(t.String())
 		cxx.WriteByte('\n')
 	}
-	cxx.WriteString("#pragma endregion TYPES")
+	cxx.WriteString("// endregion TYPES")
 	return cxx.String()
 }
 
@@ -69,12 +69,12 @@ func (p *Parser) CxxPrototypes() string {
 		return ""
 	}
 	var cxx strings.Builder
-	cxx.WriteString("#pragma region PROTOTYPES\n")
+	cxx.WriteString("// region PROTOTYPES\n")
 	for _, fun := range p.Functions {
 		cxx.WriteString(fun.Prototype())
 		cxx.WriteByte('\n')
 	}
-	cxx.WriteString("#pragma endregion PROTOTYPES")
+	cxx.WriteString("// endregion PROTOTYPES")
 	return cxx.String()
 }
 
@@ -83,24 +83,24 @@ func (p *Parser) CxxGlobalVariables() string {
 		return ""
 	}
 	var cxx strings.Builder
-	cxx.WriteString("#pragma region GLOBAL_VARIABLES\n")
+	cxx.WriteString("// region GLOBAL_VARIABLES\n")
 	for _, va := range p.GlobalVariables {
 		cxx.WriteString(va.String())
 		cxx.WriteByte('\n')
 	}
-	cxx.WriteString("#pragma endregion GLOBAL_VARIABLES")
+	cxx.WriteString("// endregion GLOBAL_VARIABLES")
 	return cxx.String()
 }
 
 func (p *Parser) CxxFunctions() string {
 	var cxx strings.Builder
-	cxx.WriteString("#pragma region FUNCTIONS")
+	cxx.WriteString("// region FUNCTIONS")
 	cxx.WriteString("\n\n")
 	for _, fun := range p.Functions {
 		cxx.WriteString(fun.String())
 		cxx.WriteString("\n\n")
 	}
-	cxx.WriteString("#pragma endregion FUNCTIONS")
+	cxx.WriteString("// endregion FUNCTIONS")
 	return cxx.String()
 }
 
@@ -212,7 +212,14 @@ func (p *Parser) Variable(varAST ast.VariableAST) ast.VariableAST {
 	if varAST.Type.Code != jn.Void {
 		if varAST.SetterToken.Id != lexer.NA {
 			p.wg.Add(1)
-			go p.checkAssignTypeAsync(varAST.Type, val, false, varAST.NameToken)
+			go assignChecker{
+				p,
+				varAST.Const,
+				varAST.Type,
+				val,
+				false,
+				varAST.NameToken,
+			}.checkAssignTypeAsync()
 		} else {
 			var valueToken lexer.Token
 			valueToken.Id = lexer.Value
@@ -233,6 +240,7 @@ func (p *Parser) Variable(varAST ast.VariableAST) ast.VariableAST {
 		} else {
 			varAST.Type = val.ast.Type
 			p.checkValidityForAutoType(varAST.Type, varAST.SetterToken)
+			p.checkAssignConst(varAST.Const, varAST.Type, val, varAST.SetterToken)
 		}
 	}
 	if varAST.Const {
@@ -577,6 +585,8 @@ func (p *valueProcessor) nil() value {
 
 func (p *valueProcessor) numeric() value {
 	var v value
+	v.ast.Value = p.token.Kind
+	p.builder.appendNode(exprNode{p.token.Kind})
 	if strings.Contains(p.token.Kind, ".") ||
 		strings.ContainsAny(p.token.Kind, "eE") {
 		v.ast.Type.Code = jn.F64
@@ -590,8 +600,6 @@ func (p *valueProcessor) numeric() value {
 			v.ast.Type.Value = "i64"
 		}
 	}
-	v.ast.Value = p.token.Kind
-	p.builder.appendNode(exprNode{p.token.Kind})
 	return v
 }
 
@@ -1092,19 +1100,56 @@ func (p *Parser) computeTryCast(tokens []lexer.Token, builder *exprBuilder) (v v
 }
 
 func (p *Parser) computeCast(v value, t ast.DataTypeAST, errToken lexer.Token) value {
-	v.ast.Type = t
-	v.constant = false
-	v.volatile = false
 	switch {
-	case typeIsPtr(t) && p.checkCastPtr(v.ast.Type, t, errToken):
+	case typeIsPtr(t):
+		p.checkCastPtr(v.ast.Type, errToken)
+	case typeIsSingle(t):
+		p.checkCastSingle(v.ast.Type, t.Code, errToken)
 	default:
 		p.PushErrorToken(errToken, "type_notsupports_casting")
 	}
+	v.ast.Type = t
+	v.constant = false
+	v.volatile = false
 	return v
 }
 
-func (p *Parser) checkCastPtr(vt, dt ast.DataTypeAST, errToken lexer.Token) bool {
-	return typeIsPtr(vt) || jn.IsIntegerType(dt.Code)
+func (p *Parser) checkCastSingle(vt ast.DataTypeAST, t uint8, errToken lexer.Token) {
+	switch {
+	case jn.IsIntegerType(t):
+		p.checkCastInteger(vt, errToken)
+	case jn.IsNumericType(t):
+		p.checkCastNumeric(vt, errToken)
+	default:
+		p.PushErrorToken(errToken, "type_notsupports_casting")
+	}
+}
+
+func (p *Parser) checkCastInteger(vt ast.DataTypeAST, errToken lexer.Token) {
+	if typeIsPtr(vt) {
+		return
+	}
+	if typeIsSingle(vt) && jn.IsNumericType(vt.Code) {
+		return
+	}
+	p.PushErrorToken(errToken, "type_notsupports_casting")
+}
+
+func (p *Parser) checkCastNumeric(vt ast.DataTypeAST, errToken lexer.Token) {
+	if typeIsSingle(vt) && jn.IsNumericType(vt.Code) {
+		return
+	}
+	p.PushErrorToken(errToken, "type_notsupports_casting")
+}
+
+func (p *Parser) checkCastPtr(vt ast.DataTypeAST, errToken lexer.Token) {
+	if typeIsPtr(vt) {
+		return
+	}
+	if typeIsSingle(vt) && jn.IsIntegerType(vt.Code) {
+		return
+	}
+	p.PushErrorToken(errToken, "type_notsupports_casting")
 }
 
 func (p *Parser) computeOperatorPartRight(tokens []lexer.Token, b *exprBuilder) (v value) {
@@ -1361,7 +1406,14 @@ func (p *Parser) buildArray(
 		partValue, expModel := p.computeTokens(part)
 		model.expr = append(model.expr, expModel)
 		p.wg.Add(1)
-		go p.checkAssignTypeAsync(elementType, partValue, false, part[0])
+		go assignChecker{
+			p,
+			false,
+			elementType,
+			partValue,
+			false,
+			part[0],
+		}.checkAssignTypeAsync()
 	}
 	return v, model
 }
@@ -1466,16 +1518,15 @@ func (p *Parser) checkArgTypeAsync(
 	errTok lexer.Token,
 ) {
 	defer func() { p.wg.Done() }()
-	if typeIsMut(param.Type) && val.constant && !param.Const {
-		p.PushErrorToken(errTok, "constant_pushed_nonconstant_parameter")
-	}
-	if param.Variadic {
-		p.wg.Add(1)
-		go p.checkAssignTypeAsync(param.Type, val, false, errTok)
-		return
-	}
 	p.wg.Add(1)
-	go p.checkAssignTypeAsync(param.Type, val, false, errTok)
+	go assignChecker{
+		p,
+		param.Const,
+		param.Type,
+		val,
+		false,
+		errTok,
+	}.checkAssignTypeAsync()
 }
 
 func (p *Parser) getRange(open, close string, tokens []lexer.Token) (_ []lexer.Token, ok bool) {
@@ -1604,7 +1655,14 @@ func (rc *returnChecker) checkValueTypes() {
 			rc.p.PushErrorToken(rc.retAST.Token, "overflow_return")
 		}
 		rc.p.wg.Add(1)
-		go rc.p.checkAssignTypeAsync(rc.fun.ReturnType, rc.values[0], true, rc.retAST.Token)
+		go assignChecker{
+			rc.p,
+			false,
+			rc.fun.ReturnType,
+			rc.values[0],
+			true,
+			rc.retAST.Token,
+		}.checkAssignTypeAsync()
 		return
 	}
 	rc.retAST.Expr.Model = rc.expModel
@@ -1619,7 +1677,14 @@ func (rc *returnChecker) checkValueTypes() {
 			break
 		}
 		rc.p.wg.Add(1)
-		go rc.p.checkAssignTypeAsync(t, rc.values[index], true, rc.retAST.Token)
+		go assignChecker{
+			rc.p,
+			false,
+			t,
+			rc.values[index],
+			true,
+			rc.retAST.Token,
+		}.checkAssignTypeAsync()
 	}
 }
 
@@ -1691,7 +1756,7 @@ func (p *Parser) checkOneVarset(vsAST *ast.VariableSetAST) {
 	if !p.checkVarsetOperation(selected, vsAST.Setter) {
 		return
 	}
-	value, model := p.computeExpr(vsAST.ValueExprs[0])
+	val, model := p.computeExpr(vsAST.ValueExprs[0])
 	vsAST.ValueExprs[0] = model.ExprAST()
 	if vsAST.Setter.Kind != "=" {
 		vsAST.Setter.Kind = vsAST.Setter.Kind[:len(vsAST.Setter.Kind)-1]
@@ -1700,14 +1765,21 @@ func (p *Parser) checkOneVarset(vsAST *ast.VariableSetAST) {
 			left:     vsAST.SelectExprs[0].Expr.Tokens,
 			leftVal:  selected.ast,
 			right:    vsAST.ValueExprs[0].Tokens,
-			rightVal: value.ast,
+			rightVal: val.ast,
 			operator: vsAST.Setter,
 		}
-		value.ast = solver.Solve()
+		val.ast = solver.Solve()
 		vsAST.Setter.Kind += "="
 	}
 	p.wg.Add(1)
-	go p.checkAssignTypeAsync(selected.ast.Type, value, false, vsAST.Setter)
+	go assignChecker{
+		p,
+		selected.constant,
+		selected.ast.Type,
+		val,
+		false,
+		vsAST.Setter,
+	}.checkAssignTypeAsync()
 }
 
 func (p *Parser) parseVarsetSelections(vsAST *ast.VariableSetAST) {
@@ -1759,7 +1831,14 @@ func (p *Parser) processMultiVarset(vsAST *ast.VariableSetAST, vals []value) {
 				return
 			}
 			p.wg.Add(1)
-			go p.checkAssignTypeAsync(selected.ast.Type, val, false, vsAST.Setter)
+			go assignChecker{
+				p,
+				selected.constant,
+				selected.ast.Type,
+				val,
+				false,
+				vsAST.Setter,
+			}.checkAssignTypeAsync()
 			continue
 		}
 		selector.Variable.Tag = val
@@ -2051,37 +2130,53 @@ func (p *Parser) checkMultiTypeAsync(
 	}
 }
 
-func (p *Parser) checkAssignTypeAsync(
+func (p *Parser) checkAssignConst(
+	constant bool,
 	t ast.DataTypeAST,
 	val value,
-	ignoreAny bool,
 	errToken lexer.Token,
 ) {
-	defer func() { p.wg.Done() }()
-	if typeIsSingle(t) && isConstantNumeric(val.ast.Value) {
+	if typeIsMut(t) && val.constant && !constant {
+		p.PushErrorToken(errToken, "constant_assignto_nonconstant")
+	}
+}
+
+type assignChecker struct {
+	p         *Parser
+	constant  bool
+	t         ast.DataTypeAST
+	val       value
+	ignoreAny bool
+	errToken  lexer.Token
+}
+
+func (ac assignChecker) checkAssignTypeAsync() {
+	defer func() { ac.p.wg.Done() }()
+	ac.p.checkAssignConst(ac.constant, ac.t, ac.val, ac.errToken)
+	if typeIsSingle(ac.t) && isConstantNumeric(ac.val.ast.Value) {
 		switch {
-		case jn.IsSignedIntegerType(t.Code):
-			if jnbits.CheckBitInt(val.ast.Value, jnbits.BitsizeOfType(t.Code)) {
+		case jn.IsSignedIntegerType(ac.t.Code):
+			if jnbits.CheckBitInt(ac.val.ast.Value, jnbits.BitsizeOfType(ac.t.Code)) {
 				return
 			}
-			p.PushErrorToken(errToken, "incompatible_datatype")
+			ac.p.PushErrorToken(ac.errToken, "incompatible_datatype")
 			return
-		case jn.IsFloatType(t.Code):
-			if checkFloatBit(val.ast, jnbits.BitsizeOfType(t.Code)) {
+		case jn.IsFloatType(ac.t.Code):
+			if checkFloatBit(ac.val.ast, jnbits.BitsizeOfType(ac.t.Code)) {
 				return
 			}
-			p.PushErrorToken(errToken, "incompatible_datatype")
+			ac.p.PushErrorToken(ac.errToken, "incompatible_datatype")
 			return
-		case jn.IsUnsignedNumericType(t.Code):
-			if jnbits.CheckBitUInt(val.ast.Value, jnbits.BitsizeOfType(t.Code)) {
+		case jn.IsUnsignedNumericType(ac.t.Code):
+			if jnbits.CheckBitUInt(ac.val.ast.Value, jnbits.BitsizeOfType(ac.t.Code)) {
 				return
 			}
-			p.PushErrorToken(errToken, "incompatible_datatype")
+			ac.p.PushErrorToken(ac.errToken, "incompatible_datatype")
 			return
 		}
 	}
-	p.wg.Add(1)
-	go p.checkTypeAsync(t, val.ast.Type, ignoreAny, errToken)
+	ac.p.wg.Add(1)
+	go ac.p.checkTypeAsync(ac.t, ac.val.ast.Type, ac.ignoreAny, ac.errToken)
 }
 
 func (p *Parser) checkTypeAsync(real, check ast.DataTypeAST, ignoreAny bool, errToken lexer.Token) {
