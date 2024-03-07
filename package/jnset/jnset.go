@@ -16,7 +16,7 @@ func Load(bytes []byte) (*JnSet, error) {
 		CxxOutDir:  "./dist",
 		CxxOutName: "jn.cxx",
 		OutName:    "main",
-		Language:   "default",
+		Language:   "",
 	}
 	err := json.Unmarshal(bytes, &set)
 	if err != nil {
