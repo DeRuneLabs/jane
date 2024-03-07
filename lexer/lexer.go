@@ -33,13 +33,13 @@ func NewLexer(f *jnio.File) *Lexer {
 	return lex
 }
 
-func (lex *Lexer) pusherr(err string) {
+func (lex *Lexer) pusherr(key string, args ...interface{}) {
 	lex.Logs = append(lex.Logs, jnlog.CompilerLog{
 		Type:   jnlog.Err,
 		Row:    lex.Row,
 		Column: lex.Column,
 		Path:   lex.File.Path,
-		Msg:    jn.Errs[err],
+		Msg:    jn.GetErr(key, args...),
 	})
 }
 
@@ -440,8 +440,9 @@ func (lex *Lexer) Token() Token {
 			tok.Id = Value
 			break
 		}
-		lex.pusherr("invalid_token")
-		lex.Column++
+		r, sz := utf8.DecodeRuneInString(txt)
+		lex.pusherr("invalid_token", r)
+		lex.Column += sz
 		lex.Pos++
 		return tok
 	}

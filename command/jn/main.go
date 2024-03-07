@@ -135,7 +135,6 @@ func init() {
 	if i == -1 {
 		i = len(arg)
 	}
-	loadJnSet()
 	if processCommand(arg[:i], arg[i:]) {
 		os.Exit(0)
 	}
@@ -501,6 +500,7 @@ func writeOuput(path, content string) {
 }
 
 func compile(path string, main, justDefs bool) *parser.Parser {
+	loadJnSet()
 	p := parser.New(nil)
 	inf, err := os.Stat(jn.StdlibPath)
 	if err != nil || !inf.IsDir() {
