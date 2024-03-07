@@ -1,0 +1,25 @@
+type TEST_TYPEDEF i32
+
+testing_variadic_param(ln_every bool, ...values i32) {
+  iter _, i: in values {
+    if ln_every {
+      println(i)
+    }
+    else {
+      println(i)
+    }
+  }
+}
+
+testing_looping() {
+  iter index:i32 in "Khairanabilla" {
+    println(index)
+  }
+}
+
+main() {
+  println("testing variadic")
+  testing_variadic_param(true, 10, 20)
+  println("testing iter index")
+  testing_looping()
+}

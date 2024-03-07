@@ -5,11 +5,13 @@ import (
 	"sync/atomic"
 
 	"github.com/De-Rune/jane/ast"
+	"github.com/De-Rune/jane/package/jnapi"
 )
 
 type function struct {
-	Ast        ast.FunctionAST
-	Attributes []ast.AttributeAST
+	Ast        ast.Func
+	Attributes []ast.Attribute
+	Desc       string
 }
 
 func (f function) String() string {
@@ -24,9 +26,9 @@ func (f function) String() string {
 func (f function) Head() string {
 	var cxx strings.Builder
 	cxx.WriteString(attributesToString(f.Attributes))
-	cxx.WriteString(f.Ast.ReturnType.String())
+	cxx.WriteString(f.Ast.RetType.String())
 	cxx.WriteByte(' ')
-	cxx.WriteString(f.Ast.Name)
+	cxx.WriteString(jnapi.AsId(f.Ast.Id))
 	cxx.WriteString(paramsToCxx(f.Ast.Params))
 	return cxx.String()
 }
@@ -34,9 +36,9 @@ func (f function) Head() string {
 func (f function) Prototype() string {
 	var cxx strings.Builder
 	cxx.WriteString(attributesToString(f.Attributes))
-	cxx.WriteString(f.Ast.ReturnType.String())
+	cxx.WriteString(f.Ast.RetType.String())
 	cxx.WriteByte(' ')
-	cxx.WriteString(f.Ast.Name)
+	cxx.WriteString(jnapi.AsId(f.Ast.Id))
 	cxx.WriteString(f.PrototypeParams())
 	cxx.WriteByte(';')
 	return cxx.String()
@@ -55,16 +57,16 @@ func (f function) PrototypeParams() string {
 	return cxx.String()[:cxx.Len()-2] + ")"
 }
 
-func attributesToString(attributes []ast.AttributeAST) string {
+func attributesToString(attributes []ast.Attribute) string {
 	var cxx strings.Builder
-	for _, attribute := range attributes {
-		cxx.WriteString(attribute.String())
+	for _, attr := range attributes {
+		cxx.WriteString(attr.String())
 		cxx.WriteByte(' ')
 	}
 	return cxx.String()
 }
 
-func paramsToCxx(params []ast.ParameterAST) string {
+func paramsToCxx(params []ast.Parameter) string {
 	if len(params) == 0 {
 		return "(void)"
 	}

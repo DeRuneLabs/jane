@@ -1,41 +1,45 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/fs"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/De-Rune/jane/package/io"
+	"github.com/De-Rune/jane/documenter"
 	"github.com/De-Rune/jane/package/jn"
-	"github.com/De-Rune/jane/package/jn/jnset"
+	"github.com/De-Rune/jane/package/jnio"
+	"github.com/De-Rune/jane/package/jnlog"
+	"github.com/De-Rune/jane/package/jnset"
 	"github.com/De-Rune/jane/parser"
 )
 
 func help(cmd string) {
 	if cmd != "" {
-		println("this module can only by used as a single")
-		return
+		println("this module can only be used on a single")
 	}
-	helpContent := [][]string{
-		{"help", "show help"},
+	helpmap := [][]string{
+		{"help", "show help message"},
 		{"version", "show version"},
-		{"init", "initialize project jane"},
+		{"init", "initialize project"},
+		{"doc", "documentize jn source code"},
 	}
-	maxlen := len(helpContent[0][0])
-	for _, part := range helpContent {
-		length := len(part[0])
-		if length > maxlen {
-			maxlen = length
+	max := len(helpmap[0][0])
+	for _, key := range helpmap {
+		len := len(key[0])
+		if len > max {
+			max = len
 		}
 	}
 	var sb strings.Builder
 	const space = 5
-	for _, part := range helpContent {
+	for _, part := range helpmap {
 		sb.WriteString(part[0])
-		sb.WriteString(strings.Repeat(" ", (maxlen-len(part[0]))+space))
+		sb.WriteString(strings.Repeat(" ", (max-len(part[0]))+space))
 		sb.WriteString(part[1])
 		sb.WriteByte('\n')
 	}
@@ -44,27 +48,52 @@ func help(cmd string) {
 
 func version(cmd string) {
 	if cmd != "" {
-		println("this module can only by used as a single")
+		println("this module can only be used on a single")
 		return
 	}
-	println("Jane Programming language\n" + jn.Version)
+	println("Jane Programming Language\n" + jn.Version)
 }
 
 func initProject(cmd string) {
 	if cmd != "" {
-		println("this module can only by used as a single")
+		println("this module can only be used on a single")
 		return
 	}
-	err := io.WriteFileTruncate(jn.SettingsFile, []byte(`{
-		"cxx_out_dir": "./dist/",
-		"cxx_out_name": "jn.cxx",
-		"out_name": "main"
-	  }`))
+	txt := []byte(`{
+  "cxx_out_dir": "./dist/",
+  "cxx_out_name": "jn.cxx",
+  "out_name": "main",
+  "language": ""
+}`)
+	err := ioutil.WriteFile(jn.SettingsFile, txt, 0666)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
 	}
-	println("initialized project")
+	println("project initialized")
+}
+
+func doc(cmd string) {
+	cmd = strings.TrimSpace(cmd)
+	paths := strings.SplitN(cmd, " ", -1)
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		p := compile(path, false, true)
+		if p == nil {
+			continue
+		}
+		if printlogs(p) {
+			fmt.Println(jn.GetErr("doc_couldnt_generated", path))
+			continue
+		}
+		docjson, err := documenter.Documentize(p)
+		if err != nil {
+			fmt.Println(jn.GetErr("error", err.Error()))
+			continue
+		}
+		path = filepath.Join(jn.JnSet.CxxOutDir, path+jn.DocExt)
+		writeOuput(path, docjson)
+	}
 }
 
 func processCommand(namespace, cmd string) bool {
@@ -75,6 +104,8 @@ func processCommand(namespace, cmd string) bool {
 		version(cmd)
 	case "init":
 		initProject(cmd)
+	case "doc":
+		doc(cmd)
 	default:
 		return false
 	}
@@ -82,7 +113,15 @@ func processCommand(namespace, cmd string) bool {
 }
 
 func init() {
-	jn.ExecutablePath = filepath.Dir(os.Args[0])
+	execp, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		println(err.Error())
+		os.Exit(0)
+	}
+	jn.ExecPath = execp
+	jn.StdlibPath = filepath.Join(jn.ExecPath, jn.Stdlib)
+	jn.LangsPath = filepath.Join(jn.ExecPath, jn.Langs)
+
 	if len(os.Args) < 2 {
 		os.Exit(0)
 	}
@@ -92,19 +131,89 @@ func init() {
 	}
 	os.Args[0] = sb.String()[1:]
 	arg := os.Args[0]
-	index := strings.Index(arg, " ")
-	if index == -1 {
-		index = len(arg)
+	i := strings.Index(arg, " ")
+	if i == -1 {
+		i = len(arg)
 	}
-	if processCommand(arg[:index], arg[index:]) {
+	if processCommand(arg[:i], arg[i:]) {
 		os.Exit(0)
 	}
+}
+
+func loadLangWarns(path string, infos []fs.FileInfo) {
+	i := -1
+	for j, f := range infos {
+		if f.IsDir() || f.Name() != "warns.json" {
+			continue
+		}
+		i = j
+		path = filepath.Join(path, f.Name())
+		break
+	}
+	if i == -1 {
+		return
+	}
+	bytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		println("language's warning couldn't loaded (using default)")
+		println(err.Error())
+		return
+	}
+	err = json.Unmarshal(bytes, &jn.Warns)
+	if err != nil {
+		println("language's warning couldn't loaded (using default)")
+		println(err.Error())
+		return
+	}
+}
+
+func loadLangErrs(path string, infos []fs.FileInfo) {
+	i := -1
+	for j, f := range infos {
+		if f.IsDir() || f.Name() != "errs.json" {
+			continue
+		}
+		i = j
+		path = filepath.Join(path, f.Name())
+		break
+	}
+	if i == -1 {
+		return
+	}
+	bytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		println("language's error couldn't loaded (using default)")
+		println(err.Error())
+		return
+	}
+	err = json.Unmarshal(bytes, &jn.Errs)
+	if err != nil {
+		println("language's error couldn't loaded (using default)")
+		println(err.Error())
+		return
+	}
+}
+
+func loadLang() {
+	lang := strings.TrimSpace(jn.JnSet.Language)
+	if lang == "" || lang == "default" {
+		return
+	}
+	path := filepath.Join(jn.LangsPath, lang)
+	infos, err := ioutil.ReadDir(path)
+	if err != nil {
+		println("language's couldn't loaded (using default)")
+		println(err.Error())
+		return
+	}
+	loadLangWarns(path, infos)
+	loadLangErrs(path, infos)
 }
 
 func loadJnSet() {
 	info, err := os.Stat(jn.SettingsFile)
 	if err != nil || info.IsDir() {
-		println(`jn settings file ("` + jn.SettingsFile + `") is not found`)
+		println(`jn settings file ("` + jn.SettingsFile + `") not found`)
 		os.Exit(0)
 	}
 	bytes, err := os.ReadFile(jn.SettingsFile)
@@ -114,249 +223,314 @@ func loadJnSet() {
 	}
 	jn.JnSet, err = jnset.Load(bytes)
 	if err != nil {
-		println("jn settings has error")
+		println("jn settings errors;")
 		println(err.Error())
 		os.Exit(0)
 	}
+	loadLang()
 }
 
-func printErrors(errors []string) {
-	defer os.Exit(0)
-	for _, message := range errors {
-		fmt.Println(message)
+func printlogs(p *parser.Parser) bool {
+	var str strings.Builder
+	for _, log := range p.Warns {
+		switch log.Type {
+		case jnlog.FlatWarn:
+			str.WriteString("WARNING: ")
+			str.WriteString(log.Msg)
+		case jnlog.Warn:
+			str.WriteString("WARNING: ")
+			str.WriteString(log.Path)
+			str.WriteByte(':')
+			str.WriteString(fmt.Sprint(log.Row))
+			str.WriteByte(':')
+			str.WriteString(fmt.Sprint(log.Column))
+			str.WriteByte(' ')
+			str.WriteString(log.Msg)
+		}
+		str.WriteByte('\n')
 	}
+	for _, log := range p.Errs {
+		switch log.Type {
+		case jnlog.FlatErr:
+			str.WriteString("ERROR: ")
+			str.WriteString(log.Msg)
+		case jnlog.Err:
+			str.WriteString("ERROR: ")
+			str.WriteString(log.Path)
+			str.WriteByte(':')
+			str.WriteString(fmt.Sprint(log.Row))
+			str.WriteByte(':')
+			str.WriteString(fmt.Sprint(log.Column))
+			str.WriteByte(' ')
+			str.WriteString(log.Msg)
+		}
+		str.WriteByte('\n')
+	}
+	print(str.String())
+	return len(p.Errs) > 0
 }
 
-func appendStandards(code *string) {
+func appendStandard(code *string) {
 	year, month, day := time.Now().Date()
 	hour, min, _ := time.Now().Clock()
-	timeString := fmt.Sprintf("%d/%d/%d %d.%d (DD/MM/YYYY) (HH.MM)", day, month, year, hour, min)
+	timeStr := fmt.Sprintf("%d/%d/%d %d.%d (DD/MM/YYYY) (HH.MM)", day, month, year, hour, min)
 	*code = `// JN compiler version:		` + jn.Version + `
-// Date: 					` + timeString + `
+// Date: 					` + timeStr + `
 // Author:  				` + jn.Author + `
 // License: 				` + jn.License + `
 
-// this file contains cxx module code which is automatically generated by JN compiler.
-// generated code in this file provide cxx functions and structures corresponding to the definition
-// in the JN source files
+// this file contains cxx module code which is automatically generated by JN
+// compiler. generated code in this file provide cxx functions and structures
+// corresponding to the definition in the JN source files
 
-#pragma region JN_STANDARD_IMPORTS
-#include <iostream>
-#include <string>
-#include <functional>
-#include <vector>
-#include <locale.h>
+// region JN_STANDARD_IMPORTS
+#include <codecvt>
 #include <cstdint>
-#pragma endregion JN_STANDARD_IMPORTS
+#include <functional>
+#include <iostream>
+#include <locale>
+#include <string>
+#include <type_traits>
+#include <vector>
+// endregion JN_STANDARD_IMPORTS
 
-#pragma region JN_RUNTIME_FUNCTIONS
-static inline void panic(const std::wstring message) {
-	std::wcout << message << std::endl;
-	std::exit(1);
+// region JN_CXX_API
+// region JN_BUILTIN_VALUES
+#define nil nullptr
+// endregion JN_BUILTIN_VALUES
+
+// region JN_MISC
+class exception : public std::exception {
+private:
+  std::basic_string<char> _buffer;
+
+public:
+  exception(const char *_Str) { this->_buffer = _Str; }
+  const char *what() const throw() { return this->_buffer.c_str(); }
+};
+
+#define JNALLOC(_Alloc) new (std::nothrow) _Alloc
+#define JNTHROW(_Msg) throw exception(_Msg)
+
+template <typename _Enum_t, typename _Index_t, typename _Item_t>
+static inline void foreach (
+    const _Enum_t _Enum, const std::function<void(_Index_t, _Item_t)> _Body) {
+  _Index_t _index{0};
+  for (auto _item : _Enum) {
+    _Body(_index++, _item);
+  }
 }
 
-template <typename ET, typename IT, typename ETET>
-static inline void foreach(ET enumerable, std::function<void(IT index, ETET element)> block) {
-	IT index = 0;
-	for (auto element : enumerable) { block(index++, element); }
+template <typename _Enum_t, typename _Index_t>
+static inline void foreach (const _Enum_t _Enum,
+                            const std::function<void(_Index_t)> _Body) {
+  _Index_t _index{0};
+  for (auto begin = _Enum.begin(), end = _Enum.end(); begin < end; ++begin) {
+    _Body(_index++);
+  }
 }
+// endregion JN_MISC
 
-template <typename ET, typename IT>
-static inline void foreach(ET enumerable, std::function<void(IT index)> block) {
-	IT index = 0;
-	for (auto element : enumerable) { block(index++); }
-}
-#pragma endregion JN_RUNTIME_FUNCTIONS
-
-#pragma region JN_BUILTIN_TYPES
-typedef size_t   size;
-typedef int8_t   i8;
-typedef int16_t  i16;
-typedef int32_t  i32;
-typedef int64_t  i64;
-typedef uint8_t  u8;
+// region JN_BUILTIN_TYPES
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+typedef ssize_t ssize;
+typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
-typedef float    f32;
-typedef double   f64;
-typedef wchar_t  rune;
+typedef size_t size;
+typedef float f32;
+typedef double f64;
+typedef wchar_t rune;
+// endregion JN_BUILTIN_TYPES
 
-class str {
+class str : public std::basic_string<rune> {
 public:
-#pragma region FIELDS
-	std::wstring string;
-#pragma endregion FIELDS
-
-#pragma region CONSTRUCTORS
-	str(const std::wstring& string) { this->string = string; }
-	str(const rune* string) { this->string = string; }
-#pragma endregion CONSTRUCTORS
-
-#pragma region DESTRUCTOR
-	~str() { this->string.clear(); }
-#pragma endregion DESTRUCTOR
-
-#pragma region FOREACH_SUPPORT
-	typedef rune *iterator;
-	typedef const rune *const_iterator;
-	iterator begin() { return &this->string[0]; }
-	const_iterator begin() const { return &this->string[0]; }
-	iterator end() { return &this->string[this->string.size()]; }
-	const_iterator end() const { return &this->string[this->string.size()]; }
-#pragma endregion FOREACH_SUPPORT
-
-#pragma region OPERATOR_OVERFLOWS
-	bool operator==(const str& string) { return this->string == string.string; }
-	bool operator!=(const str& string) { return !(this->string == string.string); }
-	str operator+(const str& string) { return str(this->string + string.string); }
-	void operator+=(const str& string) { this->string += string.string; }
-
-	rune& operator[](const int index) {
-		const u32 length = this->string.length();
-		if (index > 0) {
-			panic(L"stackoverflow exception:\n index is less than zero");
-		} else if (index >= length) {
-			panic(L"stackoverflow exception:\nindex overflow " + std::to_wstring(index) + L":" + std::to_wstring(length));
-		}
-		return this->string[index];
-	}
-
-	friend std::wostream& operator<<(std::wostream &os, const str& string) {
-		os << string.string;
-		return os;
-	}
-#pragma endregion OPERATOR_OVERFLOWS
+  // region CONSTRUCTOR
+  str(void) : str(L"") {}
+  str(const rune *_Str) { this->assign(_Str); }
+  str(const std::basic_string<rune> _Src) : str(_Src.c_str()) {}
+  // endregion CONSTRUCTOR
 };
-#pragma endregion JN_BUILTIN_TYPES
+// endregion JN_BUILTIN_TYPES
 
-#pragma region JN_BUILTIN_VALUES
-#define nil nullptr
-#pragma endregion JN_BUILTIN_VALUES
-
-#pragma region JN_STRUCTURES
-template <typename T>
-class array {
+// region JN_STRUCTURES
+template <typename _Item_t> class array {
 public:
-#pragma region FIELDS
-	std::vector<T> vector;
-#pragma endregion FIELDS
+  // region FIELDS
+  std::vector<_Item_t> _buffer;
+  // endregion FIELDS
 
-#pragma region CONSTRUCTORS
-	array() { this->vector = { }; }
-	array(const std::vector<T>& vector) { this->vector = vector; }
-	array(std::nullptr_t) : array() { }
-	array(const array<T>& arr): array(std::vector<T>(arr.vector)) { }
-#pragma endregion CONSTRUCTORS
+  // region CONSTRUCTORS
+  array<_Item_t>(void) noexcept { this->_buffer = {}; }
+  array<_Item_t>(const std::vector<_Item_t> &_Src) noexcept {
+    this->_buffer = _Src;
+  }
+  array<_Item_t>(const std::nullptr_t) noexcept : array<_Item_t>() {}
+  array<_Item_t>(const array<_Item_t> &_Src) noexcept
+      : array<_Item_t>(_Src._buffer) {}
 
-#pragma region DESTRUCTOR
-	~array() { this->vector.clear(); }
-#pragma endregion DESTRUCTOR
+  array<_Item_t>(const str _Str) {
+    if (std::is_same<_Item_t, rune>::value) {
+      this->_buffer = std::vector<_Item_t>(_Str.begin(), _Str.end());
+      return;
+    }
+    if (std::is_same<_Item_t, u8>::value) {
+      std::wstring_convert<std::codecvt_utf8_utf16<rune>> _conv;
+      std::string _bytes = _conv.to_bytes(_Str);
+      this->_buffer = std::vector<_Item_t>(_bytes.begin(), _bytes.end());
+      return;
+    }
+  }
+  // endregion CONSTRUCTORS
 
-#pragma region FOREACH_SUPPORT
-	typedef T *iterator;
-	typedef const T *const_iterator;
-	iterator begin() { return &this->vector[0]; }
-	iterator end() { return &this->vector[this->vector.size()]; }
-	const_iterator end() const { return &this->vector[this->vector.size()]; }
-#pragma endregion FOREACH_SUPPORT
+  // region DESTRUCTOR
+  ~array<_Item_t>(void) noexcept { this->_buffer.clear(); }
+  // endregion DESTRUCTOR
 
-#pragma region OPERATOR_OVERFLOWS
-	bool operator==(const array& array) {
-		const u32 vector_length = this->vector.size();
-		const u32 array_vector_length = array.vector.size();
-		if (vector_length != array_vector_length) {
-			return false;
-		}
-		for (int index = 0; index < vector_length; ++index) {
-			if (this->vector[index] != array.vector[index]) { return false; }
-		}
-		return true;
-	}
+  // region FOREACH_SUPPORT
+  typedef _Item_t *iterator;
+  typedef const _Item_t *const_iterator;
+  iterator begin(void) noexcept { return &this->_buffer[0]; }
+  const_iterator begin(void) const noexcept { return &this->_buffer[0]; }
+  iterator end(void) noexcept { return &this->_buffer[this->_buffer.size()]; }
+  const_iterator end(void) const noexcept {
+    return &this->_buffer[this->_buffer.size()];
+  }
+  // endregion FOREACH_SUPPORT
 
-	bool operator==(std::nullptr_t) { return this->vector.empty(); }
-	bool operator!=(const array& array) { return !(*this == array); }
-	bool operator!=(std::nullptr_t) { return !this->vector.empty(); }
+  // region OPERATOR_OVERFLOWS
+  operator str(void) const noexcept {
+    if (std::is_same<_Item_t, rune>::value) {
+      return str(std::basic_string<rune>(this->begin(), this->end()));
+    }
+    if (std::is_same<_Item_t, u8>::value) {
+      std::wstring_convert<std::codecvt_utf8_utf16<rune>> _conv;
+      const std::string _bytes(this->begin(), this->end());
+      return str(_conv.from_bytes(_bytes));
+    }
+  }
 
-	T& operator[](const int index) {
-		const u32 length = this->vector.size();
-		if (index < 0) { panic(L"stackoverflow exception:\n index is less than zero"); }
-		else if (index >= length) {
-			panic(L"stackoverflow exception:\nindex overflow " + std::to_wstring(index) + L":" + std::to_wstring(length));
-		}
-		return this->vector[index];
-	}
+  bool operator==(const array<_Item_t> &_Src) const noexcept {
+    const size _length = this->_buffer.size();
+    const size _Src_length = _Src._buffer.size();
+    if (_length != _Src_length) {
+      return false;
+    }
+    for (size _index = 0; _index < _length; ++_index) {
+      if (this->_buffer[_index] != _Src._buffer[_index]) {
+        return false;
+      }
+    }
+    return true;
+  }
 
-	friend std::wostream& operator<<(std::wostream &os, const array<T>& array) {
-		os << L"[";
-		const u32 size = array.vector.size();
-		for (int index = 0; index < size;) {
-			os << array.vector[index++];
-			if (index < size) { os << L", "; }
-		}
-		os << L"]";
-		return os;
-	}
-#pragma endregion OPERATOR_OVERFLOWS
+  bool operator==(const std::nullptr_t) const noexcept {
+    return this->_buffer.empty();
+  }
+  bool operator!=(const array<_Item_t> &_Src) const noexcept {
+    return !(*this == _Src);
+  }
+  bool operator!=(const std::nullptr_t) const noexcept {
+    return !this->_buffer.empty();
+  }
+  _Item_t &operator[](const size _Index) { return this->_buffer[_Index]; }
+
+  friend std::wostream &operator<<(std::wostream &_Stream,
+                                   const array<_Item_t> &_Src) {
+    _Stream << L"[";
+    const size _length = _Src._buffer.size();
+    for (size _index = 0; _index < _length;) {
+      _Stream << _Src._buffer[_index++];
+      if (_index < _length) {
+        _Stream << L", ";
+      }
+    }
+    _Stream << L"]";
+    return _Stream;
+  }
+  // endregion OPERATOR_OVERFLOWS
 };
-#pragma endregion JN_STRUCTURES
+// endregion JN_STRUCTURES
 
-#pragma region JN_BUILTIN_FUNCTIONS
-#define _print(v) std::wcout << v
-#define _println(v) _print(v); std::wcout << std::endl
-#pragma endregion JN_BUILTIN_FUNCTIONS
+// region JN_BUILTIN_FUNCTIONS
+template <typename _Obj_t> static inline void _print(_Obj_t _Obj) {
+  std::wcout << _Obj;
+}
 
-#pragma region TRANSPILED_JN_CODE
+template <typename _Obj_t> static inline void _println(_Obj_t _Obj) {
+  _print<_Obj_t>(_Obj);
+  std::wcout << std::endl;
+}
+// endregion JN_BUILTIN_FUNCTIONS
+// endregion JN_CXX_API
+
+// region TRANSPILED_JN_CODE
 ` + *code + `
-#pragma endregion TRANSPILED_JN_CODE
+// endregion TRANSPILED_JN_CODE
 
-#pragma region JN_ENTRY_POINT
+// region JN_ENTRY_POINT
 int main() {
-#pragma region JN_ENTRY_POINT_STANDARD_CODES
-	setlocale(0x0, "");
-#pragma endregion JN_ENTRY_POINT_STANDARD_CODES
-	_main();
-
-#pragma region JN_ENTRY_POINT_END_STANDARD_CODES
-	return EXIT_SUCCESS;
-#pragma endregion JN_ENTRY_POINT_END_STANDARD_CODES
+// region JN_ENTRY_POINT_STANDARD_CODES
+  std::locale::global(std::locale());
+// endregion JN_ENTRY_POINT_STANDARD_CODES
+  _main();
+// region JN_ENTRY_POINT_END_STANDARD_CODES
+  return EXIT_SUCCESS;
+// endregion JN_ENTRY_POINT_END_STANDARD_CODES
 }
-#pragma endergion JN_ENTRY_POINT`
+// endergion JN_ENTRY_POINT`
 }
 
-func writeCxxOutput(info *parser.ParseFileInfo) {
-	path := filepath.Join(jn.JnSet.CxxOutDir, jn.JnSet.CxxOutName)
-	err := os.MkdirAll(jn.JnSet.CxxOutDir, 0511)
+func writeOuput(path, content string) {
+	err := os.MkdirAll(jn.JnSet.CxxOutDir, 0777)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
 	}
-	err = io.WriteFileTruncate(path, []byte(info.JN_CXX))
+	bytes := []byte(content)
+	err = ioutil.WriteFile(path, bytes, 0666)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
 	}
 }
 
-var routines *sync.WaitGroup
+func compile(path string, main, justDefs bool) *parser.Parser {
+	loadJnSet()
+	p := parser.New(nil)
+	inf, err := os.Stat(jn.StdlibPath)
+	if err != nil || !inf.IsDir() {
+		p.Errs = append(p.Errs, jnlog.CompilerLog{
+			Type: jnlog.FlatErr,
+			Msg:  "standard library directory not found",
+		})
+		return p
+	}
+	f, err := jnio.OpenJn(path)
+	if err != nil {
+		println(err.Error())
+		return nil
+	}
+	p.File = f
+	p.Parsef(true, false)
+	return p
+}
 
 func main() {
-	f, err := io.GetJn(os.Args[0])
-	if err != nil {
-		println(err.Error())
+	fpath := os.Args[0]
+	p := compile(fpath, true, false)
+	if p == nil {
 		return
 	}
-	loadJnSet()
-	routines = new(sync.WaitGroup)
-	info := new(parser.ParseFileInfo)
-	info.File = f
-	info.Routines = routines
-	routines.Add(1)
-	go parser.ParseFileAsync(info)
-	routines.Wait()
-	if info.Errors != nil {
-		printErrors(info.Errors)
+	if printlogs(p) {
+		os.Exit(0)
 	}
-	appendStandards(&info.JN_CXX)
-	writeCxxOutput(info)
+	cxx := p.Cxx()
+	appendStandard(&cxx)
+	path := filepath.Join(jn.JnSet.CxxOutDir, jn.JnSet.CxxOutName)
+	writeOuput(path, cxx)
 }

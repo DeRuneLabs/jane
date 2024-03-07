@@ -5,55 +5,51 @@ import (
 	"github.com/De-Rune/jane/package/jn"
 )
 
-func typeIsVoidReturn(t ast.DataTypeAST) bool {
-	return t.Code == jn.Void && !t.MultiTyped
+func typeIsVoidRet(t ast.DataType) bool {
+	return t.Id == jn.Void && !t.MultiTyped
 }
 
-func typeOfArrayElements(t ast.DataTypeAST) ast.DataTypeAST {
-	t.Value = t.Value[2:]
+func typeOfArrayElements(t ast.DataType) ast.DataType {
+	t.Val = t.Val[2:]
 	return t
 }
 
-func typeIsPointer(t ast.DataTypeAST) bool {
-	if t.Value == "" {
+func typeIsPtr(t ast.DataType) bool {
+	if t.Val == "" {
 		return false
 	}
-	return t.Value[0] == '*'
+	return t.Val[0] == '*'
 }
 
-func typeIsArray(t ast.DataTypeAST) bool {
-	if t.Value == "" {
+func typeIsArray(t ast.DataType) bool {
+	if t.Val == "" {
 		return false
 	}
-	return t.Value[0] == '['
+	return t.Val[0] == '['
 }
 
-func typeIsSingle(dt ast.DataTypeAST) bool {
-	return !typeIsPointer(dt) &&
+func typeIsSingle(dt ast.DataType) bool {
+	return !typeIsPtr(dt) &&
 		!typeIsArray(dt) &&
-		dt.Code != jn.Function
+		dt.Id != jn.Func
 }
 
-func checkValidityConstantDataType(dt ast.DataTypeAST) bool {
-	return typeIsSingle(dt)
+func typeIsNilCompatible(t ast.DataType) bool {
+	return t.Id == jn.Func || typeIsPtr(t)
 }
 
-func typeIsNilCompatible(t ast.DataTypeAST) bool {
-	return t.Code == jn.Function || typeIsPointer(t)
-}
-
-func checkArrayCompatiblity(arrT, t ast.DataTypeAST) bool {
-	if t.Code == jn.Nil {
+func checkArrayCompatiblity(arrT, t ast.DataType) bool {
+	if t.Id == jn.Nil {
 		return true
 	}
-	return arrT.Value == t.Value
+	return arrT.Val == t.Val
 }
 
-func typeIsLvalue(t ast.DataTypeAST) bool {
-	return typeIsPointer(t) || typeIsArray(t)
+func typeIsLvalue(t ast.DataType) bool {
+	return typeIsPtr(t) || typeIsArray(t)
 }
 
-func typesAreCompatible(t1, t2 ast.DataTypeAST, ignoreany bool) bool {
+func typesAreCompatible(t1, t2 ast.DataType, ignoreany bool) bool {
 	switch {
 	case typeIsArray(t1) || typeIsArray(t2):
 		if typeIsArray(t2) {
@@ -61,11 +57,15 @@ func typesAreCompatible(t1, t2 ast.DataTypeAST, ignoreany bool) bool {
 		}
 		return checkArrayCompatiblity(t1, t2)
 	case typeIsNilCompatible(t1) || typeIsNilCompatible(t2):
-		return t1.Code == jn.Nil || t2.Code == jn.Nil
+		return t1.Id == jn.Nil || t2.Id == jn.Nil
 	}
-	return jn.TypesAreCompatible(t1.Code, t2.Code, ignoreany)
+	return jn.TypesAreCompatible(t1.Id, t2.Id, ignoreany)
 }
 
-func typeIsVariadicable(t ast.DataTypeAST) bool {
+func typeIsVariadicable(t ast.DataType) bool {
 	return typeIsArray(t)
+}
+
+func typeIsMut(t ast.DataType) bool {
+	return typeIsPtr(t)
 }

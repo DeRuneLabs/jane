@@ -5,116 +5,77 @@ import (
 
 	"github.com/De-Rune/jane/ast"
 	"github.com/De-Rune/jane/lexer"
+	"github.com/De-Rune/jane/package/jnapi"
 )
 
-type IExprNode interface {
+type iExpr interface {
 	String() string
 }
 
 type exprBuildNode struct {
 	index int
-	node  exprModel
-}
-
-type exprBuilder struct {
-	index   int
-	current exprModel
-	nodes   []exprBuildNode
-}
-
-func newExprBuilder() *exprBuilder {
-	builder := new(exprBuilder)
-	builder.index = -1
-	return builder
-}
-
-func (b *exprBuilder) setIndex(index int) {
-	if b.index != -1 {
-		b.appendBuildNode(exprBuildNode{b.index, b.current})
-	}
-	b.index = index
-	b.current = exprModel{}
-}
-
-func (b *exprBuilder) appendBuildNode(node exprBuildNode) {
-	b.nodes = append(b.nodes, node)
-}
-
-func (b *exprBuilder) appendNode(node IExprNode) {
-	b.current.nodes = append(b.current.nodes, node)
-}
-
-func (b *exprBuilder) build() (e exprModel) {
-	b.setIndex(-1)
-	for index := range b.nodes {
-		for _, buildNode := range b.nodes {
-			if buildNode.index != index {
-				continue
-			}
-			e.nodes = append(e.nodes, buildNode.node)
-		}
-	}
-	return
+	nodes []iExpr
 }
 
 type exprModel struct {
-	nodes []IExprNode
+	index int
+	nodes []exprBuildNode
 }
 
-func (model exprModel) String() string {
-	var sb strings.Builder
-	for _, node := range model.nodes {
-		sb.WriteString(node.String())
+func newExprModel(processes [][]lexer.Token) *exprModel {
+	m := new(exprModel)
+	m.index = 0
+	for i := range processes {
+		m.nodes = append(m.nodes, exprBuildNode{index: i})
 	}
-	return sb.String()
+	return m
 }
 
-func (model exprModel) ExprAST() ast.ExprAST {
-	return ast.ExprAST{Model: model}
+func (m *exprModel) appendSubNode(node iExpr) {
+	nodes := &m.nodes[m.index].nodes
+	*nodes = append(*nodes, node)
 }
 
-type tokenExprNode struct {
-	token lexer.Token
+func (m exprModel) String() string {
+	var expr strings.Builder
+	for _, node := range m.nodes {
+		for _, node := range node.nodes {
+			expr.WriteString(node.String())
+		}
+	}
+	return expr.String()
 }
 
-func (node tokenExprNode) String() string {
-	return node.token.Kind
+func (m *exprModel) Expr() ast.Expr {
+	return ast.Expr{Model: m}
 }
 
-type runeExprNode struct {
-	token lexer.Token
+type exprNode struct {
+	value string
 }
 
-func (run runeExprNode) String() string {
-	return "L" + run.token.Kind
+func (node exprNode) String() string {
+	return node.value
 }
 
-type strExprNode struct {
-	token lexer.Token
+type anonFunc struct {
+	ast ast.Func
 }
 
-func (str strExprNode) String() string {
-	return "str(L" + str.token.Kind + ")"
-}
-
-type anonymousFunctionExpr struct {
-	ast ast.FunctionAST
-}
-
-func (af anonymousFunctionExpr) String() string {
+func (af anonFunc) String() string {
 	var cxx strings.Builder
 	cxx.WriteString("[=]")
 	cxx.WriteString(paramsToCxx(af.ast.Params))
 	cxx.WriteString(" mutable -> ")
-	cxx.WriteString(af.ast.ReturnType.String())
+	cxx.WriteString(af.ast.RetType.String())
 	cxx.WriteByte(' ')
 	cxx.WriteString(af.ast.Block.String())
 	return cxx.String()
 }
 
 type arrayExpr struct {
-	dataType ast.DataTypeAST
-	expr     []exprModel
+	dataType ast.DataType
+	expr     []iExpr
 }
 
 func (a arrayExpr) String() string {
@@ -132,7 +93,7 @@ func (a arrayExpr) String() string {
 }
 
 type argsExpr struct {
-	args []ast.ArgAST
+	args []ast.Arg
 }
 
 func (a argsExpr) String() string {
@@ -147,11 +108,11 @@ func (a argsExpr) String() string {
 	return cxx.String()[:cxx.Len()-1]
 }
 
-type multiReturnExprModel struct {
-	models []exprModel
+type multiRetExpr struct {
+	models []iExpr
 }
 
-func (mre multiReturnExprModel) String() string {
+func (mre multiRetExpr) String() string {
 	var cxx strings.Builder
 	cxx.WriteString("std::make_tuple(")
 	for _, model := range mre.models {
@@ -161,10 +122,22 @@ func (mre multiReturnExprModel) String() string {
 	return cxx.String()[:cxx.Len()-1] + ")"
 }
 
-type newHeapAllocationExprModel struct {
-	typeAST ast.DataTypeAST
+type newHeapAllocExpr struct {
+	typeAST ast.DataType
 }
 
-func (nha newHeapAllocationExprModel) String() string {
-	return "new(std::nothrow) " + nha.typeAST.String()
+func (nha newHeapAllocExpr) String() string {
+	return jnapi.ToJnAlloc(nha.typeAST.String())
+}
+
+type assignExpr struct {
+	assign ast.Assign
+}
+
+func (a assignExpr) String() string {
+	var cxx strings.Builder
+	cxx.WriteByte('(')
+	cxx.WriteString(a.assign.String())
+	cxx.WriteByte(')')
+	return cxx.String()
 }

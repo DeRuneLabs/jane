@@ -1,21 +1,23 @@
 package jn
 
-import "github.com/De-Rune/jane/package/jn/jnset"
+import "github.com/De-Rune/jane/package/jnset"
 
 const (
 	Version      = `@dev_beta 0.0.1`
-	Author       = `DeruneLabs`
-	License      = `MIT License`
-	Extension    = `.jn`
+	SrcExt       = `.jn`
+	DocExt       = ".jndoc"
 	SettingsFile = "jn.set"
-	EntryPoint   = "main"
+	Stdlib       = "lib"
+	Langs        = "langs"
+	Author       = "DeruneLabs"
+	License      = "MIT LICENSE"
+
+	EntryPoint = "main"
 )
 
 var (
-	ExecutablePath string
-	JnSet          *jnset.JnSet
+	LangsPath  string
+	StdlibPath string
+	ExecPath   string
+	JnSet      *jnset.JnSet
 )
-
-func IsIgnoreName(name string) bool {
-	return name == "__"
-}

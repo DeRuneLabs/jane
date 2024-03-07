@@ -34,3 +34,4 @@
 # dist folders
 dist/
 build_testing.sh
+todo/

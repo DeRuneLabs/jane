@@ -1,84 +1,99 @@
 package lexer
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 	"sync"
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/De-Rune/jane/package/io"
 	"github.com/De-Rune/jane/package/jn"
+	"github.com/De-Rune/jane/package/jnio"
+	"github.com/De-Rune/jane/package/jnlog"
 )
 
 type Lexer struct {
-	wg sync.WaitGroup
+	wg               sync.WaitGroup
+	firstTokenOfLine bool
 
-	File     *io.FILE
-	Position int
-	Column   int
-	Line     int
-	Errors   []string
-	braces   []Token
+	File   *jnio.File
+	Pos    int
+	Column int
+	Row    int
+	Logs   []jnlog.CompilerLog
+	braces []Token
 }
 
-func NewLex(f *io.FILE) *Lexer {
+func NewLexer(f *jnio.File) *Lexer {
 	lex := new(Lexer)
 	lex.File = f
-	lex.Line = 1
-	lex.Column = 1
-	lex.Position = 0
+	lex.Pos = 0
+	lex.Row = -1
+	lex.NewLine()
 	return lex
 }
 
-func (lex *Lexer) pushError(err string) {
-	lex.Errors = append(lex.Errors, fmt.Sprintf("%s %d:%d %s", lex.File.Path, lex.Line, lex.Column, jn.Errors[err]))
+func (lex *Lexer) pusherr(key string, args ...interface{}) {
+	lex.Logs = append(lex.Logs, jnlog.CompilerLog{
+		Type:   jnlog.Err,
+		Row:    lex.Row,
+		Column: lex.Column,
+		Path:   lex.File.Path,
+		Msg:    jn.GetErr(key, args...),
+	})
 }
 
-func (lex *Lexer) pushErrorToken(tok Token, err string) {
-	lex.Errors = append(lex.Errors, fmt.Sprintf("%s %d:%d %s", lex.File.Path, tok.Row, tok.Column, jn.Errors[err]))
+func (lex *Lexer) pusherrtok(token Token, err string) {
+	lex.Logs = append(lex.Logs, jnlog.CompilerLog{
+		Type:   jnlog.Err,
+		Row:    token.Row,
+		Column: token.Column,
+		Path:   lex.File.Path,
+		Msg:    jn.Errs[err],
+	})
 }
 
-func (lex *Lexer) Tokenize() []Token {
-	var tokens []Token
-	lex.Errors = nil
-	for lex.Position < len(lex.File.Content) {
-		token := lex.Token()
-		if token.Id != NA {
-			tokens = append(tokens, token)
+func (lex *Lexer) Lexer() []Token {
+	var toks []Token
+	lex.Logs = nil
+	lex.NewLine()
+	for lex.Pos < len(lex.File.Text) {
+		tok := lex.Token()
+		if tok.Id != NA {
+			toks = append(toks, tok)
 		}
 	}
 	lex.wg.Add(1)
-	go lex.checkParenthesesAsync()
+	go lex.checkRangesAsync()
 	lex.wg.Wait()
-	return tokens
+	return toks
 }
 
-func (lex *Lexer) checkParenthesesAsync() {
+func (lex *Lexer) checkRangesAsync() {
 	defer func() { lex.wg.Done() }()
 	for _, token := range lex.braces {
 		switch token.Kind {
 		case "(":
-			lex.pushErrorToken(token, "wait_close_parentheses")
+			lex.pusherrtok(token, "wait_close_parentheses")
 		case "{":
-			lex.pushErrorToken(token, "wait_close_brace")
+			lex.pusherrtok(token, "wait_close_brace")
 		case "[":
-			lex.pushErrorToken(token, "wait_close_bracket")
+			lex.pusherrtok(token, "wait_close_bracket")
 		}
 	}
 }
 
-func isKeyword(lexerline, kw string) bool {
+func iskw(lexerline, kw string) bool {
 	if !strings.HasPrefix(lexerline, kw) {
 		return false
 	}
 	lexerline = lexerline[len(kw):]
-	return lexerline == "" || unicode.IsSpace(rune(lexerline[0])) ||
+	return lexerline == "" ||
+		unicode.IsSpace(rune(lexerline[0])) ||
 		unicode.IsPunct(rune(lexerline[0]))
 }
 
-func (lex *Lexer) lexName(lexerline string) string {
+func (lex *Lexer) id(lexerline string) string {
 	if lexerline[0] != '_' {
 		r, _ := utf8.DecodeRuneInString(lexerline)
 		if !unicode.IsLetter(r) {
@@ -86,27 +101,28 @@ func (lex *Lexer) lexName(lexerline string) string {
 		}
 	}
 	var sb strings.Builder
-	for _, run := range lexerline {
-		if run != '_' &&
-			('0' > run || '9' < run) &&
-			!unicode.IsLetter(run) {
+	for _, r := range lexerline {
+		if r != '_' &&
+			('0' > r || '9' < r) &&
+			!unicode.IsLetter(r) {
 			break
 		}
-		sb.WriteRune(run)
-		lex.Position++
+		sb.WriteRune(r)
+		lex.Pos++
 	}
 	return sb.String()
 }
 
 func (lex *Lexer) resume() string {
 	var lexerline string
-	runes := lex.File.Content[lex.Position:]
+	runes := lex.File.Text[lex.Pos:]
 	for i, r := range runes {
 		if unicode.IsSpace(r) {
-			lex.Column++
-			lex.Position++
+			lex.Pos++
 			if r == '\n' {
 				lex.NewLine()
+			} else {
+				lex.Column++
 			}
 			continue
 		}
@@ -116,302 +132,326 @@ func (lex *Lexer) resume() string {
 	return lexerline
 }
 
-func (lex *Lexer) lexLineComment() {
-	lex.Position += 2
-	for ; lex.Position < len(lex.File.Content); lex.Position++ {
-		if lex.File.Content[lex.Position] == '\n' {
-			lex.Position++
-			lex.NewLine()
+func (lex *Lexer) lncomment(token *Token) {
+	start := lex.Pos
+	lex.Pos += 2
+	for ; lex.Pos < len(lex.File.Text); lex.Pos++ {
+		if lex.File.Text[lex.Pos] == '\n' {
+			if lex.firstTokenOfLine {
+				token.Id = Comment
+				token.Kind = string(lex.File.Text[start:lex.Pos])
+			}
 			return
 		}
 	}
+	if lex.firstTokenOfLine {
+		token.Id = Comment
+		token.Kind = string(lex.File.Text[start:])
+	}
 }
 
-func (lex *Lexer) lexBlockComment() {
-	lex.Position += 2
-	for ; lex.Position < len(lex.File.Content); lex.Position++ {
-		run := lex.File.Content[lex.Position]
+func (lex *Lexer) rangecomment() {
+	lex.Pos += 2
+	for ; lex.Pos < len(lex.File.Text); lex.Pos++ {
+		run := lex.File.Text[lex.Pos]
 		if run == '\n' {
 			lex.NewLine()
 			continue
 		}
 		lex.Column += len(string(run))
-		if strings.HasPrefix(string(lex.File.Content[lex.Position:]), "*/") {
+		if strings.HasPrefix(string(lex.File.Text[lex.Pos:]), "*/") {
 			lex.Column += 2
-			lex.Position += 2
+			lex.Pos += 2
 			return
 		}
 	}
-	lex.pushError("missing_block_comment")
+	lex.pusherr("missing_block_comment")
 }
 
 var numRegexp = *regexp.MustCompile(`^((0x[[:xdigit:]]+)|(\d+((\.\d+)?((e|E)(\-|\+|)\d+)?|(\.\d+))))`)
 
-func (lex *Lexer) lexNumeric(content string) string {
-	value := numRegexp.FindString(content)
-	lex.Position += len(value)
-	return value
+func (lex *Lexer) num(txt string) string {
+	val := numRegexp.FindString(txt)
+	lex.Pos += len(val)
+	return val
 }
 
 var escSeqRegexp = regexp.MustCompile(`^\\([\\'"abfnrtv]|U.{8}|u.{4}|x..|[0-7]{1,3})`)
 
-func (lex *Lexer) getEscapeSequence(content string) string {
-	seq := escSeqRegexp.FindString(content)
+func (lex *Lexer) escseq(txt string) string {
+	seq := escSeqRegexp.FindString(txt)
 	if seq != "" {
-		lex.Position += len(seq)
+		lex.Pos += len([]rune(seq))
 		return seq
 	}
-	lex.Position++
-	lex.pushError("invalid_escape_sequence")
+	lex.Pos++
+	lex.pusherr("invalid_escape_sequence")
 	return seq
 }
 
-func (lex *Lexer) getRune(content string) string {
-	if content[0] == '\\' {
-		return lex.getEscapeSequence(content)
+func (lex *Lexer) getrune(txt string, raw bool) string {
+	if !raw && txt[0] == '\\' {
+		return lex.escseq(txt)
 	}
-	run, _ := utf8.DecodeRuneInString(content)
-	lex.Position++
+	run, _ := utf8.DecodeRuneInString(txt)
+	lex.Pos++
 	return string(run)
 }
 
-func (lex *Lexer) lexRune(content string) string {
+func (lex *Lexer) rune(txt string) string {
 	var sb strings.Builder
 	sb.WriteByte('\'')
 	lex.Column++
-	content = content[1:]
+	txt = txt[1:]
 	count := 0
-	for index := 0; index < len(content); index++ {
-		if content[index] == '\n' {
-			lex.pushError("missing_rune_end")
-			lex.Position++
+	for i := 0; i < len(txt); i++ {
+		if txt[i] == '\n' {
+			lex.pusherr("missing_rune_end")
+			lex.Pos++
 			lex.NewLine()
 			return ""
 		}
-		run := lex.getRune(content[index:])
+		run := lex.getrune(txt[i:], false)
 		sb.WriteString(run)
 		length := len(run)
 		lex.Column += length
 		if run == "'" {
-			lex.Position++
+			lex.Pos++
 			break
 		}
 		if length > 1 {
-			index += length - 1
+			i += length - 1
 		}
 		count++
 	}
 	if count == 0 {
-		lex.pushError("rune_empty")
+		lex.pusherr("rune_empty")
 	} else if count > 1 {
-		lex.pushError("rune_overflow")
+		lex.pusherr("rune_overflow")
 	}
 	return sb.String()
 }
 
-func (lex *Lexer) lexString(content string) string {
+func (lex *Lexer) str(txt string) string {
 	var sb strings.Builder
-	sb.WriteByte('"')
+	mark := txt[0]
+	raw := mark == '`'
+	sb.WriteByte(mark)
 	lex.Column++
-	content = content[1:]
-	for index, run := range content {
-		if run == '\n' {
-			lex.pushError("missing_string_end")
-			lex.Position++
-			lex.NewLine()
-			return ""
+	txt = txt[1:]
+	for i := 0; i < len(txt); i++ {
+		ch := txt[i]
+		if ch == '\n' {
+			defer lex.NewLine()
+			if !raw {
+				lex.pusherr("missing_string_end")
+				lex.Pos++
+				return ""
+			}
 		}
-		run := lex.getRune(content[index:])
+		run := lex.getrune(txt[i:], raw)
 		sb.WriteString(run)
 		length := len(run)
 		lex.Column += length
-		if run == `"` {
-			lex.Position++
+		if ch == mark {
+			lex.Pos++
 			break
 		}
 		if length > 1 {
-			index += length - 1
+			i += length - 1
 		}
 	}
 	return sb.String()
 }
 
 func (lex *Lexer) NewLine() {
-	lex.Line++
+	lex.firstTokenOfLine = true
+	lex.Row++
 	lex.Column = 1
 }
 
-func (lex *Lexer) lexPunct(content, kind string, id uint8, token *Token) bool {
-	if !strings.HasPrefix(content, kind) {
+func (lex *Lexer) punct(txt, kind string, id uint8, token *Token) bool {
+	if !strings.HasPrefix(txt, kind) {
 		return false
 	}
 	token.Kind = kind
 	token.Id = id
-	lex.Position += len([]rune(kind))
+	lex.Pos += len([]rune(kind))
 	return true
 }
 
-func (lex *Lexer) lexKeyword(content, kind string, id uint8, token *Token) bool {
-	if !isKeyword(content, kind) {
+func (lex *Lexer) kw(txt, kind string, id uint8, tok *Token) bool {
+	if !iskw(txt, kind) {
 		return false
 	}
-	token.Kind = kind
-	token.Id = id
-	lex.Position += len([]rune(kind))
+	tok.Kind = kind
+	tok.Id = id
+	lex.Pos += len([]rune(kind))
 	return true
 }
 
 func (lex *Lexer) Token() Token {
-	token := Token{
-		File: lex.File,
-		Id:   NA,
+	defer func() { lex.firstTokenOfLine = false }()
+
+	tok := Token{File: lex.File, Id: NA}
+
+	txt := lex.resume()
+	if txt == "" {
+		return tok
 	}
-	content := lex.resume()
-	if content == "" {
-		return token
-	}
-	token.Column = lex.Column
-	token.Row = lex.Line
+
+	tok.Column = lex.Column
+	tok.Row = lex.Row
 
 	switch {
-	case content[0] == '\'':
-		token.Kind = lex.lexRune(content)
-		token.Id = Value
-		return token
-	case content[0] == '"':
-		token.Kind = lex.lexString(content)
-		token.Id = Value
-		return token
-	case strings.HasPrefix(content, "//"):
-		lex.lexLineComment()
-		return token
-	case strings.HasPrefix(content, "/*"):
-		lex.lexBlockComment()
-		return token
-	case lex.lexPunct(content, "(", Brace, &token):
-		lex.braces = append(lex.braces, token)
-	case lex.lexPunct(content, ")", Brace, &token):
-		length := len(lex.braces)
-		if length == 0 {
-			lex.pushErrorToken(token, "extra_closed_parentheses")
+	case txt[0] == '\'':
+		tok.Kind = lex.rune(txt)
+		tok.Id = Value
+		return tok
+	case txt[0] == '"', txt[0] == '`':
+		tok.Kind = lex.str(txt)
+		tok.Id = Value
+		return tok
+	case strings.HasPrefix(txt, "//"):
+		lex.lncomment(&tok)
+		goto ret
+	case strings.HasPrefix(txt, "/*"):
+		lex.rangecomment()
+		return tok
+	case lex.punct(txt, "(", Brace, &tok):
+		lex.braces = append(lex.braces, tok)
+	case lex.punct(txt, ")", Brace, &tok):
+		len := len(lex.braces)
+		if len == 0 {
+			lex.pusherrtok(tok, "extra_closed_parentheses")
 			break
-		} else if lex.braces[length-1].Kind != "(" {
+		} else if lex.braces[len-1].Kind != "(" {
 			lex.wg.Add(1)
-			go lex.pushWrongOrderCloseErrorrAsync(token)
+			go lex.pushWrongOrderCloseErrAsync(tok)
 		}
-		lex.removeBrace(length-1, token.Kind)
-	case lex.lexPunct(content, "{", Brace, &token):
-		lex.braces = append(lex.braces, token)
-	case lex.lexPunct(content, "}", Brace, &token):
-		length := len(lex.braces)
-		if length == 0 {
-			lex.pushErrorToken(token, "extra_closed_braces")
+		lex.rmrange(len-1, tok.Kind)
+	case lex.punct(txt, "{", Brace, &tok):
+		lex.braces = append(lex.braces, tok)
+	case lex.punct(txt, "}", Brace, &tok):
+		len := len(lex.braces)
+		if len == 0 {
+			lex.pusherrtok(tok, "extra_closed_braces")
 			break
-		} else if lex.braces[length-1].Kind != "{" {
+		} else if lex.braces[len-1].Kind != "{" {
 			lex.wg.Add(1)
-			go lex.pushWrongOrderCloseErrorrAsync(token)
+			go lex.pushWrongOrderCloseErrAsync(tok)
 		}
-		lex.removeBrace(length-1, token.Kind)
-	case lex.lexPunct(content, "[", Brace, &token):
-		lex.braces = append(lex.braces, token)
-	case lex.lexPunct(content, "]", Brace, &token):
-		length := len(lex.braces)
-		if length == 0 {
-			lex.pushErrorToken(token, "extra_closed_brackets")
+		lex.rmrange(len-1, tok.Kind)
+	case lex.punct(txt, "[", Brace, &tok):
+		lex.braces = append(lex.braces, tok)
+	case lex.punct(txt, "]", Brace, &tok):
+		len := len(lex.braces)
+		if len == 0 {
+			lex.pusherrtok(tok, "extra_closed_brackets")
 			break
-		} else if lex.braces[length-1].Kind != "[" {
+		} else if lex.braces[len-1].Kind != "[" {
 			lex.wg.Add(1)
-			go lex.pushWrongOrderCloseErrorrAsync(token)
+			go lex.pushWrongOrderCloseErrAsync(tok)
 		}
-		lex.removeBrace(length-1, token.Kind)
+		lex.rmrange(len-1, tok.Kind)
 	case
-		lex.lexPunct(content, ":", Colon, &token),
-		lex.lexPunct(content, ";", SemiColon, &token),
-		lex.lexPunct(content, ",", Comma, &token),
-		lex.lexPunct(content, "@", At, &token),
-		lex.lexPunct(content, "...", Operator, &token),
-		lex.lexPunct(content, "+=", Operator, &token),
-		lex.lexPunct(content, "-=", Operator, &token),
-		lex.lexPunct(content, "*=", Operator, &token),
-		lex.lexPunct(content, "/=", Operator, &token),
-		lex.lexPunct(content, "%=", Operator, &token),
-		lex.lexPunct(content, "<<=", Operator, &token),
-		lex.lexPunct(content, ">>=", Operator, &token),
-		lex.lexPunct(content, "^=", Operator, &token),
-		lex.lexPunct(content, "&=", Operator, &token),
-		lex.lexPunct(content, "|=", Operator, &token),
-		lex.lexPunct(content, "==", Operator, &token),
-		lex.lexPunct(content, "!=", Operator, &token),
-		lex.lexPunct(content, ">=", Operator, &token),
-		lex.lexPunct(content, "<=", Operator, &token),
-		lex.lexPunct(content, "&&", Operator, &token),
-		lex.lexPunct(content, "||", Operator, &token),
-		lex.lexPunct(content, "<<", Operator, &token),
-		lex.lexPunct(content, ">>", Operator, &token),
-		lex.lexPunct(content, "+", Operator, &token),
-		lex.lexPunct(content, "-", Operator, &token),
-		lex.lexPunct(content, "*", Operator, &token),
-		lex.lexPunct(content, "/", Operator, &token),
-		lex.lexPunct(content, "%", Operator, &token),
-		lex.lexPunct(content, "~", Operator, &token),
-		lex.lexPunct(content, "&", Operator, &token),
-		lex.lexPunct(content, "|", Operator, &token),
-		lex.lexPunct(content, "^", Operator, &token),
-		lex.lexPunct(content, "!", Operator, &token),
-		lex.lexPunct(content, "<", Operator, &token),
-		lex.lexPunct(content, ">", Operator, &token),
-		lex.lexPunct(content, "=", Operator, &token),
-		lex.lexKeyword(content, "i8", DataType, &token),
-		lex.lexKeyword(content, "i16", DataType, &token),
-		lex.lexKeyword(content, "i32", DataType, &token),
-		lex.lexKeyword(content, "i64", DataType, &token),
-		lex.lexKeyword(content, "u8", DataType, &token),
-		lex.lexKeyword(content, "u16", DataType, &token),
-		lex.lexKeyword(content, "u32", DataType, &token),
-		lex.lexKeyword(content, "u64", DataType, &token),
-		lex.lexKeyword(content, "f32", DataType, &token),
-		lex.lexKeyword(content, "f64", DataType, &token),
-		lex.lexKeyword(content, "size", DataType, &token),
-		lex.lexKeyword(content, "bool", DataType, &token),
-		lex.lexKeyword(content, "rune", DataType, &token),
-		lex.lexKeyword(content, "str", DataType, &token),
-		lex.lexKeyword(content, "true", Value, &token),
-		lex.lexKeyword(content, "false", Value, &token),
-		lex.lexKeyword(content, "nil", Value, &token),
-		lex.lexKeyword(content, "const", Const, &token),
-		lex.lexKeyword(content, "ret", Return, &token),
-		lex.lexKeyword(content, "type", Type, &token),
-		lex.lexKeyword(content, "new", New, &token),
-		lex.lexKeyword(content, "free", Free, &token),
-		lex.lexKeyword(content, "iter", Iter, &token),
-		lex.lexKeyword(content, "break", Break, &token),
-		lex.lexKeyword(content, "continue", Continue, &token),
-		lex.lexKeyword(content, "in", In, &token),
-		lex.lexKeyword(content, "if", If, &token),
-		lex.lexKeyword(content, "else", Else, &token):
+		lex.firstTokenOfLine && lex.punct(txt, "#", Preprocessor, &tok),
+		lex.punct(txt, ":", Colon, &tok),
+		lex.punct(txt, ";", SemiColon, &tok),
+		lex.punct(txt, ",", Comma, &tok),
+		lex.punct(txt, "@", At, &tok),
+		lex.punct(txt, "...", Operator, &tok),
+		lex.punct(txt, ".", Dot, &tok),
+		lex.punct(txt, "+=", Operator, &tok),
+		lex.punct(txt, "-=", Operator, &tok),
+		lex.punct(txt, "*=", Operator, &tok),
+		lex.punct(txt, "/=", Operator, &tok),
+		lex.punct(txt, "%=", Operator, &tok),
+		lex.punct(txt, "<<=", Operator, &tok),
+		lex.punct(txt, ">>=", Operator, &tok),
+		lex.punct(txt, "^=", Operator, &tok),
+		lex.punct(txt, "&=", Operator, &tok),
+		lex.punct(txt, "|=", Operator, &tok),
+		lex.punct(txt, "==", Operator, &tok),
+		lex.punct(txt, "!=", Operator, &tok),
+		lex.punct(txt, ">=", Operator, &tok),
+		lex.punct(txt, "<=", Operator, &tok),
+		lex.punct(txt, "&&", Operator, &tok),
+		lex.punct(txt, "||", Operator, &tok),
+		lex.punct(txt, "<<", Operator, &tok),
+		lex.punct(txt, ">>", Operator, &tok),
+		lex.punct(txt, "+", Operator, &tok),
+		lex.punct(txt, "-", Operator, &tok),
+		lex.punct(txt, "*", Operator, &tok),
+		lex.punct(txt, "/", Operator, &tok),
+		lex.punct(txt, "%", Operator, &tok),
+		lex.punct(txt, "~", Operator, &tok),
+		lex.punct(txt, "&", Operator, &tok),
+		lex.punct(txt, "|", Operator, &tok),
+		lex.punct(txt, "^", Operator, &tok),
+		lex.punct(txt, "!", Operator, &tok),
+		lex.punct(txt, "<", Operator, &tok),
+		lex.punct(txt, ">", Operator, &tok),
+		lex.punct(txt, "=", Operator, &tok),
+		lex.kw(txt, "i8", DataType, &tok),
+		lex.kw(txt, "i16", DataType, &tok),
+		lex.kw(txt, "i32", DataType, &tok),
+		lex.kw(txt, "i64", DataType, &tok),
+		lex.kw(txt, "u8", DataType, &tok),
+		lex.kw(txt, "u16", DataType, &tok),
+		lex.kw(txt, "u32", DataType, &tok),
+		lex.kw(txt, "u64", DataType, &tok),
+		lex.kw(txt, "f32", DataType, &tok),
+		lex.kw(txt, "f64", DataType, &tok),
+		lex.kw(txt, "byte", DataType, &tok),
+		lex.kw(txt, "sbyte", DataType, &tok),
+		lex.kw(txt, "size", DataType, &tok),
+		lex.kw(txt, "ssize", DataType, &tok),
+		lex.kw(txt, "bool", DataType, &tok),
+		lex.kw(txt, "rune", DataType, &tok),
+		lex.kw(txt, "str", DataType, &tok),
+		lex.kw(txt, "true", Value, &tok),
+		lex.kw(txt, "false", Value, &tok),
+		lex.kw(txt, "nil", Value, &tok),
+		lex.kw(txt, "const", Const, &tok),
+		lex.kw(txt, "ret", Ret, &tok),
+		lex.kw(txt, "type", Type, &tok),
+		lex.kw(txt, "new", New, &tok),
+		lex.kw(txt, "free", Free, &tok),
+		lex.kw(txt, "iter", Iter, &tok),
+		lex.kw(txt, "break", Break, &tok),
+		lex.kw(txt, "continue", Continue, &tok),
+		lex.kw(txt, "in", In, &tok),
+		lex.kw(txt, "if", If, &tok),
+		lex.kw(txt, "else", Else, &tok),
+		lex.kw(txt, "volatile", Volatile, &tok),
+		lex.kw(txt, "use", Use, &tok),
+		lex.kw(txt, "pub", Pub, &tok):
 	default:
-		l := lex.lexName(content)
+		l := lex.id(txt)
 		if l != "" {
-			token.Kind = "_" + l
-			token.Id = Name
+			tok.Kind = l
+			tok.Id = Id
 			break
 		}
-		l = lex.lexNumeric(content)
+		l = lex.num(txt)
 		if l != "" {
-			token.Kind = l
-			token.Id = Value
+			tok.Kind = l
+			tok.Id = Value
 			break
 		}
-		lex.pushError("invalid_token")
-		lex.Column++
-		lex.Position++
-		return token
+		r, sz := utf8.DecodeRuneInString(txt)
+		lex.pusherr("invalid_token", r)
+		lex.Column += sz
+		lex.Pos++
+		return tok
 	}
-	lex.Column += len(token.Kind)
-	return token
+	lex.Column += len(tok.Kind)
+ret:
+	return tok
 }
 
-func (lex *Lexer) removeBrace(index int, kind string) {
+func (lex *Lexer) rmrange(i int, kind string) {
 	var close string
 	switch kind {
 	case ")":
@@ -421,26 +461,26 @@ func (lex *Lexer) removeBrace(index int, kind string) {
 	case "]":
 		close = "["
 	}
-	for ; index >= 0; index-- {
-		token := lex.braces[index]
-		if token.Kind != close {
+	for ; i >= 0; i-- {
+		tok := lex.braces[i]
+		if tok.Kind != close {
 			continue
 		}
-		lex.braces = append(lex.braces[:index], lex.braces[index+1:]...)
+		lex.braces = append(lex.braces[:i], lex.braces[i+1:]...)
 		break
 	}
 }
 
-func (lex *Lexer) pushWrongOrderCloseErrorrAsync(token Token) {
+func (lex *Lexer) pushWrongOrderCloseErrAsync(tok Token) {
 	defer func() { lex.wg.Done() }()
-	var message string
+	var msg string
 	switch lex.braces[len(lex.braces)-1].Kind {
 	case "(":
-		message = "expected_parentheses_close"
+		msg = "expected_parentheses_close"
 	case "{":
-		message = "expected_brace_close"
+		msg = "expected_brace_close"
 	case "[":
-		message = "expected_bracket_close"
+		msg = "expected_bracket_close"
 	}
-	lex.pushErrorToken(token, message)
+	lex.pusherrtok(tok, msg)
 }
