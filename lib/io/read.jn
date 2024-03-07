@@ -1,0 +1,34 @@
+// doc: full-complete line from command-line
+@inline
+pub readln() str {
+  line:str
+  // cxx: std::getline(std::wcln, _line);
+  < line
+}
+
+// doc: read first pat of line from command-line
+@inline
+pub readin() str {
+  line:str
+  // cxx: stdd::wcin >> _line;
+  < line
+}
+
+#pragma enofi
+
+readln_test() {
+  print("input name: ")
+  input: = readln()
+  println("welcome " + input)
+}
+
+readin_test() {
+  print("input fullname: ")
+  input: = readin()
+  println("hello " + input)
+}
+
+main() {
+  readln_test()
+  readin_test()
+}

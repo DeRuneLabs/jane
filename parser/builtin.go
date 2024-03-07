@@ -5,35 +5,59 @@ import (
 	"github.com/De-Rune/jane/package/jn"
 )
 
-var builtinFunctions = []*function{
+var builtinFuncs = []*function{
 	{
-		Ast: ast.FunctionAST{
-			Name: "_print",
-			ReturnType: ast.DataTypeAST{
-				Code: jn.Void,
+		Ast: ast.Func{
+			Id: "out",
+			RetType: ast.DataType{
+				Id: jn.Void,
 			},
-			Params: []ast.ParameterAST{{
-				Name: "v",
-				Type: ast.DataTypeAST{
-					Value: "any",
-					Code:  jn.Any,
+			Params: []ast.Parameter{{
+				Id:    "v",
+				Const: true,
+				Type: ast.DataType{
+					Val: "any",
+					Id:  jn.Any,
 				},
 			}},
 		},
 	},
 	{
-		Ast: ast.FunctionAST{
-			Name: "_println",
-			ReturnType: ast.DataTypeAST{
-				Code: jn.Void,
+		Ast: ast.Func{
+			Id: "println",
+			RetType: ast.DataType{
+				Id: jn.Void,
 			},
-			Params: []ast.ParameterAST{{
-				Name: "v",
-				Type: ast.DataTypeAST{
-					Value: "any",
-					Code:  jn.Any,
+			Params: []ast.Parameter{{
+				Id:    "v",
+				Const: true,
+				Type: ast.DataType{
+					Val: "any",
+					Id:  jn.Any,
 				},
 			}},
+		},
+	},
+}
+
+var strDefs = &defmap{
+	Globals: []ast.Var{
+		{
+			Id:    "len",
+			Const: true,
+			Type:  ast.DataType{Id: jn.Size, Val: "size"},
+			Tag:   "length()",
+		},
+	},
+}
+
+var arrDefs = &defmap{
+	Globals: []ast.Var{
+		{
+			Id:    "len",
+			Const: true,
+			Type:  ast.DataType{Id: jn.Size, Val: "size"},
+			Tag:   "_buffer.size()",
 		},
 	},
 }

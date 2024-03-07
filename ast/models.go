@@ -7,30 +7,26 @@ import (
 
 	"github.com/De-Rune/jane/lexer"
 	"github.com/De-Rune/jane/package/jn"
+	"github.com/De-Rune/jane/package/jnapi"
 )
 
-type Object struct {
+type Obj struct {
 	Token lexer.Token
 	Value interface{}
 }
 
-type StatementAST struct {
+type Statement struct {
 	Token          lexer.Token
-	Value          interface{}
+	Val            interface{}
 	WithTerminator bool
 }
 
-func (s StatementAST) String() string {
-	return fmt.Sprint(s.Value)
-}
-
-type RangeAST struct {
-	Type    uint8
-	Content []Object
+func (s Statement) String() string {
+	return fmt.Sprint(s.Val)
 }
 
 type BlockAST struct {
-	Statements []StatementAST
+	Tree []Statement
 }
 
 var Indent int32 = 0
@@ -46,7 +42,7 @@ const IndentSpace = 2
 func ParseBlock(b BlockAST, indent int) string {
 	var cxx strings.Builder
 	cxx.WriteByte('{')
-	for _, s := range b.Statements {
+	for _, s := range b.Tree {
 		cxx.WriteByte('\n')
 		cxx.WriteString(strings.Repeat(" ", indent*IndentSpace))
 		cxx.WriteString(s.String())
@@ -56,63 +52,70 @@ func ParseBlock(b BlockAST, indent int) string {
 	return cxx.String()
 }
 
-type DataTypeAST struct {
+type DataType struct {
 	Token      lexer.Token
-	Code       uint8
-	Value      string
+	Id         uint8
+	Val        string
 	MultiTyped bool
 	Tag        interface{}
 }
 
-func (dt DataTypeAST) String() string {
+func (dt DataType) String() string {
 	var cxx strings.Builder
-	for index, run := range dt.Value {
+	for i, run := range dt.Val {
 		if run == '*' {
 			cxx.WriteRune(run)
 			continue
 		}
-		dt.Value = dt.Value[index:]
+		dt.Val = dt.Val[i:]
 		break
 	}
 	if dt.MultiTyped {
 		return dt.MultiTypeString() + cxx.String()
 	}
-	if dt.Value != "" && dt.Value[0] == '[' {
+	if dt.Val != "" && dt.Val[0] == '[' {
 		pointers := cxx.String()
 		cxx.Reset()
 		cxx.WriteString("array<")
-		dt.Value = dt.Value[2:]
+		dt.Val = dt.Val[2:]
 		cxx.WriteString(dt.String())
 		cxx.WriteByte('>')
 		cxx.WriteString(pointers)
 		return cxx.String()
 	}
-	switch dt.Code {
-	case jn.Name:
-		return dt.Token.Kind + cxx.String()
-	case jn.Function:
+	switch dt.Id {
+	case jn.Id:
+		return jnapi.AsId(dt.Token.Kind) + cxx.String()
+	case jn.Func:
 		return dt.FunctionString() + cxx.String()
+	default:
+		return jn.CxxTypeIdFromType(dt.Id) + cxx.String()
 	}
-	return jn.CxxTypeNameFromType(dt.Code) + cxx.String()
 }
 
-func (dt DataTypeAST) FunctionString() string {
-	cxx := "std::function<"
-	fun := dt.Tag.(FunctionAST)
-	cxx += fun.ReturnType.String()
-	cxx += "("
+func (dt DataType) FunctionString() string {
+	var cxx strings.Builder
+	cxx.WriteString("std::function<")
+	fun := dt.Tag.(Func)
+	cxx.WriteString(fun.RetType.String())
+	cxx.WriteByte('(')
 	if len(fun.Params) > 0 {
 		for _, param := range fun.Params {
-			cxx += param.Type.String() + ", "
+			cxx.WriteString(param.Type.String())
+			cxx.WriteString(", ")
 		}
-		cxx = cxx[:len(cxx)-2]
+		cxxStr := cxx.String()[:cxx.Len()-1]
+		cxx.Reset()
+		cxx.WriteString(cxxStr)
+	} else {
+		cxx.WriteString("void")
 	}
-	cxx += ")>"
-	return cxx
+	cxx.WriteString(")>")
+	return cxx.String()
 }
 
-func (dt DataTypeAST) MultiTypeString() string {
-	types := dt.Tag.([]DataTypeAST)
+func (dt DataType) MultiTypeString() string {
+	types := dt.Tag.([]DataType)
 	var cxx strings.Builder
 	cxx.WriteString("std::tuple<")
 	for _, t := range types {
@@ -122,39 +125,67 @@ func (dt DataTypeAST) MultiTypeString() string {
 	return cxx.String()[:cxx.Len()-1] + ">"
 }
 
-type TypeAST struct {
+type Type struct {
+	Pub   bool
 	Token lexer.Token
-	Name  string
-	Type  DataTypeAST
+	Id    string
+	Type  DataType
+	Desc  string
 }
 
-func (t TypeAST) String() string {
-	return "typedef " + t.Type.String() + " " + t.Name + ";"
+func (t Type) String() string {
+	var cxx strings.Builder
+	cxx.WriteString("typedef ")
+	cxx.WriteString(t.Type.String())
+	cxx.WriteByte(' ')
+	cxx.WriteString(jnapi.AsId(t.Id))
+	cxx.WriteByte(';')
+	return cxx.String()
 }
 
-type FunctionAST struct {
-	Token      lexer.Token
-	Name       string
-	Params     []ParameterAST
-	ReturnType DataTypeAST
-	Block      BlockAST
+type Func struct {
+	Pub     bool
+	Token   lexer.Token
+	Id      string
+	Params  []Parameter
+	RetType DataType
+	Block   BlockAST
 }
 
-type ParameterAST struct {
+func (fc Func) DataTypeString() string {
+	var cxx strings.Builder
+	cxx.WriteByte('(')
+	if len(fc.Params) > 0 {
+		for _, param := range fc.Params {
+			cxx.WriteString(param.Type.String())
+			cxx.WriteString(", ")
+		}
+		cxxStr := cxx.String()[:cxx.Len()-2]
+		cxx.Reset()
+		cxx.WriteString(cxxStr)
+	}
+	cxx.WriteByte(')')
+	if fc.RetType.Id != jn.Void {
+		cxx.WriteString(fc.RetType.String())
+	}
+	return cxx.String()
+}
+
+type Parameter struct {
 	Token    lexer.Token
-	Name     string
+	Id       string
 	Const    bool
 	Volatile bool
 	Variadic bool
-	Type     DataTypeAST
+	Type     DataType
 }
 
-func (p ParameterAST) String() string {
+func (p Parameter) String() string {
 	var cxx strings.Builder
 	cxx.WriteString(p.Prototype())
-	if p.Name != "" {
+	if p.Id != "" {
 		cxx.WriteByte(' ')
-		cxx.WriteString(p.Name)
+		cxx.WriteString(jnapi.AsId(p.Id))
 	}
 	if p.Variadic {
 		cxx.WriteString(" =array<")
@@ -164,7 +195,7 @@ func (p ParameterAST) String() string {
 	return cxx.String()
 }
 
-func (p ParameterAST) Prototype() string {
+func (p Parameter) Prototype() string {
 	var cxx strings.Builder
 	if p.Volatile {
 		cxx.WriteString("volatile ")
@@ -182,31 +213,16 @@ func (p ParameterAST) Prototype() string {
 	return cxx.String()
 }
 
-func (fc FunctionAST) DataTypeString() string {
-	dt := "("
-	if len(fc.Params) > 0 {
-		for _, param := range fc.Params {
-			dt += param.Type.Value + ", "
-		}
-		dt = dt[:len(dt)-2]
-	}
-	dt += ")"
-	if fc.ReturnType.Code != jn.Void {
-		dt += fc.ReturnType.Value
-	}
-	return dt
-}
-
-type ArgAST struct {
+type Arg struct {
 	Token lexer.Token
-	Expr  ExprAST
+	Expr  Expr
 }
 
-func (a ArgAST) String() string {
+func (a Arg) String() string {
 	return a.Expr.String()
 }
 
-type ExprAST struct {
+type Expr struct {
 	Tokens    []lexer.Token
 	Processes [][]lexer.Token
 	Model     IExprModel
@@ -216,150 +232,153 @@ type IExprModel interface {
 	String() string
 }
 
-func (e ExprAST) String() string {
+func (e Expr) String() string {
 	if e.Model != nil {
 		return e.Model.String()
 	}
-	var sb strings.Builder
+	var expr strings.Builder
 	for _, process := range e.Processes {
-		if len(process) == 1 && process[0].Id == lexer.Operator {
-			sb.WriteByte(' ')
-			sb.WriteString(process[0].Kind)
-			sb.WriteByte(' ')
-			continue
+		for _, tok := range process {
+			switch tok.Id {
+			case lexer.Id:
+				expr.WriteString(jnapi.AsId(tok.Kind))
+			default:
+				expr.WriteString(tok.Kind)
+			}
 		}
-		for _, token := range process {
-			sb.WriteString(token.Kind)
-		}
 	}
-	return sb.String()
+	return expr.String()
 }
 
-type ExprStatementAST struct {
-	Expr ExprAST
+type ExprStatement struct {
+	Expr Expr
 }
 
-func (be ExprStatementAST) String() string {
-	return be.Expr.String() + ";"
-}
-
-type ValueAST struct {
-	Token lexer.Token
-	Value string
-	Type  DataTypeAST
-}
-
-func (v ValueAST) String() string {
-	return v.Value
-}
-
-type BraceAST struct {
-	Token lexer.Token
-}
-
-func (b BraceAST) String() string {
-	return b.Token.Kind
-}
-
-type OperatorAST struct {
-	Token lexer.Token
-}
-
-func (o OperatorAST) String() string {
-	return o.Token.Kind
-}
-
-type ReturnAST struct {
-	Token lexer.Token
-	Expr  ExprAST
-}
-
-func (r ReturnAST) String() string {
-	return "return " + r.Expr.String() + ";"
-}
-
-type AttributeAST struct {
-	Token lexer.Token
-	Tag   lexer.Token
-}
-
-func (a AttributeAST) String() string {
-	return a.Tag.Kind[1:]
-}
-
-type VariableAST struct {
-	DefineToken lexer.Token
-	NameToken   lexer.Token
-	SetterToken lexer.Token
-	Name        string
-	Type        DataTypeAST
-	Value       ExprAST
-	Const       bool
-	Volatile    bool
-	New         bool
-	Tag         interface{}
-}
-
-func (v VariableAST) String() string {
-	var sb strings.Builder
-	if v.Volatile {
-		sb.WriteString("volatile ")
-	}
-	if v.Const {
-		sb.WriteString("const ")
-	}
-	sb.WriteString(v.Type.String())
-	sb.WriteByte(' ')
-	sb.WriteString(v.Name)
-	if v.Value.Processes != nil {
-		sb.WriteString(" = ")
-		sb.WriteString(v.Value.String())
-	}
-	sb.WriteByte(';')
-	return sb.String()
-}
-
-type VarsetSelector struct {
-	NewVariable bool
-	Variable    VariableAST
-	Expr        ExprAST
-	Ignore      bool
-}
-
-func (vs VarsetSelector) String() string {
-	if vs.NewVariable {
-		return vs.Expr.Tokens[0].Kind
-	}
-	return vs.Expr.String()
-}
-
-type VariableSetAST struct {
-	Setter         lexer.Token
-	SelectExprs    []VarsetSelector
-	ValueExprs     []ExprAST
-	JustDeclare    bool
-	MultipleReturn bool
-}
-
-func (vs VariableSetAST) cxxSingleSet(cxx *strings.Builder) string {
-	cxx.WriteString(vs.SelectExprs[0].String())
-	cxx.WriteString(vs.Setter.Kind)
-	cxx.WriteString(vs.ValueExprs[0].String())
+func (be ExprStatement) String() string {
+	var cxx strings.Builder
+	cxx.WriteString(be.Expr.String())
 	cxx.WriteByte(';')
 	return cxx.String()
 }
 
-func (vs VariableSetAST) cxxMultipleSet(cxx *strings.Builder) string {
+type Value struct {
+	Token lexer.Token
+	Data  string
+	Type  DataType
+}
+
+func (v Value) String() string {
+	return v.Data
+}
+
+type Ret struct {
+	Token lexer.Token
+	Expr  Expr
+}
+
+func (r Ret) String() string {
+	var cxx strings.Builder
+	cxx.WriteString("return ")
+	cxx.WriteString(r.Expr.String())
+	cxx.WriteByte(';')
+	return cxx.String()
+}
+
+type Attribute struct {
+	Token lexer.Token
+	Tag   lexer.Token
+}
+
+func (a Attribute) String() string {
+	return a.Tag.Kind
+}
+
+type Var struct {
+	Pub         bool
+	DefToken    lexer.Token
+	IdToken     lexer.Token
+	SetterToken lexer.Token
+	Id          string
+	Type        DataType
+	Val         Expr
+	Const       bool
+	Volatile    bool
+	New         bool
+	Tag         interface{}
+	Desc        string
+}
+
+func (v Var) String() string {
+	var cxx strings.Builder
+	if v.Volatile {
+		cxx.WriteString("volatile ")
+	}
+	if v.Const {
+		cxx.WriteString("const ")
+	}
+	cxx.WriteString(v.Type.String())
+	cxx.WriteByte(' ')
+	cxx.WriteString(jnapi.AsId(v.Id))
+	if v.Val.Processes != nil {
+		cxx.WriteByte('{')
+		cxx.WriteString(v.Val.String())
+		cxx.WriteByte('}')
+	}
+	cxx.WriteByte(';')
+	return cxx.String()
+}
+
+type AssignSelector struct {
+	Var    Var
+	Expr   Expr
+	Ignore bool
+}
+
+func (vs AssignSelector) String() string {
+	if vs.Var.New {
+		return jnapi.AsId(vs.Expr.Tokens[0].Kind)
+	}
+	return vs.Expr.String()
+}
+
+type Assign struct {
+	Setter      lexer.Token
+	SelectExprs []AssignSelector
+	ValueExprs  []Expr
+	IsExpr      bool
+	MultipleRet bool
+}
+
+func (vs Assign) cxxSingleAssign() string {
+	expr := vs.SelectExprs[0]
+	if expr.Var.New {
+		expr.Var.Val = vs.ValueExprs[0]
+		s := expr.Var.String()
+		return s[:len(s)-1]
+	}
+	var cxx strings.Builder
+	if len(expr.Expr.Tokens) != 1 ||
+		!jnapi.IsIgnoreId(expr.Expr.Tokens[0].Kind) {
+		cxx.WriteString(expr.String())
+		cxx.WriteString(vs.Setter.Kind)
+	}
+	cxx.WriteString(vs.ValueExprs[0].String())
+	return cxx.String()
+}
+
+func (vs Assign) cxxMultipleAssign() string {
+	var cxx strings.Builder
+	cxx.WriteString(vs.cxxNewDefines())
 	cxx.WriteString("std::tie(")
 	var expCxx strings.Builder
 	expCxx.WriteString("std::make_tuple(")
-	for index, selector := range vs.SelectExprs {
+	for i, selector := range vs.SelectExprs {
 		if selector.Ignore {
 			continue
 		}
 		cxx.WriteString(selector.String())
 		cxx.WriteByte(',')
-		expCxx.WriteString(vs.ValueExprs[index].String())
+		expCxx.WriteString(vs.ValueExprs[i].String())
 		expCxx.WriteByte(',')
 	}
 	str := cxx.String()[:cxx.Len()-1] + ")"
@@ -367,11 +386,12 @@ func (vs VariableSetAST) cxxMultipleSet(cxx *strings.Builder) string {
 	cxx.WriteString(str)
 	cxx.WriteString(vs.Setter.Kind)
 	cxx.WriteString(expCxx.String()[:expCxx.Len()-1] + ")")
-	cxx.WriteByte(';')
 	return cxx.String()
 }
 
-func (vs VariableSetAST) cxxMultipleReturn(cxx *strings.Builder) string {
+func (vs Assign) cxxMultipleReturn() string {
+	var cxx strings.Builder
+	cxx.WriteString(vs.cxxNewDefines())
 	cxx.WriteString("std::tie(")
 	for _, selector := range vs.SelectExprs {
 		if selector.Ignore {
@@ -387,91 +407,102 @@ func (vs VariableSetAST) cxxMultipleReturn(cxx *strings.Builder) string {
 	cxx.WriteByte(')')
 	cxx.WriteString(vs.Setter.Kind)
 	cxx.WriteString(vs.ValueExprs[0].String())
+	return cxx.String()
+}
+
+func (vs Assign) cxxNewDefines() string {
+	var cxx strings.Builder
+	for _, selector := range vs.SelectExprs {
+		if selector.Ignore || !selector.Var.New {
+			continue
+		}
+		cxx.WriteString(selector.Var.String() + " ")
+	}
+	return cxx.String()
+}
+
+func (vs Assign) String() string {
+	var cxx strings.Builder
+	switch {
+	case vs.MultipleRet:
+		cxx.WriteString(vs.cxxMultipleReturn())
+	case len(vs.SelectExprs) == 1:
+		cxx.WriteString(vs.cxxSingleAssign())
+	default:
+		cxx.WriteString(vs.cxxMultipleAssign())
+	}
+	if !vs.IsExpr {
+		cxx.WriteByte(';')
+	}
+	return cxx.String()
+}
+
+type Free struct {
+	Token lexer.Token
+	Expr  Expr
+}
+
+func (f Free) String() string {
+	var cxx strings.Builder
+	cxx.WriteString("delete ")
+	cxx.WriteString(f.Expr.String())
 	cxx.WriteByte(';')
 	return cxx.String()
 }
 
-func (vs VariableSetAST) cxxNewDefines(cxx *strings.Builder) {
-	for _, selector := range vs.SelectExprs {
-		if selector.Ignore || !selector.NewVariable {
-			continue
-		}
-		cxx.WriteString(selector.Variable.String() + " ")
-	}
-}
-
-func (vs VariableSetAST) String() string {
-	var cxx strings.Builder
-	vs.cxxNewDefines(&cxx)
-	if vs.JustDeclare {
-		return cxx.String()[:cxx.Len()-1]
-	}
-	if vs.MultipleReturn {
-		return vs.cxxMultipleReturn(&cxx)
-	} else if len(vs.SelectExprs) == 1 {
-		return vs.cxxSingleSet(&cxx)
-	}
-	return vs.cxxMultipleSet(&cxx)
-}
-
-type FreeAST struct {
-	Token lexer.Token
-	Expr  ExprAST
-}
-
-func (f FreeAST) String() string {
-	return "delete " + f.Expr.String() + ";"
-}
-
 type IterProfile interface {
-	String(iter IterAST) string
+	String(iter Iter) string
 }
 
 type WhileProfile struct {
-	Expr ExprAST
+	Expr Expr
 }
 
-func (wp WhileProfile) String(iter IterAST) string {
+func (wp WhileProfile) String(iter Iter) string {
 	var cxx strings.Builder
 	cxx.WriteString("while (")
 	cxx.WriteString(wp.Expr.String())
-	cxx.WriteByte(')')
+	cxx.WriteString(") ")
 	cxx.WriteString(iter.Block.String())
 	return cxx.String()
 }
 
 type ForeachProfile struct {
-	KeyA     VariableAST
-	KeyB     VariableAST
+	KeyA     Var
+	KeyB     Var
 	InToken  lexer.Token
-	Expr     ExprAST
-	ExprType DataTypeAST
+	Expr     Expr
+	ExprType DataType
 }
 
-func (fp ForeachProfile) String(iter IterAST) string {
-	if !jn.IsIgnoreName(fp.KeyA.Name) {
+func (fp ForeachProfile) String(iter Iter) string {
+	if !jnapi.IsIgnoreId(fp.KeyA.Id) {
 		return fp.ForeachString(iter)
 	}
 	return fp.IterationSring(iter)
 }
 
-func (fp ForeachProfile) ForeachString(iter IterAST) string {
+func (fp ForeachProfile) ForeachString(iter Iter) string {
 	var cxx strings.Builder
 	cxx.WriteString("foreach<")
 	cxx.WriteString(fp.ExprType.String())
-	cxx.WriteString("," + fp.KeyA.Type.String())
-	if !jn.IsIgnoreName(fp.KeyB.Name) {
-		cxx.WriteString("," + fp.KeyB.Type.String())
+	cxx.WriteByte(',')
+	cxx.WriteString(fp.KeyA.Type.String())
+	if !jnapi.IsIgnoreId(fp.KeyB.Id) {
+		cxx.WriteByte(',')
+		cxx.WriteString(fp.KeyB.Type.String())
 	}
 	cxx.WriteString(">(")
 	cxx.WriteString(fp.Expr.String())
 	cxx.WriteString(", [&](")
 	cxx.WriteString(fp.KeyA.Type.String())
-	cxx.WriteString(" " + fp.KeyA.Name)
-	if !jn.IsIgnoreName(fp.KeyB.Name) {
-		cxx.WriteString(",")
+	cxx.WriteByte(' ')
+	cxx.WriteString(jnapi.AsId(fp.KeyA.Id))
+	if !jnapi.IsIgnoreId(fp.KeyB.Id) {
+		cxx.WriteByte(',')
 		cxx.WriteString(fp.KeyB.Type.String())
-		cxx.WriteString(" " + fp.KeyB.Name)
+		cxx.WriteByte(' ')
+		cxx.WriteString(jnapi.AsId(fp.KeyB.Id))
 	}
 	cxx.WriteString(") -> void ")
 	cxx.WriteString(iter.Block.String())
@@ -479,10 +510,10 @@ func (fp ForeachProfile) ForeachString(iter IterAST) string {
 	return cxx.String()
 }
 
-func (fp ForeachProfile) IterationSring(iter IterAST) string {
+func (fp ForeachProfile) IterationSring(iter Iter) string {
 	var cxx strings.Builder
 	cxx.WriteString("for (auto ")
-	cxx.WriteString(fp.KeyB.Name)
+	cxx.WriteString(jnapi.AsId(fp.KeyB.Id))
 	cxx.WriteString(" : ")
 	cxx.WriteString(fp.Expr.String())
 	cxx.WriteString(") ")
@@ -490,42 +521,45 @@ func (fp ForeachProfile) IterationSring(iter IterAST) string {
 	return cxx.String()
 }
 
-type IterAST struct {
+type Iter struct {
 	Token   lexer.Token
 	Block   BlockAST
 	Profile IterProfile
 }
 
-func (iter IterAST) String() string {
+func (iter Iter) String() string {
 	if iter.Profile == nil {
-		return "while (true) " + iter.Block.String()
+		var cxx strings.Builder
+		cxx.WriteString("while (true) ")
+		cxx.WriteString(iter.Block.String())
+		return cxx.String()
 	}
 	return iter.Profile.String(iter)
 }
 
-type BreakAST struct {
+type Break struct {
 	Token lexer.Token
 }
 
-func (b BreakAST) String() string {
+func (b Break) String() string {
 	return "break;"
 }
 
-type ContinueAST struct {
+type Continue struct {
 	Token lexer.Token
 }
 
-func (c ContinueAST) String() string {
+func (c Continue) String() string {
 	return "continue;"
 }
 
-type IfAST struct {
+type If struct {
 	Token lexer.Token
-	Expr  ExprAST
+	Expr  Expr
 	Block BlockAST
 }
 
-func (ifast IfAST) String() string {
+func (ifast If) String() string {
 	var cxx strings.Builder
 	cxx.WriteString("if (")
 	cxx.WriteString(ifast.Expr.String())
@@ -534,13 +568,13 @@ func (ifast IfAST) String() string {
 	return cxx.String()
 }
 
-type ElseIfAST struct {
+type ElseIf struct {
 	Token lexer.Token
-	Expr  ExprAST
+	Expr  Expr
 	Block BlockAST
 }
 
-func (elif ElseIfAST) String() string {
+func (elif ElseIf) String() string {
 	var cxx strings.Builder
 	cxx.WriteString("else if (")
 	cxx.WriteString(elif.Expr.String())
@@ -549,14 +583,61 @@ func (elif ElseIfAST) String() string {
 	return cxx.String()
 }
 
-type ElseAST struct {
+type Else struct {
 	Token lexer.Token
 	Block BlockAST
 }
 
-func (elseast ElseAST) String() string {
+func (elseast Else) String() string {
 	var cxx strings.Builder
 	cxx.WriteString("else ")
 	cxx.WriteString(elseast.Block.String())
 	return cxx.String()
+}
+
+type Comment struct {
+	Content string
+}
+
+func (c Comment) String() string {
+	var cxx strings.Builder
+	cxx.WriteString("// ")
+	cxx.WriteString(c.Content)
+	return cxx.String()
+}
+
+type Use struct {
+	Token lexer.Token
+	Path  string
+}
+
+type CxxEmbed struct {
+	Content string
+}
+
+func (ce CxxEmbed) String() string {
+	return ce.Content
+}
+
+type Preprocessor struct {
+	Token   lexer.Token
+	Command interface{}
+}
+
+func (pp Preprocessor) String() string {
+	return fmt.Sprint(pp.Command)
+}
+
+type Directive struct {
+	Command interface{}
+}
+
+func (d Directive) String() string {
+	return fmt.Sprint(d.Command)
+}
+
+type EnofiDirective struct{}
+
+func (EnofiDirective) String() string {
+	return ""
 }

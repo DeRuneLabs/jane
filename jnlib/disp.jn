@@ -1,5 +1,0 @@
-// print specified value to command line
-print(v any)
-
-// disp prints specified avalue to comamnd line with new line
-println(v any)

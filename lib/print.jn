@@ -1,0 +1,4 @@
+print(const v any) { }
+
+// print specified value to command line with the line
+println(const v any) { }

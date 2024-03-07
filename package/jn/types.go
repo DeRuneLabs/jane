@@ -1,25 +1,30 @@
 package jn
 
 const (
-	Void     uint8 = 0
-	I8       uint8 = 1
-	I16      uint8 = 2
-	I32      uint8 = 3
-	I64      uint8 = 4
-	U8       uint8 = 5
-	U16      uint8 = 6
-	U32      uint8 = 7
-	U64      uint8 = 8
-	Bool     uint8 = 9
-	Str      uint8 = 10
-	F32      uint8 = 11
-	F64      uint8 = 12
-	Any      uint8 = 13
-	Rune     uint8 = 14
-	Name     uint8 = 15
-	Function uint8 = 16
-	Nil      uint8 = 17
-	Size     uint8 = 18
+	Void  uint8 = 0
+	I8    uint8 = 1
+	I16   uint8 = 2
+	I32   uint8 = 3
+	I64   uint8 = 4
+	U8    uint8 = 5
+	U16   uint8 = 6
+	U32   uint8 = 7
+	U64   uint8 = 8
+	Bool  uint8 = 9
+	Str   uint8 = 10
+	F32   uint8 = 11
+	F64   uint8 = 12
+	Any   uint8 = 13
+	Rune  uint8 = 14
+	Id    uint8 = 15
+	Func  uint8 = 16
+	Nil   uint8 = 17
+	Size  uint8 = 18
+	SSize uint8 = 19
+)
+
+const (
+	NumericTypeStr = "<numeric>"
 )
 
 func TypeGreaterThan(t1, t2 uint8) bool {
@@ -46,7 +51,7 @@ func TypeGreaterThan(t1, t2 uint8) bool {
 		return t2 != Any && t2 != F64
 	case F64:
 		return t2 != Any
-	case Size:
+	case Size, SSize:
 		return true
 	}
 	return false
@@ -68,44 +73,60 @@ func TypesAreCompatible(t1, t2 uint8, ignoreany bool) bool {
 			t2 == I32 ||
 			t2 == I64 ||
 			t2 == F32 ||
-			t2 == F64
+			t2 == F64 ||
+			t2 == Size ||
+			t2 == SSize
 	case I16:
 		return t2 == I16 ||
 			t2 == I32 ||
 			t2 == I64 ||
 			t2 == F32 ||
-			t2 == F64
+			t2 == F64 ||
+			t2 == Size ||
+			t2 == SSize
 	case I32:
 		return t2 == I32 ||
 			t2 == I64 ||
 			t2 == F32 ||
-			t2 == F64
-	case I64:
+			t2 == F64 ||
+			t2 == Size ||
+			t2 == SSize
+	case I64, SSize:
 		return t2 == I64 ||
 			t2 == F32 ||
-			t2 == F64
+			t2 == F64 ||
+			t2 == Size ||
+			t2 == SSize
 	case U8:
 		return t2 == U8 ||
 			t2 == U16 ||
 			t2 == U32 ||
 			t2 == U64 ||
 			t2 == F32 ||
-			t2 == F64
+			t2 == F64 ||
+			t2 == Size ||
+			t2 == SSize
 	case U16:
 		return t2 == U16 ||
 			t2 == U32 ||
 			t2 == U64 ||
 			t2 == F32 ||
-			t2 == F64
+			t2 == F64 ||
+			t2 == Size ||
+			t2 == SSize
 	case U32:
 		return t2 == U32 ||
 			t2 == U64 ||
 			t2 == F32 ||
-			t2 == F64
-	case U64:
+			t2 == F64 ||
+			t2 == Size ||
+			t2 == SSize
+	case U64, Size:
 		return t2 == U64 ||
 			t2 == F32 ||
-			t2 == F64
+			t2 == F64 ||
+			t2 == Size ||
+			t2 == SSize
 	case Bool:
 		return t2 == Bool
 	case Str:
@@ -121,7 +142,8 @@ func TypesAreCompatible(t1, t2 uint8, ignoreany bool) bool {
 			t2 == I64 ||
 			t2 == U16 ||
 			t2 == U32 ||
-			t2 == U64
+			t2 == U64 ||
+			t2 == Size
 	case Nil:
 		return t2 == Nil
 	}
@@ -150,7 +172,8 @@ func IsSignedIntegerType(t uint8) bool {
 	return t == I8 ||
 		t == I16 ||
 		t == I32 ||
-		t == I64
+		t == I64 ||
+		t == SSize
 }
 
 func IsUnsignedNumericType(t uint8) bool {
@@ -161,9 +184,9 @@ func IsUnsignedNumericType(t uint8) bool {
 		t == Size
 }
 
-func TypeFromName(name string) uint8 {
-	switch name {
-	case "i8":
+func TypeFromId(id string) uint8 {
+	switch id {
+	case "i8", "sbyte":
 		return I8
 	case "i16":
 		return I16
@@ -171,7 +194,7 @@ func TypeFromName(name string) uint8 {
 		return I32
 	case "i64":
 		return I64
-	case "u8":
+	case "u8", "byte":
 		return U8
 	case "u16":
 		return U16
@@ -193,11 +216,13 @@ func TypeFromName(name string) uint8 {
 		return Rune
 	case "size":
 		return Size
+	case "ssize":
+		return SSize
 	}
 	return 0
 }
 
-func CxxTypeNameFromType(typeCode uint8) string {
+func CxxTypeIdFromType(typeCode uint8) string {
 	switch typeCode {
 	case Void:
 		return "void"
@@ -231,11 +256,13 @@ func CxxTypeNameFromType(typeCode uint8) string {
 		return "rune"
 	case Size:
 		return "size"
+	case SSize:
+		return "ssize"
 	}
 	return ""
 }
 
-func DefaultValueOfType(code uint8) string {
+func DefaultValOfType(code uint8) string {
 	if IsNumericType(code) {
 		return "0"
 	}
@@ -245,7 +272,7 @@ func DefaultValueOfType(code uint8) string {
 	case Str:
 		return `""`
 	case Rune:
-		return `'\0`
+		return `'\0'`
 	}
 	return "nil"
 }
