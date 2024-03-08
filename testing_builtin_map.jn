@@ -1,0 +1,17 @@
+#pragma enofi
+
+main() {
+	map: = [i32:str] {
+		0: "jane",
+		1: "are",
+		2: "wonderfull",
+	}
+	println("length map")
+	println(map.len)
+
+	println("keys map")
+	println(map.keys())
+
+	println("values of map")
+	println(map.values())
+}
