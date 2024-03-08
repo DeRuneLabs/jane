@@ -1,6 +1,6 @@
 package parser
 
-import "github.com/De-Rune/jane/ast"
+import "github.com/DeRuneLabs/jane/ast"
 
 type defmap struct {
 	Funcs   []*function

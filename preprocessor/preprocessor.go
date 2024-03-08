@@ -1,6 +1,6 @@
 package preprocessor
 
-import "github.com/De-Rune/jane/ast"
+import "github.com/DeRuneLabs/jane/ast"
 
 func TrimEnofi(tree *[]ast.Obj) {
 	for i, obj := range *tree {

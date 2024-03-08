@@ -8,14 +8,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/De-Rune/jane/ast"
-	"github.com/De-Rune/jane/lexer"
-	"github.com/De-Rune/jane/package/jn"
-	"github.com/De-Rune/jane/package/jnapi"
-	"github.com/De-Rune/jane/package/jnbits"
-	"github.com/De-Rune/jane/package/jnio"
-	"github.com/De-Rune/jane/package/jnlog"
-	"github.com/De-Rune/jane/preprocessor"
+	"github.com/DeRuneLabs/jane/ast"
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/package/jn"
+	"github.com/DeRuneLabs/jane/package/jnapi"
+	"github.com/DeRuneLabs/jane/package/jnbits"
+	"github.com/DeRuneLabs/jane/package/jnio"
+	"github.com/DeRuneLabs/jane/package/jnlog"
+	"github.com/DeRuneLabs/jane/preprocessor"
 )
 
 type use struct {

@@ -1,8 +1,8 @@
 package parser
 
 import (
-	"github.com/De-Rune/jane/ast"
-	"github.com/De-Rune/jane/package/jn"
+	"github.com/DeRuneLabs/jane/ast"
+	"github.com/DeRuneLabs/jane/package/jn"
 )
 
 var builtinFuncs = []*function{

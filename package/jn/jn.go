@@ -1,6 +1,6 @@
 package jn
 
-import "github.com/De-Rune/jane/package/jnset"
+import "github.com/DeRuneLabs/jane/package/jnset"
 
 const (
 	Version      = `@dev_beta 0.0.1`

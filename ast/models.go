@@ -5,9 +5,9 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/De-Rune/jane/lexer"
-	"github.com/De-Rune/jane/package/jn"
-	"github.com/De-Rune/jane/package/jnapi"
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/package/jn"
+	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
 type Obj struct {

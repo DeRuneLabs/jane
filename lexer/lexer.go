@@ -7,9 +7,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/De-Rune/jane/package/jn"
-	"github.com/De-Rune/jane/package/jnio"
-	"github.com/De-Rune/jane/package/jnlog"
+	"github.com/DeRuneLabs/jane/package/jn"
+	"github.com/DeRuneLabs/jane/package/jnio"
+	"github.com/DeRuneLabs/jane/package/jnlog"
 )
 
 type Lexer struct {

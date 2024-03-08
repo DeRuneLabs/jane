@@ -3,7 +3,7 @@ package jnbits
 import (
 	"strconv"
 
-	"github.com/De-Rune/jane/package/jn"
+	"github.com/DeRuneLabs/jane/package/jn"
 )
 
 func BitsizeType(t uint8) int {

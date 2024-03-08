@@ -5,11 +5,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/De-Rune/jane/lexer"
-	"github.com/De-Rune/jane/package/jn"
-	"github.com/De-Rune/jane/package/jnapi"
-	"github.com/De-Rune/jane/package/jnbits"
-	"github.com/De-Rune/jane/package/jnlog"
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/package/jn"
+	"github.com/DeRuneLabs/jane/package/jnapi"
+	"github.com/DeRuneLabs/jane/package/jnbits"
+	"github.com/DeRuneLabs/jane/package/jnlog"
 )
 
 type Builder struct {

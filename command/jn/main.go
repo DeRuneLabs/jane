@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/De-Rune/jane/documenter"
-	"github.com/De-Rune/jane/package/jn"
-	"github.com/De-Rune/jane/package/jnio"
-	"github.com/De-Rune/jane/package/jnlog"
-	"github.com/De-Rune/jane/package/jnset"
-	"github.com/De-Rune/jane/parser"
+	"github.com/DeRuneLabs/jane/documenter"
+	"github.com/DeRuneLabs/jane/package/jn"
+	"github.com/DeRuneLabs/jane/package/jnio"
+	"github.com/DeRuneLabs/jane/package/jnlog"
+	"github.com/DeRuneLabs/jane/package/jnset"
+	"github.com/DeRuneLabs/jane/parser"
 )
 
 func help(cmd string) {

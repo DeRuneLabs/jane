@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/De-Rune/jane/package/jn"
+	"github.com/DeRuneLabs/jane/package/jn"
 )
 
 func OpenJn(path string) (*File, error) {

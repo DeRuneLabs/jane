@@ -3,9 +3,9 @@ package parser
 import (
 	"strings"
 
-	"github.com/De-Rune/jane/ast"
-	"github.com/De-Rune/jane/lexer"
-	"github.com/De-Rune/jane/package/jnapi"
+	"github.com/DeRuneLabs/jane/ast"
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
 type iExpr interface {
