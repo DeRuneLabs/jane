@@ -38,7 +38,7 @@ func isBoolExpr(val value) bool {
 
 func isForeachIterExpr(val value) bool {
 	switch {
-	case typeIsArray(val.ast.Type):
+	case typeIsArray(val.ast.Type), typeIsMap(val.ast.Type):
 		return true
 	case !typeIsSingle(val.ast.Type):
 		return false

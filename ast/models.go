@@ -73,15 +73,29 @@ func (dt DataType) String() string {
 	if dt.MultiTyped {
 		return dt.MultiTypeString() + cxx.String()
 	}
-	if dt.Val != "" && dt.Val[0] == '[' {
-		pointers := cxx.String()
-		cxx.Reset()
-		cxx.WriteString("array<")
-		dt.Val = dt.Val[2:]
-		cxx.WriteString(dt.String())
-		cxx.WriteByte('>')
-		cxx.WriteString(pointers)
-		return cxx.String()
+	if dt.Val != "" {
+		switch {
+		case strings.HasPrefix(dt.Val, "[]"):
+			pointers := cxx.String()
+			cxx.Reset()
+			cxx.WriteString("array<")
+			dt.Val = dt.Val[2:]
+			cxx.WriteString(dt.String())
+			cxx.WriteByte('>')
+			cxx.WriteString(pointers)
+			return cxx.String()
+		case dt.Id == jn.Map && dt.Val[0] == '[':
+			pointers := cxx.String()
+			types := dt.Tag.([]DataType)
+			cxx.Reset()
+			cxx.WriteString("map<")
+			cxx.WriteString(types[0].String())
+			cxx.WriteByte(',')
+			cxx.WriteString(types[1].String())
+			cxx.WriteByte('>')
+			cxx.WriteString(pointers)
+			return cxx.String()
+		}
 	}
 	switch dt.Id {
 	case jn.Id:
@@ -95,7 +109,7 @@ func (dt DataType) String() string {
 
 func (dt DataType) FunctionString() string {
 	var cxx strings.Builder
-	cxx.WriteString("std::function<")
+	cxx.WriteString("func<")
 	fun := dt.Tag.(Func)
 	cxx.WriteString(fun.RetType.String())
 	cxx.WriteByte('(')
@@ -319,11 +333,11 @@ func (v Var) String() string {
 	cxx.WriteString(v.Type.String())
 	cxx.WriteByte(' ')
 	cxx.WriteString(jnapi.AsId(v.Id))
+	cxx.WriteByte('{')
 	if v.Val.Processes != nil {
-		cxx.WriteByte('{')
 		cxx.WriteString(v.Val.String())
-		cxx.WriteByte('}')
 	}
+	cxx.WriteByte('}')
 	cxx.WriteByte(';')
 	return cxx.String()
 }
@@ -482,7 +496,7 @@ func (fp ForeachProfile) String(iter Iter) string {
 	return fp.IterationSring(iter)
 }
 
-func (fp ForeachProfile) ForeachString(iter Iter) string {
+func (fp ForeachProfile) ClassicString(iter Iter) string {
 	var cxx strings.Builder
 	cxx.WriteString("foreach<")
 	cxx.WriteString(fp.ExprType.String())
@@ -508,6 +522,28 @@ func (fp ForeachProfile) ForeachString(iter Iter) string {
 	cxx.WriteString(iter.Block.String())
 	cxx.WriteString(");")
 	return cxx.String()
+}
+
+func (fp ForeachProfile) MapString(iter Iter) string {
+	var cxx strings.Builder
+	cxx.WriteString("for (auto ")
+	cxx.WriteString(jnapi.AsId(fp.KeyB.Id))
+	cxx.WriteString(" : ")
+	cxx.WriteString(fp.Expr.String())
+	cxx.WriteString(") ")
+	cxx.WriteString(iter.Block.String())
+	return cxx.String()
+}
+
+func (fp *ForeachProfile) ForeachString(iter Iter) string {
+	switch {
+	case fp.ExprType.Val == "str",
+		strings.HasPrefix(fp.ExprType.Val, "[]"):
+		return fp.ClassicString(iter)
+	case fp.ExprType.Val[0] == '[':
+		return fp.MapString(iter)
+	}
+	return ""
 }
 
 func (fp ForeachProfile) IterationSring(iter Iter) string {

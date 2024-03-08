@@ -75,10 +75,14 @@ func (b *Builder) Build() {
 		b.pub = toks[0].Id == lexer.Pub
 		if b.pub {
 			if len(toks) == 1 {
-				b.pusherr(toks[0], "invalid_syntax")
-				continue
+				if b.Ended() {
+					b.pusherr(toks[0], "invalid_syntax")
+					continue
+				}
+				toks = b.skipStatement()
+			} else {
+				toks = toks[1:]
 			}
-			toks = toks[1:]
 		}
 		b.buildNode(toks)
 	}
@@ -264,7 +268,7 @@ func (b *Builder) Func(tokens []lexer.Token, anonymous bool) (f Func) {
 		i++
 	}
 	f.RetType.Id = jn.Void
-	paramToks := getRange(&i, "(", ")", tokens)
+	paramToks := b.getrange(&i, "(", ")", &tokens)
 	if len(paramToks) > 0 {
 		b.Params(&f, paramToks)
 	}
@@ -287,7 +291,7 @@ func (b *Builder) Func(tokens []lexer.Token, anonymous bool) (f Func) {
 		b.pusherr(tok, "invalid_syntax")
 		return
 	}
-	blockToks := getRange(&i, "{", "}", tokens)
+	blockToks := b.getrange(&i, "{", "}", &tokens)
 	if blockToks == nil {
 		b.pusherr(f.Token, "body_not_exist")
 		return
@@ -418,22 +422,22 @@ end:
 	f.Params = append(f.Params, past)
 }
 
-func (b *Builder) DataType(tokens []lexer.Token, i *int, err bool) (dt DataType, ok bool) {
+func (b *Builder) DataType(tokens []lexer.Token, i *int, err bool) (t DataType, ok bool) {
 	first := *i
 	var dtv strings.Builder
 	for ; *i < len(tokens); *i++ {
 		tok := tokens[*i]
 		switch tok.Id {
 		case lexer.DataType:
-			dt.Token = tok
-			dt.Id = jn.TypeFromId(dt.Token.Kind)
-			dtv.WriteString(dt.Token.Kind)
+			t.Token = tok
+			t.Id = jn.TypeFromId(t.Token.Kind)
+			dtv.WriteString(t.Token.Kind)
 			ok = true
 			goto ret
 		case lexer.Id:
-			dt.Token = tok
-			dt.Id = jn.Id
-			dtv.WriteString(dt.Token.Kind)
+			t.Token = tok
+			t.Id = jn.Id
+			dtv.WriteString(t.Token.Kind)
 			ok = true
 			goto ret
 		case lexer.Operator:
@@ -448,12 +452,12 @@ func (b *Builder) DataType(tokens []lexer.Token, i *int, err bool) (dt DataType,
 		case lexer.Brace:
 			switch tok.Kind {
 			case "(":
-				dt.Token = tok
-				dt.Id = jn.Func
-				value, f := b.FuncDataTypeHead(tokens, i)
+				t.Token = tok
+				t.Id = jn.Func
+				val, f := b.FuncDataTypeHead(tokens, i)
 				f.RetType, _ = b.FuncRetDataType(tokens, i)
-				dtv.WriteString(value)
-				dt.Tag = f
+				dtv.WriteString(val)
+				t.Tag = f
 				ok = true
 				goto ret
 			case "[":
@@ -465,14 +469,22 @@ func (b *Builder) DataType(tokens []lexer.Token, i *int, err bool) (dt DataType,
 					return
 				}
 				tok = tokens[*i]
-				if tok.Id != lexer.Brace || tok.Kind != "]" {
+				if tok.Id == lexer.Brace && tok.Kind == "]" {
+					dtv.WriteString("[]")
+					continue
+				}
+				*i--
+				dt, val := b.MapDataType(tokens, i, err)
+				if val == "" {
 					if err {
 						b.pusherr(tok, "invalid_syntax")
 					}
 					return
 				}
-				dtv.WriteString("[]")
-				continue
+				t = dt
+				dtv.WriteString(val)
+				ok = true
+				goto ret
 			}
 			return
 		default:
@@ -486,8 +498,69 @@ func (b *Builder) DataType(tokens []lexer.Token, i *int, err bool) (dt DataType,
 		b.pusherr(tokens[first], "invalid_type")
 	}
 ret:
-	dt.Val = dtv.String()
+	t.Val = dtv.String()
 	return
+}
+
+func (b *Builder) MapDataType(tokens []lexer.Token, i *int, err bool) (t DataType, _ string) {
+	t.Id = jn.Map
+	t.Token = tokens[0]
+	braceCount := 0
+	colon := -1
+	start := *i
+	var mapToks []lexer.Token
+	for ; *i < len(tokens); *i++ {
+		tok := tokens[*i]
+		if tok.Id == lexer.Brace {
+			switch tok.Kind {
+			case "(", "[", "{":
+				braceCount++
+			default:
+				braceCount--
+			}
+		}
+		if braceCount == 0 {
+			if start+1 > *i {
+				return
+			}
+			mapToks = tokens[start+1 : *i]
+			break
+		} else if braceCount != 1 {
+			continue
+		}
+		if colon == -1 && tok.Id == lexer.Colon {
+			colon = *i - start - 1
+		}
+	}
+	if mapToks == nil || colon == -1 {
+		return
+	}
+	colonTok := tokens[colon]
+	if colon == 0 || colon+1 >= len(mapToks) {
+		b.pusherr(colonTok, "missing_expr")
+		return t, " "
+	}
+	keyTypeToks := mapToks[:colon]
+	valTypeToks := mapToks[colon+1:]
+	types := make([]DataType, 2)
+	j := 0
+	types[0], _ = b.DataType(keyTypeToks, &j, err)
+	if j < len(keyTypeToks) && err {
+		b.pusherr(keyTypeToks[j], "invalid_syntax")
+	}
+	j = 0
+	types[1], _ = b.DataType(valTypeToks, &j, err)
+	if j < len(valTypeToks) && err {
+		b.pusherr(valTypeToks[j], "invalid_syntax")
+	}
+	t.Tag = types
+	var val strings.Builder
+	val.WriteByte('[')
+	val.WriteString(types[0].Val)
+	val.WriteByte(':')
+	val.WriteString(types[1].Val)
+	val.WriteByte(']')
+	return t, val.String()
 }
 
 func (b *Builder) FuncDataTypeHead(tokens []lexer.Token, i *int) (string, Func) {
@@ -527,13 +600,14 @@ func (b *Builder) pushTypeToTypes(types *[]DataType, tokens []lexer.Token, errTo
 	*types = append(*types, currentDt)
 }
 
-func (b *Builder) FuncRetDataType(tokens []lexer.Token, i *int) (dt DataType, ok bool) {
+func (b *Builder) FuncRetDataType(tokens []lexer.Token, i *int) (t DataType, ok bool) {
 	if *i >= len(tokens) {
 		return
 	}
 	tok := tokens[*i]
+	start := *i
 	if tok.Id == lexer.Brace && tok.Kind == "[" {
-		dt.Val += tok.Kind
+		t.Val += tok.Kind
 		*i++
 		if *i >= len(tokens) {
 			*i--
@@ -548,7 +622,7 @@ func (b *Builder) FuncRetDataType(tokens []lexer.Token, i *int) (dt DataType, ok
 		last := *i
 		for ; *i < len(tokens); *i++ {
 			tok := tokens[*i]
-			dt.Val += tok.Kind
+			t.Val += tok.Kind
 			if tok.Id == lexer.Brace {
 				switch tok.Kind {
 				case "(", "[", "{":
@@ -558,6 +632,10 @@ func (b *Builder) FuncRetDataType(tokens []lexer.Token, i *int) (dt DataType, ok
 				}
 			}
 			if braceCount == 0 {
+				if tok.Id == lexer.Colon {
+					*i = start
+					goto end
+				}
 				b.pushTypeToTypes(&types, tokens[last:*i], tokens[last-1])
 				break
 			} else if braceCount > 1 {
@@ -570,10 +648,10 @@ func (b *Builder) FuncRetDataType(tokens []lexer.Token, i *int) (dt DataType, ok
 			last = *i + 1
 		}
 		if len(types) > 1 {
-			dt.MultiTyped = true
-			dt.Tag = types
+			t.MultiTyped = true
+			t.Tag = types
 		} else {
-			dt = types[0]
+			t = types[0]
 		}
 		ok = true
 		return
@@ -1290,7 +1368,7 @@ func (b *Builder) IterExpr(tokens []lexer.Token) (s Statement) {
 	}
 	i := new(int)
 	*i = len(exprToks)
-	blockToks := getRange(i, "{", "}", tokens)
+	blockToks := b.getrange(i, "{", "}", &tokens)
 	if blockToks == nil {
 		b.pusherr(iter.Token, "body_not_exist")
 		return
@@ -1312,7 +1390,7 @@ func (b *Builder) IfExpr(bs *blockStatement) (s Statement) {
 	}
 	i := new(int)
 	*i = len(exprToks)
-	blockToks := getRange(i, "{", "}", bs.tokens)
+	blockToks := b.getrange(i, "{", "}", &bs.tokens)
 	if blockToks == nil {
 		b.pusherr(ifast.Token, "body_not_exist")
 		return
@@ -1339,7 +1417,7 @@ func (b *Builder) ElseIfExpr(bs *blockStatement) (s Statement) {
 	}
 	i := new(int)
 	*i = len(exprToks)
-	blockToks := getRange(i, "{", "}", bs.tokens)
+	blockToks := b.getrange(i, "{", "}", &bs.tokens)
 	if blockToks == nil {
 		b.pusherr(elif.Token, "body_not_exist")
 		return
@@ -1364,7 +1442,7 @@ func (b *Builder) ElseBlock(bs *blockStatement) (s Statement) {
 	elseast.Token = bs.tokens[0]
 	bs.tokens = bs.tokens[1:]
 	i := new(int)
-	blockToks := getRange(i, "{", "}", bs.tokens)
+	blockToks := b.getrange(i, "{", "}", &bs.tokens)
 	if blockToks == nil {
 		if *i < len(bs.tokens) {
 			b.pusherr(elseast.Token, "else_have_expr")
@@ -1544,7 +1622,21 @@ func (b *Builder) checkExprTok(token lexer.Token) {
 	}
 }
 
-func getRange(i *int, open, close string, tokens []lexer.Token) []lexer.Token {
+func (b *Builder) getrange(i *int, open, close string, toks *[]lexer.Token) []lexer.Token {
+	rang := getrange(i, open, close, *toks)
+	if rang != nil {
+		return rang
+	}
+	if b.Ended() {
+		return nil
+	}
+	*i = 0
+	*toks = b.skipStatement()
+	rang = getrange(i, open, close, *toks)
+	return rang
+}
+
+func getrange(i *int, open, close string, tokens []lexer.Token) []lexer.Token {
 	if *i >= len(tokens) {
 		return nil
 	}

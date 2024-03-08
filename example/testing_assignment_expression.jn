@@ -1,0 +1,14 @@
+#pragma enofi
+
+// cxx:#define TEST_CXX_EMBED
+
+type TEST_TYPEDEF i32
+
+test_assignment_expression() {
+	number:i32 = 10
+	println((number*=10))
+}
+
+main() {
+	test_assignment_expression()
+}

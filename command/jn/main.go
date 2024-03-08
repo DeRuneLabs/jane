@@ -289,6 +289,7 @@ func appendStandard(code *string) {
 #include <functional>
 #include <iostream>
 #include <locale>
+#include <map>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -298,38 +299,6 @@ func appendStandard(code *string) {
 // region JN_BUILTIN_VALUES
 #define nil nullptr
 // endregion JN_BUILTIN_VALUES
-
-// region JN_MISC
-class exception : public std::exception {
-private:
-  std::basic_string<char> _buffer;
-
-public:
-  exception(const char *_Str) { this->_buffer = _Str; }
-  const char *what() const throw() { return this->_buffer.c_str(); }
-};
-
-#define JNALLOC(_Alloc) new (std::nothrow) _Alloc
-#define JNTHROW(_Msg) throw exception(_Msg)
-
-template <typename _Enum_t, typename _Index_t, typename _Item_t>
-static inline void foreach (
-    const _Enum_t _Enum, const std::function<void(_Index_t, _Item_t)> _Body) {
-  _Index_t _index{0};
-  for (auto _item : _Enum) {
-    _Body(_index++, _item);
-  }
-}
-
-template <typename _Enum_t, typename _Index_t>
-static inline void foreach (const _Enum_t _Enum,
-                            const std::function<void(_Index_t)> _Body) {
-  _Index_t _index{0};
-  for (auto begin = _Enum.begin(), end = _Enum.end(); begin < end; ++begin) {
-    _Body(_index++);
-  }
-}
-// endregion JN_MISC
 
 // region JN_BUILTIN_TYPES
 typedef int8_t i8;
@@ -345,6 +314,8 @@ typedef size_t size;
 typedef float f32;
 typedef double f64;
 typedef wchar_t rune;
+
+#define func std::function
 // endregion JN_BUILTIN_TYPES
 
 class str : public std::basic_string<rune> {
@@ -380,7 +351,7 @@ public:
     }
     if (std::is_same<_Item_t, u8>::value) {
       std::wstring_convert<std::codecvt_utf8_utf16<rune>> _conv;
-      std::string _bytes = _conv.to_bytes(_Str);
+      const std::string _bytes = _conv.to_bytes(_Str);
       this->_buffer = std::vector<_Item_t>(_bytes.begin(), _bytes.end());
       return;
     }
@@ -410,7 +381,7 @@ public:
     if (std::is_same<_Item_t, u8>::value) {
       std::wstring_convert<std::codecvt_utf8_utf16<rune>> _conv;
       const std::string _bytes(this->begin(), this->end());
-      return str(_conv.from_bytes(_bytes));
+      return str(std::wstring(_bytes.begin(), _bytes.end()));
     }
   }
 
@@ -441,7 +412,7 @@ public:
 
   friend std::wostream &operator<<(std::wostream &_Stream,
                                    const array<_Item_t> &_Src) {
-    _Stream << L"[";
+    _Stream << L'[';
     const size _length = _Src._buffer.size();
     for (size _index = 0; _index < _length;) {
       _Stream << _Src._buffer[_index++];
@@ -449,12 +420,82 @@ public:
         _Stream << L", ";
       }
     }
-    _Stream << L"]";
+    _Stream << L']';
     return _Stream;
   }
   // endregion OPERATOR_OVERFLOWS
 };
+
+template<typename _Key_t, typename _Value_t>
+class map: public std::map<_Key_t, _Value_t> {
+public:
+// region CONSTRUCTORS
+	map<_Key_t, _Value_t>(void)                 {}
+	map<_Key_t, _Value_t>(const std::nullptr_t) {}
+	map<_Key_t, _Value_t>(const std::initializer_list<std::pair<_Key_t, _Value_t>> _Src)
+	{ for (const auto _data: _Src) { this->insert(_data); } }
+// endregion CONSTRUCTORS
+
+// region OPERATOR_OVERFLOWS
+	bool operator==(const std::nullptr_t) const noexcept { return this->empty(); }
+	bool operator!=(const std::nullptr_t) const noexcept { return !this->empty(); }
+
+	friend std::wostream& operator<<(std::wostream &_Stream,
+		const map<_Key_t, _Value_t> &_Src) {
+		_Stream << L'{';
+		size _length = _Src.size();
+		for (const auto _pair: _Src) {
+		_Stream << _pair.first;
+		_Stream << L':';
+		_Stream << _pair.second;
+		if (--_length > 0) { _Stream << L", "; }
+		}
+		_Stream << L'}';
+		return _Stream;
+	}
+// endregion OPERATOR_OVERFLOWS
+};
 // endregion JN_STRUCTURES
+
+// region JN_MISC
+class exception: public std::exception {
+private:
+	std::basic_string<char> _buffer;
+public:
+	exception(const char *_Str)      { this->_buffer = _Str; }
+	const char *what() const throw() { return this->_buffer.c_str(); }
+};
+
+#define JNALLOC(_Alloc) new(std::nothrow) _Alloc
+#define JNTHROW(_Msg) throw exception(_Msg)
+
+template <typename _Enum_t, typename _Index_t, typename _Item_t>
+static inline void foreach(const _Enum_t _Enum,
+                           const func<void(_Index_t, _Item_t)> _Body) {
+  _Index_t _index{0};
+  for (auto _item: _Enum) { _Body(_index++, _item); }
+}
+
+template <typename _Enum_t, typename _Index_t>
+static inline void foreach(const _Enum_t _Enum,
+                           const func<void(_Index_t)> _Body) {
+  _Index_t _index{0};
+  for (auto begin = _Enum.begin(), end = _Enum.end(); begin < end; ++begin)
+  { _Body(_index++); }
+}
+
+template <typename _Key_t, typename _Value_t>
+static inline void foreach(const map<_Key_t, _Value_t> _Map,
+                           const func<void(_Key_t)> _Body) {
+  for (const auto _pair: _Map) { _Body(_pair.first); }
+}
+
+template <typename _Key_t, typename _Value_t>
+static inline void foreach(const map<_Key_t, _Value_t> _Map,
+                           const func<void(_Key_t, _Value_t)> _Body) {
+  for (const auto _pair: _Map) { _Body(_pair.first, _pair.second); }
+}
+// endregion JN_MISC
 
 // region JN_BUILTIN_FUNCTIONS
 template <typename _Obj_t> static inline void _print(_Obj_t _Obj) {
@@ -475,7 +516,9 @@ template <typename _Obj_t> static inline void _println(_Obj_t _Obj) {
 // region JN_ENTRY_POINT
 int main() {
 // region JN_ENTRY_POINT_STANDARD_CODES
-  std::locale::global(std::locale());
+  std::setlocale(LC_ALL, "");
+  std::wcin.imbue(std::locale::global(std::locale()));
+  std::wcout.imbue(std::locale::global(std::locale()));
 // endregion JN_ENTRY_POINT_STANDARD_CODES
   _main();
 // region JN_ENTRY_POINT_END_STANDARD_CODES

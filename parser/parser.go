@@ -565,16 +565,17 @@ func (p *Parser) Var(vast ast.Var) ast.Var {
 				vast.IdToken,
 			}.checkAssignTypeAsync()
 		} else {
-			dt, ok := p.readyType(vast.Type, true)
-			if ok {
-				var valTok lexer.Token
-				valTok.Id = lexer.Value
-				valTok.Kind = p.defaultValueOfType(dt)
-				valToks := []lexer.Token{valTok}
-				processes := [][]lexer.Token{valToks}
-				vast.Val = ast.Expr{Tokens: valToks, Processes: processes}
-				_, vast.Val.Model = p.evalExpr(vast.Val)
-			}
+			vast.Type, _ = p.readyType(vast.Type, true)
+			// dt, ok := p.readyType(vast.Type, true)
+			// if ok {
+			// 	var valTok lexer.Token
+			// 	valTok.Id = lexer.Value
+			// 	valTok.Kind = p.defaultValueOfType(dt)
+			// 	valToks := []lexer.Token{valTok}
+			// 	processes := [][]lexer.Token{valToks}
+			// 	vast.Val = ast.Expr{Tokens: valToks, Processes: processes}
+			// 	_, vast.Val.Model = p.evalExpr(vast.Val)
+			// }
 		}
 	} else {
 		if vast.SetterToken.Id == lexer.NA {
@@ -725,9 +726,9 @@ func (p *Parser) checkTypesAsync() {
 }
 
 func (p *Parser) WaitingGlobals() {
-	for _, varAST := range p.waitingGlobals {
-		variable := p.Var(varAST)
-		p.Defs.Globals = append(p.Defs.Globals, variable)
+	for _, vast := range p.waitingGlobals {
+		v := p.Var(vast)
+		p.Defs.Globals = append(p.Defs.Globals, v)
 	}
 }
 
@@ -944,6 +945,7 @@ func (p *valueEvaluator) nil() value {
 	var v value
 	v.ast.Data = p.token.Kind
 	v.ast.Type.Id = jn.Nil
+	v.ast.Type.Val = jn.NilTypeStr
 	p.model.appendSubNode(exprNode{p.token.Kind})
 	return v
 }
@@ -1786,16 +1788,20 @@ func (p *Parser) evalBraceRangeExpr(tokens []lexer.Token, m *exprModel) (v value
 	case lexer.Brace:
 		switch exprToks[0].Kind {
 		case "[":
-			ast := ast.NewBuilder(nil)
-			dt, ok := ast.DataType(exprToks, new(int), true)
+			b := ast.NewBuilder(nil)
+			t, ok := b.DataType(exprToks, new(int), true)
 			if !ok {
-				p.pusherrs(ast.Errs...)
+				p.pusherrs(b.Errs...)
 				return
 			}
 			exprToks = tokens[len(exprToks):]
 			var model iExpr
-			v, model = p.buildArray(p.buildEnumerableParts(exprToks),
-				dt, exprToks[0])
+			switch {
+			case typeIsArray(t):
+				v, model = p.buildArray(p.buildEnumerableParts(exprToks), t, exprToks[0])
+			case typeIsMap(t):
+				v, model = p.buildMap(p.buildEnumerableParts(exprToks), t, exprToks[0])
+			}
 			m.appendSubNode(model)
 			return
 		case "(":
@@ -1860,6 +1866,8 @@ func (p *Parser) evalEnumerableSelect(enumv, selectv value, errtok lexer.Token) 
 	switch {
 	case typeIsArray(enumv.ast.Type):
 		return p.evalArraySelect(enumv, selectv, errtok)
+	case typeIsMap(enumv.ast.Type):
+		return p.evalMapSelect(enumv, selectv, errtok)
 	case typeIsSingle(enumv.ast.Type):
 		return p.evalStrSelect(enumv, selectv, errtok)
 	}
@@ -1875,6 +1883,17 @@ func (p *Parser) evalArraySelect(arrv, selectv value, errtok lexer.Token) value 
 		p.pusherrtok(errtok, "notint_array_select")
 	}
 	return arrv
+}
+
+func (p *Parser) evalMapSelect(mapv, selectv value, errtok lexer.Token) value {
+	mapv.lvalue = true
+	types := mapv.ast.Type.Tag.([]ast.DataType)
+	keyType := types[0]
+	valType := types[1]
+	mapv.ast.Type = valType
+	p.wg.Add(1)
+	go p.checkTypeAsync(keyType, selectv.ast.Type, false, errtok)
+	return mapv
 }
 
 func (p *Parser) evalStrSelect(strv, selectv value, errtok lexer.Token) value {
@@ -1940,6 +1959,66 @@ func (p *Parser) buildArray(
 			partVal,
 			false,
 			part[0],
+		}.checkAssignTypeAsync()
+	}
+	return v, model
+}
+
+func (p *Parser) buildMap(parts [][]lexer.Token, t ast.DataType, errtok lexer.Token) (value, iExpr) {
+	var v value
+	v.ast.Type = t
+	model := mapExpr{dataType: t}
+	types := t.Tag.([]ast.DataType)
+	keyType := types[0]
+	valType := types[1]
+	for _, part := range parts {
+		braceCount := 0
+		colon := -1
+		for i, tok := range part {
+			if tok.Id == lexer.Brace {
+				switch tok.Kind {
+				case "(", "[", "{":
+					braceCount++
+				default:
+					braceCount--
+				}
+			}
+			if braceCount != 0 {
+				continue
+			}
+			if tok.Id == lexer.Colon {
+				colon = i
+				break
+			}
+		}
+		if colon < 1 || colon+1 >= len(part) {
+			p.pusherrtok(errtok, "missing_expr")
+			continue
+		}
+		colonTok := part[colon]
+		keyToks := part[:colon]
+		valToks := part[colon+1:]
+		key, keyModel := p.evalToks(keyToks)
+		model.keyExprs = append(model.keyExprs, keyModel)
+		val, valModel := p.evalToks(valToks)
+		model.valExprs = append(model.valExprs, valModel)
+		p.wg.Add(1)
+		go assignChecker{
+			p,
+			false,
+			keyType,
+			key,
+			false,
+			colonTok,
+		}.checkAssignTypeAsync()
+		p.wg.Add(1)
+		go assignChecker{
+			p,
+			false,
+			valType,
+			val,
+			false,
+			colonTok,
 		}.checkAssignTypeAsync()
 	}
 	return v, model
@@ -2417,90 +2496,110 @@ func (p *Parser) checkWhileProfile(iter *ast.Iter) {
 	p.checkBlock(&iter.Block)
 }
 
-type foreachTypeChecker struct {
+type foreachChecker struct {
 	p       *Parser
 	profile *ast.ForeachProfile
-	value   value
+	val     value
 }
 
-func (frc *foreachTypeChecker) array() {
-	if !jnapi.IsIgnoreId(frc.profile.KeyA.Id) {
-		keyA := &frc.profile.KeyA
-		if keyA.Type.Id == jn.Void {
-			keyA.Type.Id = jn.Size
-			keyA.Type.Val = jn.CxxTypeIdFromType(keyA.Type.Id)
-		} else {
-			var ok bool
-			keyA.Type, ok = frc.p.readyType(keyA.Type, true)
-			if ok {
-				if !typeIsSingle(keyA.Type) || !jn.IsNumericType(keyA.Type.Id) {
-					frc.p.pusherrtok(keyA.IdToken, "incompatible_datatype",
-						keyA.Type.Val, jn.NumericTypeStr)
-				}
-			}
-		}
-	}
-	if !jnapi.IsIgnoreId(frc.profile.KeyB.Id) {
-		elementType := frc.profile.ExprType
-		elementType.Val = elementType.Val[2:]
-		keyB := &frc.profile.KeyB
-		if keyB.Type.Id == jn.Void {
-			keyB.Type = elementType
-		} else {
-			frc.p.wg.Add(1)
-			go frc.p.checkTypeAsync(elementType, frc.profile.KeyB.Type, true, frc.profile.InToken)
-		}
-	}
-}
-
-func (frc *foreachTypeChecker) keyA() {
-	if jnapi.IsIgnoreId(frc.profile.KeyA.Id) {
+func (fc *foreachChecker) array() {
+	fc.checkKeyASize()
+	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
 		return
 	}
-	keyA := &frc.profile.KeyA
+	elementType := fc.profile.ExprType
+	elementType.Val = elementType.Val[2:]
+	keyB := &fc.profile.KeyB
+	if keyB.Type.Id == jn.Void {
+		keyB.Type = elementType
+		return
+	}
+	fc.p.wg.Add(1)
+	go fc.p.checkTypeAsync(elementType, keyB.Type, true, fc.profile.InToken)
+}
+
+func (fc *foreachChecker) jnmap() {
+	fc.checkKeyAMapKey()
+	fc.checkKeyBMapVal()
+}
+
+func (fc *foreachChecker) checkKeyASize() {
+	if jnapi.IsIgnoreId(fc.profile.KeyA.Id) {
+		return
+	}
+	keyA := &fc.profile.KeyA
 	if keyA.Type.Id == jn.Void {
 		keyA.Type.Id = jn.Size
 		keyA.Type.Val = jn.CxxTypeIdFromType(keyA.Type.Id)
 		return
 	}
 	var ok bool
-	keyA.Type, ok = frc.p.readyType(keyA.Type, true)
+	keyA.Type, ok = fc.p.readyType(keyA.Type, true)
 	if ok {
 		if !typeIsSingle(keyA.Type) || !jn.IsNumericType(keyA.Type.Id) {
-			frc.p.pusherrtok(keyA.IdToken, "incompatible_datatype",
+			fc.p.pusherrtok(keyA.IdToken, "incompatible_datatype",
 				keyA.Type.Val, jn.NumericTypeStr)
 		}
 	}
 }
 
-func (frc *foreachTypeChecker) keyB() {
-	if jnapi.IsIgnoreId(frc.profile.KeyB.Id) {
+func (fc *foreachChecker) checkKeyAMapKey() {
+	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
 		return
 	}
 	runeType := ast.DataType{
 		Id:  jn.Rune,
 		Val: jn.CxxTypeIdFromType(jn.Rune),
 	}
-	keyB := &frc.profile.KeyB
+	keyB := &fc.profile.KeyB
 	if keyB.Type.Id == jn.Void {
 		keyB.Type = runeType
 		return
 	}
-	frc.p.wg.Add(1)
-	go frc.p.checkTypeAsync(runeType, frc.profile.KeyB.Type, true, frc.profile.InToken)
+	fc.p.wg.Add(1)
+	go fc.p.checkTypeAsync(runeType, fc.profile.KeyB.Type, true, fc.profile.InToken)
 }
 
-func (frc *foreachTypeChecker) str() {
-	frc.keyA()
-	frc.keyB()
+func (fc *foreachChecker) checkKeyBMapVal() {
+	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
+		return
+	}
+	valType := fc.val.ast.Type.Tag.([]ast.DataType)[1]
+	keyB := &fc.profile.KeyB
+	if keyB.Type.Id == jn.Void {
+		keyB.Type = valType
+		return
+	}
+	fc.p.wg.Add(1)
+	go fc.p.checkTypeAsync(valType, keyB.Type, true, fc.profile.InToken)
 }
 
-func (ftc *foreachTypeChecker) check() {
+func (fc *foreachChecker) str() {
+	fc.checkKeyASize()
+	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
+		return
+	}
+	runeType := ast.DataType{
+		Id:  jn.Rune,
+		Val: jn.CxxTypeIdFromType(jn.Rune),
+	}
+	keyB := &fc.profile.KeyB
+	if keyB.Type.Id == jn.Void {
+		keyB.Type = runeType
+		return
+	}
+	fc.p.wg.Add(1)
+	go fc.p.checkTypeAsync(runeType, keyB.Type, true, fc.profile.InToken)
+}
+
+func (fc *foreachChecker) check() {
 	switch {
-	case typeIsArray(ftc.value.ast.Type):
-		ftc.array()
-	case ftc.value.ast.Type.Id == jn.Str:
-		ftc.str()
+	case typeIsArray(fc.val.ast.Type):
+		fc.array()
+	case typeIsMap(fc.val.ast.Type):
+		fc.jnmap()
+	case fc.val.ast.Type.Id == jn.Str:
+		fc.str()
 	}
 }
 
@@ -2512,7 +2611,7 @@ func (p *Parser) checkForeachProfile(iter *ast.Iter) {
 	if !isForeachIterExpr(val) {
 		p.pusherrtok(iter.Token, "iter_foreach_nonenumerable_expr")
 	} else {
-		checker := foreachTypeChecker{p, &profile, val}
+		checker := foreachChecker{p, &profile, val}
 		checker.check()
 	}
 	iter.Profile = profile
@@ -2730,7 +2829,7 @@ func (p *Parser) checkTypeAsync(real, check ast.DataType, ignoreAny bool, errTok
 		}
 		return
 	}
-	if (typeIsPtr(real) || typeIsArray(real)) && check.Id == jn.Nil {
+	if typeIsNilCompatible(real) && check.Id == jn.Nil {
 		return
 	}
 	if real.Val != check.Val {

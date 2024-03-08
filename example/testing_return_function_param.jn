@@ -1,0 +1,8 @@
+testing_parameter_function(a i32, b i32) i32 {
+	< a + b
+}
+
+main() {
+	println("testing return function")
+	println(testing_parameter_function(12, 12))
+}
