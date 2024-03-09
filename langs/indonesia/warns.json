@@ -1,0 +1,4 @@
+{
+  "doc_ignored": "dokumentasi diabaikan karena objek tidak mendukung dokumentasi",
+  "exist_undefined_doc": "kode sumber memiliki dokumentasi yang tidak terdefinisi (beberapa dokumentasi tidak mendokumentasikan apa pun)"
+}
