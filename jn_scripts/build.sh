@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# MIT License
+
+# Copyright (c) 2024 arfy slowy - DeRuneLabs
 
 if [ -f command/jn/main.go ]; then
     JANE_MAIN_FILE="command/jn/main.go"

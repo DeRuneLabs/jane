@@ -2,7 +2,7 @@
 
 # Copyright (c) 2024 arfy slowy - DeRuneLabs
 
-name: testing jane workflow linux
+name: testing jane workflow windows
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -22,4 +22,4 @@ jobs:
           go-version: "1.21.x"
 
       - name: build jane
-        run: sh ./jn_scripts/build.sh
+        run: jn_scripts/build.bat
