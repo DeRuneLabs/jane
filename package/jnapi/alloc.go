@@ -4,8 +4,8 @@ import "strings"
 
 func ToJnAlloc(t string) string {
 	var cxx strings.Builder
-	cxx.WriteString("JNALLOC(")
+	cxx.WriteString("jnalloc<")
 	cxx.WriteString(t)
-	cxx.WriteByte(')')
+	cxx.WriteString(">()")
 	return cxx.String()
 }
