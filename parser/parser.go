@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -204,7 +203,7 @@ func (p *Parser) checkUsePath(use *ast.Use) bool {
 }
 
 func (p *Parser) compileUse(useAST *ast.Use) *use {
-	infos, err := ioutil.ReadDir(useAST.Path)
+	infos, err := os.ReadDir(useAST.Path)
 	if err != nil {
 		p.pusherrmsg(err.Error())
 		return nil
@@ -364,7 +363,7 @@ func (p *Parser) useLocalPackage(tree *[]ast.Obj) {
 		return
 	}
 	dir := filepath.Dir(p.File.Path)
-	infos, err := ioutil.ReadDir(dir)
+	infos, err := os.ReadDir(dir)
 	if err != nil {
 		p.pusherrmsg(err.Error())
 		return
@@ -1352,11 +1351,29 @@ func (p *unaryProcessor) star() value {
 
 func (p *unaryProcessor) amper() value {
 	v := p.parser.evalExprPart(p.tokens, p.model)
-	v.lvalue = true
-	if !canGetPointer(v) {
-		p.parser.pusherrtok(p.token, "invalid_type_unary_amper")
+	switch {
+	case typeIsFunc(v.ast.Type):
+		mainNode := &p.model.nodes[p.model.index]
+		mainNode.nodes = mainNode.nodes[1:]
+		node := &p.model.nodes[p.model.index].nodes[0]
+		switch t := (*node).(type) {
+		case anonFuncExpr:
+			if t.capture == jnapi.LambdaByReference {
+				p.parser.pusherrmsgtok(p.token, "invalid_type_unary_amper")
+				break
+			}
+			t.capture = jnapi.LambdaByReference
+			*node = t
+		default:
+			p.parser.pusherrtok(p.token, "invalid_type_unary_amper")
+		}
+	default:
+		v.lvalue = true
+		if !canGetPointer(v) {
+			p.parser.pusherrtok(p.token, "invalid_type_unary_amper")
+		}
+		v.ast.Type.Val = "*" + v.ast.Type.Val
 	}
-	v.ast.Type.Val = "*" + v.ast.Type.Val
 	return v
 }
 
@@ -1497,7 +1514,7 @@ func (p *Parser) evalArraySubId(val value, idTok lexer.Token, m *exprModel) (v v
 		return
 	}
 	v = val
-	m.appendSubNode(exprNode{"."})
+	m.appendSubNode(exprNode{subIdAcessorOfType(val.ast.Type)})
 	switch t {
 	case 'g':
 		g := &arrDefs.Globals[i]
@@ -1519,7 +1536,7 @@ func (p *Parser) evalMapSubId(val value, idTok lexer.Token, m *exprModel) (v val
 	v = val
 	v.lvalue = false
 	v.ast.Data = idTok.Kind
-	m.appendSubNode(exprNode{"."})
+	m.appendSubNode(exprNode{subIdAcessorOfType(val.ast.Type)})
 	switch t {
 	case 'g':
 		g := &mapDefs.Globals[i]
@@ -1554,12 +1571,16 @@ func (p *Parser) evalIdExprPart(tokens []lexer.Token, m *exprModel) (v value) {
 	valTok := tokens[i]
 	tokens = tokens[:i]
 	val := p.evalExprPart(tokens, m)
+	checkType := val.ast.Type
+	if typeIsPtr(checkType) {
+		checkType.Val = checkType.Val[1:]
+	}
 	switch {
-	case typeIsSingle(val.ast.Type) && val.ast.Type.Id == jn.Str:
+	case typeIsSingle(checkType) && checkType.Id == jn.Str:
 		return p.evalStrSubId(val, idTok, m)
-	case typeIsArray(val.ast.Type):
+	case typeIsArray(checkType):
 		return p.evalArraySubId(val, idTok, m)
-	case typeIsMap(val.ast.Type):
+	case typeIsMap(checkType):
 		return p.evalMapSubId(val, idTok, m)
 	}
 	p.pusherrtok(valTok, "obj_not_support_sub_fields", val.ast.Type.Val)
@@ -1776,11 +1797,11 @@ func (p *Parser) evalParenthesesRangeExpr(tokens []lexer.Token, m *exprModel) (v
 	m.appendSubNode(exprNode{"("})
 	defer m.appendSubNode(exprNode{")"})
 
-	switch v.ast.Type.Id {
-	case jn.Func:
-		fun := v.ast.Type.Tag.(ast.Func)
-		p.parseFuncCall(fun, tokens[len(valueToks):], m)
-		v.ast.Type = fun.RetType
+	switch {
+	case typeIsFunc(v.ast.Type):
+		f := v.ast.Type.Tag.(ast.Func)
+		p.parseFuncCall(f, tokens[len(valueToks):], m)
+		v.ast.Type = f.RetType
 		v.lvalue = typeIsLvalue(v.ast.Type)
 	default:
 		p.pusherrtok(tokens[len(valueToks)], "invalid_syntax")
@@ -1844,7 +1865,7 @@ func (p *Parser) evalBraceRangeExpr(tokens []lexer.Token, m *exprModel) (v value
 			v.ast.Type.Tag = f
 			v.ast.Type.Id = jn.Func
 			v.ast.Type.Val = f.DataTypeString()
-			m.appendSubNode(anonFunc{f})
+			m.appendSubNode(anonFuncExpr{f, jnapi.LambdaByCopy})
 			return
 		default:
 			p.pusherrtok(exprToks[0], "invalid_syntax")
@@ -2090,10 +2111,12 @@ func (p *Parser) parseArgs(
 	if len(params) > 0 && params[len(params)-1].Variadic {
 		if len(*args) == 0 && len(params) == 1 {
 			return
-		} else if len(*args) < len(params)-1 {
+		}
+		if len(*args) < len(params)-1 {
 			p.pusherrtok(errTok, "missing_argument")
 			goto argParse
-		} else if len(*args) <= len(params)-1 {
+		}
+		if len(*args) <= len(params)-1 {
 			goto argParse
 		}
 		variadicArgs := (*args)[len(params)-1:]
@@ -2119,6 +2142,10 @@ func (p *Parser) parseArgs(
 	if len(*args) == 0 && len(params) == 0 {
 		return
 	} else if len(*args) < len(params) {
+		if len(*args) == 1 {
+			p.tryFuncMultiRetAsArgs(params, args, errTok, m)
+			return
+		}
 		p.pusherrtok(errTok, "missing_argument")
 	} else if len(*args) > len(params) {
 		p.pusherrtok(errTok, "argument_overflow")
@@ -2130,6 +2157,35 @@ argParse:
 		parsedArgs = append(parsedArgs, arg)
 	}
 	*args = parsedArgs
+}
+
+func (p *Parser) tryFuncMultiRetAsArgs(params []ast.Parameter, args *[]ast.Arg, errTok lexer.Token, m *exprModel) {
+	arg := (*args)[0]
+	val, model := p.evalExpr(arg.Expr)
+	arg.Expr.Model = model
+	if !val.ast.Type.MultiTyped {
+		p.pusherrtok(errTok, "missing_argument")
+		return
+	}
+	types := val.ast.Type.Tag.([]ast.DataType)
+	if len(types) < len(params) {
+		p.pusherrtok(errTok, "missing_argument")
+		return
+	} else if len(types) > len(params) {
+		p.pusherrtok(errTok, "argument_overflow")
+		return
+	}
+	fname := m.nodes[m.index].nodes[0]
+	m.nodes[m.index].nodes[0] = exprNode{"tuple_as_args"}
+	*args = make([]ast.Arg, 2)
+	(*args)[0] = ast.Arg{Expr: ast.Expr{Model: fname}}
+	(*args)[1] = arg
+	for i, param := range params {
+		rt := types[i]
+		p.wg.Add(1)
+		val := value{ast: ast.Value{Type: rt}}
+		go p.checkArgTypeAsync(param, val, false, arg.Token)
+	}
 }
 
 func (p *Parser) parseArg(param ast.Parameter, arg *ast.Arg, variadiced *bool) {
@@ -2301,7 +2357,8 @@ func (rc *retChecker) checkExprTypes() {
 	rc.retAST.Expr.Model = rc.expModel
 	types := rc.fun.RetType.Tag.([]ast.DataType)
 	if valLength == 1 {
-		rc.p.pusherrtok(rc.retAST.Token, "missing_multi_return")
+		rc.checkMultiRetAsMultiRet()
+		return
 	} else if valLength > len(types) {
 		rc.p.pusherrtok(rc.retAST.Token, "overflow_return")
 	}
@@ -2315,6 +2372,37 @@ func (rc *retChecker) checkExprTypes() {
 			constant:  false,
 			t:         t,
 			v:         rc.values[i],
+			ignoreAny: false,
+			errtok:    rc.retAST.Token,
+		}.checkAssignTypeAsync()
+	}
+}
+
+func (rc *retChecker) checkMultiRetAsMultiRet() {
+	val := rc.values[0]
+	if !val.ast.Type.MultiTyped {
+		rc.p.pusherrtok(rc.retAST.Token, "missing_multi_return")
+		return
+	}
+	valTypes := val.ast.Type.Tag.([]ast.DataType)
+	retTypes := rc.fun.RetType.Tag.([]ast.DataType)
+	if len(valTypes) < len(retTypes) {
+		rc.p.pusherrtok(rc.retAST.Token, "missing_multi_return")
+		return
+	} else if len(valTypes) < len(retTypes) {
+		rc.p.pusherrtok(rc.retAST.Token, "overflow_return")
+		return
+	}
+	rc.retAST.Expr.Model = rc.expModel.models[0]
+	for i, rt := range retTypes {
+		vt := valTypes[i]
+		val := value{ast: ast.Value{Type: vt}}
+		rc.p.wg.Add(1)
+		go assignChecker{
+			p:         rc.p,
+			constant:  false,
+			t:         rt,
+			v:         val,
 			ignoreAny: false,
 			errtok:    rc.retAST.Token,
 		}.checkAssignTypeAsync()

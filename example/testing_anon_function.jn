@@ -1,14 +1,15 @@
 testing_anonymous_function() {
 	other_function:() = () {
-		println("khairanabila are awesome")
+		println("jane are awesome")
 	}
 	other_function()
 	rf: = () i32 {
 		ret 90
-	}
-	() {
-		println("anonymous println")
 	}()
+	(&() {
+		println("anonymous println")
+	})()
+	a: = 0
 }
 
 main() {

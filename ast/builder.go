@@ -613,6 +613,7 @@ func (b *Builder) FuncRetDataType(tokens []lexer.Token, i *int) (t DataType, ok 
 			*i--
 			goto end
 		}
+		tok = tokens[*i]
 		if tok.Id == lexer.Brace && tok.Kind == "]" {
 			*i--
 			goto end
@@ -783,7 +784,10 @@ func (b *Builder) Statement(bs *blockStatement) (s Statement) {
 	tok := bs.tokens[0]
 	switch tok.Id {
 	case lexer.Id:
-		return b.IdStatement(bs.tokens)
+		s, ok := b.IdStatement(bs.tokens)
+		if ok {
+			return s
+		}
 	case lexer.Const, lexer.Volatile:
 		return b.VarStatement(bs.tokens)
 	case lexer.Ret:
@@ -842,7 +846,7 @@ func (b *Builder) assignInfo(tokens []lexer.Token) (info assignInfo) {
 			}
 			info.setter = tok
 			if i+1 >= len(tokens) {
-				b.pusherr(tok, "missing_expr")
+				// b.pusherr(tok, "missing_expr")
 				info.ok = false
 			} else {
 				info.exprTokens = tokens[i+1:]
@@ -984,7 +988,9 @@ func checkAssignToks(tokens []lexer.Token) bool {
 				braceCount--
 			}
 		}
-		if braceCount > 0 {
+		if braceCount < 0 {
+			return false
+		} else if braceCount > 0 {
 			continue
 		}
 		if tok.Id == lexer.Operator &&
@@ -1025,26 +1031,13 @@ func (b *Builder) AssignExpr(tokens []lexer.Token, isExpr bool) (assign Assign, 
 	return
 }
 
-func (b *Builder) IdStatement(tokens []lexer.Token) (s Statement) {
-	if len(tokens) == 1 {
-		b.pusherr(tokens[0], "invalid_syntax")
-		return
-	}
-	switch tokens[1].Id {
+func (b *Builder) IdStatement(tokens []lexer.Token) (s Statement, _ bool) {
+	tok := tokens[1]
+	switch tok.Id {
 	case lexer.Colon:
-		return b.VarStatement(tokens)
-	case lexer.Brace:
-		switch tokens[1].Kind {
-		case "(":
-			return b.FuncCallStatement(tokens)
-		}
+		return b.VarStatement(tokens), true
 	}
-	b.pusherr(tokens[0], "invalid_syntax")
 	return
-}
-
-func (b *Builder) FuncCallStatement(tokens []lexer.Token) Statement {
-	return b.ExprStatement(tokens)
 }
 
 func (b *Builder) ExprStatement(tokens []lexer.Token) Statement {

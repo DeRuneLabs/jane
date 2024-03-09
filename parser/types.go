@@ -37,11 +37,25 @@ func typeIsMap(t ast.DataType) bool {
 	return t.Id == jn.Map && t.Val[0] == '[' && !strings.HasPrefix(t.Val, "[]")
 }
 
+func typeIsFunc(t ast.DataType) bool {
+	if t.Id != jn.Func || t.Val == "" {
+		return false
+	}
+	return t.Val[0] == '('
+}
+
 func typeIsSingle(t ast.DataType) bool {
 	return !typeIsPtr(t) &&
 		!typeIsArray(t) &&
 		!typeIsArray(t) &&
-		t.Id != jn.Func
+		!typeIsFunc(t)
+}
+
+func subIdAcessorOfType(t ast.DataType) string {
+	if typeIsPtr(t) {
+		return "->"
+	}
+	return "."
 }
 
 func typeIsNilCompatible(t ast.DataType) bool {
