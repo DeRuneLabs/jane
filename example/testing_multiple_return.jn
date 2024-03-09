@@ -22,7 +22,7 @@ testing_multiple_return_as_multiple_return() {
 main() {
     println("testing multiple return as argument")
     testing_multipe_return_as_argument()
-    
+
     println("testing multiple return as multiple return")
     testing_multiple_return_as_multiple_return()
 }

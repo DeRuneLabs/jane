@@ -339,7 +339,7 @@ public:
   array<_Item_t>(void) noexcept {}
   array<_Item_t>(const std::nullptr_t) noexcept {}
   array<_Item_t>(const array<_Item_t>& _Src) noexcept { this->_buffer = _Src._buffer; }
-  
+
   array<_Item_t>(const std::initializer_list<_Item_t> &_Src) noexcept {
 	this->_buffer = std::vector<_Item_t>(_Src.begin(), _Src.end());
   }
@@ -451,7 +451,7 @@ array<_Key_t> keys(void) const noexcept {
     return _values;
   }
 
-  bool has(const _Key_t _Key) const noexcept { 
+  bool has(const _Key_t _Key) const noexcept {
 	return this->find(_Key) != this->end();
   }
 
