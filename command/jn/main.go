@@ -490,8 +490,12 @@ public:
 	const char *what() const throw() { return this->_buffer.c_str(); }
 };
 
-#define JNALLOC(_Alloc) new(std::nothrow) _Alloc
 #define JNTHROW(_Msg) throw exception(_Msg)
+
+template<typename _Alloc_t>
+static inline _Alloc_t *jnalloc() {
+	return new(std::nothrow) _Alloc_t;
+}
 
 template <typename _Enum_t, typename _Index_t, typename _Item_t>
 static inline void foreach(const _Enum_t _Enum,

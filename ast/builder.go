@@ -55,7 +55,10 @@ func (b *Builder) buildNode(tokens []lexer.Token) {
 	case lexer.Const, lexer.Volatile:
 		b.GlobalVar(tokens)
 	case lexer.Type:
-		b.Type(tokens)
+		t := b.Type(tokens)
+		t.Pub = b.pub
+		b.pub = false
+		b.Tree = append(b.Tree, Obj{t.Token, t})
 	case lexer.Comment:
 		b.Comment(tokens[0])
 	case lexer.Preprocessor:
@@ -89,7 +92,7 @@ func (b *Builder) Build() {
 	b.wg.Wait()
 }
 
-func (b *Builder) Type(tokens []lexer.Token) {
+func (b *Builder) Type(tokens []lexer.Token) (t Type) {
 	i := 1
 	if i >= len(tokens) {
 		b.pusherr(tokens[i-1], "invalid_syntax")
@@ -106,14 +109,12 @@ func (b *Builder) Type(tokens []lexer.Token) {
 	}
 	destType, _ := b.DataType(tokens[i:], new(int), true)
 	tok = tokens[1]
-	t := Type{
+	return Type{
 		Pub:   b.pub,
 		Token: tok,
 		Id:    tok.Kind,
 		Type:  destType,
 	}
-	b.pub = false
-	b.Tree = append(b.Tree, Obj{tok, t})
 }
 
 func (b *Builder) Comment(token lexer.Token) {
@@ -804,6 +805,11 @@ func (b *Builder) Statement(bs *blockStatement) (s Statement) {
 		return b.IfExpr(bs)
 	case lexer.Else:
 		return b.ElseBlock(bs)
+	case lexer.Type:
+		t := b.Type(bs.tokens)
+		s.Token = t.Token
+		s.Val = t
+		return
 	case lexer.Operator:
 		if tok.Kind == "<" {
 			return b.RetStatement(bs.tokens)

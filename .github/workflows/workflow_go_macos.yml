@@ -1,0 +1,25 @@
+# MIT License
+
+# Copyright (c) 2024 arfy slowy - DeRuneLabs
+
+name: testing jane workflow mac
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: installattion golang
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21.x"
+
+      - name: build jane
+        run: sh ./jn_scripts/build.sh
