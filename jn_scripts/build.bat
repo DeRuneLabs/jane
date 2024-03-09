@@ -4,16 +4,12 @@
 
 @echo off
 
-if exist .\jane.exe (del /f jane.exe)
-
-if exist command\jane\main.go (
-    go build -o jane.exe -v command\jane\main.go
-) else (
-    go build -o jane.exe -v ..\command\jane\main.go
+if exist jane.exe and exist jn.set (
+  del jane.exe; del jn.set; del dist
 )
 
-if exist .\jane.exe (
-    echo jane created successfully
+if exist command/jn/main.go (
+  go build -o jane.exe -v command/jn/main.go
 ) else (
-    echo something wrong when build jane
+  go build -o jane.exe -v ../command/jn/main.go
 )
