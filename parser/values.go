@@ -1,9 +1,9 @@
 package parser
 
 import (
-	"github.com/De-Rune/jane/ast"
-	"github.com/De-Rune/jane/package/jn"
-	"github.com/De-Rune/jane/package/jnbits"
+	"github.com/DeRuneLabs/jane/ast"
+	"github.com/DeRuneLabs/jane/package/jn"
+	"github.com/DeRuneLabs/jane/package/jnbits"
 )
 
 func isstr(value string) bool {
@@ -38,7 +38,7 @@ func isBoolExpr(val value) bool {
 
 func isForeachIterExpr(val value) bool {
 	switch {
-	case typeIsArray(val.ast.Type):
+	case typeIsArray(val.ast.Type), typeIsMap(val.ast.Type):
 		return true
 	case !typeIsSingle(val.ast.Type):
 		return false

@@ -3,9 +3,9 @@ package parser
 import (
 	"strings"
 
-	"github.com/De-Rune/jane/ast"
-	"github.com/De-Rune/jane/lexer"
-	"github.com/De-Rune/jane/package/jnapi"
+	"github.com/DeRuneLabs/jane/ast"
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
 type iExpr interface {
@@ -58,13 +58,16 @@ func (node exprNode) String() string {
 	return node.value
 }
 
-type anonFunc struct {
-	ast ast.Func
+type anonFuncExpr struct {
+	ast     ast.Func
+	capture byte
 }
 
-func (af anonFunc) String() string {
+func (af anonFuncExpr) String() string {
 	var cxx strings.Builder
-	cxx.WriteString("[=]")
+	cxx.WriteByte('[')
+	cxx.WriteByte(af.capture)
+	cxx.WriteByte(']')
 	cxx.WriteString(paramsToCxx(af.ast.Params))
 	cxx.WriteString(" mutable -> ")
 	cxx.WriteString(af.ast.RetType.String())
@@ -83,13 +86,36 @@ func (a arrayExpr) String() string {
 	cxx.WriteString(a.dataType.String())
 	cxx.WriteString("({")
 	if len(a.expr) == 0 {
-		return cxx.String() + "})"
+		cxx.WriteString("})")
+		return cxx.String()
 	}
 	for _, exp := range a.expr {
 		cxx.WriteString(exp.String())
 		cxx.WriteString(", ")
 	}
 	return cxx.String()[:cxx.Len()-2] + "})"
+}
+
+type mapExpr struct {
+	dataType ast.DataType
+	keyExprs []iExpr
+	valExprs []iExpr
+}
+
+func (m mapExpr) String() string {
+	var cxx strings.Builder
+	cxx.WriteString(m.dataType.String())
+	cxx.WriteByte('{')
+	for i, k := range m.keyExprs {
+		v := m.valExprs[i]
+		cxx.WriteByte('{')
+		cxx.WriteString(k.String())
+		cxx.WriteByte(',')
+		cxx.WriteString(v.String())
+		cxx.WriteString("},")
+	}
+	cxx.WriteByte('}')
+	return cxx.String()
 }
 
 type argsExpr struct {

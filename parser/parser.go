@@ -2,20 +2,19 @@ package parser
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
-	"github.com/De-Rune/jane/ast"
-	"github.com/De-Rune/jane/lexer"
-	"github.com/De-Rune/jane/package/jn"
-	"github.com/De-Rune/jane/package/jnapi"
-	"github.com/De-Rune/jane/package/jnbits"
-	"github.com/De-Rune/jane/package/jnio"
-	"github.com/De-Rune/jane/package/jnlog"
-	"github.com/De-Rune/jane/preprocessor"
+	"github.com/DeRuneLabs/jane/ast"
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/package/jn"
+	"github.com/DeRuneLabs/jane/package/jnapi"
+	"github.com/DeRuneLabs/jane/package/jnbits"
+	"github.com/DeRuneLabs/jane/package/jnio"
+	"github.com/DeRuneLabs/jane/package/jnlog"
+	"github.com/DeRuneLabs/jane/preprocessor"
 )
 
 type use struct {
@@ -204,7 +203,7 @@ func (p *Parser) checkUsePath(use *ast.Use) bool {
 }
 
 func (p *Parser) compileUse(useAST *ast.Use) *use {
-	infos, err := ioutil.ReadDir(useAST.Path)
+	infos, err := os.ReadDir(useAST.Path)
 	if err != nil {
 		p.pusherrmsg(err.Error())
 		return nil
@@ -364,7 +363,7 @@ func (p *Parser) useLocalPackage(tree *[]ast.Obj) {
 		return
 	}
 	dir := filepath.Dir(p.File.Path)
-	infos, err := ioutil.ReadDir(dir)
+	infos, err := os.ReadDir(dir)
 	if err != nil {
 		p.pusherrmsg(err.Error())
 		return
@@ -565,16 +564,17 @@ func (p *Parser) Var(vast ast.Var) ast.Var {
 				vast.IdToken,
 			}.checkAssignTypeAsync()
 		} else {
-			dt, ok := p.readyType(vast.Type, true)
-			if ok {
-				var valTok lexer.Token
-				valTok.Id = lexer.Value
-				valTok.Kind = p.defaultValueOfType(dt)
-				valToks := []lexer.Token{valTok}
-				processes := [][]lexer.Token{valToks}
-				vast.Val = ast.Expr{Tokens: valToks, Processes: processes}
-				_, vast.Val.Model = p.evalExpr(vast.Val)
-			}
+			vast.Type, _ = p.readyType(vast.Type, true)
+			// dt, ok := p.readyType(vast.Type, true)
+			// if ok {
+			// 	var valTok lexer.Token
+			// 	valTok.Id = lexer.Value
+			// 	valTok.Kind = p.defaultValueOfType(dt)
+			// 	valToks := []lexer.Token{valTok}
+			// 	processes := [][]lexer.Token{valToks}
+			// 	vast.Val = ast.Expr{Tokens: valToks, Processes: processes}
+			// 	_, vast.Val.Model = p.evalExpr(vast.Val)
+			// }
 		}
 	} else {
 		if vast.SetterToken.Id == lexer.NA {
@@ -725,9 +725,9 @@ func (p *Parser) checkTypesAsync() {
 }
 
 func (p *Parser) WaitingGlobals() {
-	for _, varAST := range p.waitingGlobals {
-		variable := p.Var(varAST)
-		p.Defs.Globals = append(p.Defs.Globals, variable)
+	for _, vast := range p.waitingGlobals {
+		v := p.Var(vast)
+		p.Defs.Globals = append(p.Defs.Globals, v)
 	}
 }
 
@@ -944,6 +944,7 @@ func (p *valueEvaluator) nil() value {
 	var v value
 	v.ast.Data = p.token.Kind
 	v.ast.Type.Id = jn.Nil
+	v.ast.Type.Val = jn.NilTypeStr
 	p.model.appendSubNode(exprNode{p.token.Kind})
 	return v
 }
@@ -1350,11 +1351,29 @@ func (p *unaryProcessor) star() value {
 
 func (p *unaryProcessor) amper() value {
 	v := p.parser.evalExprPart(p.tokens, p.model)
-	v.lvalue = true
-	if !canGetPointer(v) {
-		p.parser.pusherrtok(p.token, "invalid_type_unary_amper")
+	switch {
+	case typeIsFunc(v.ast.Type):
+		mainNode := &p.model.nodes[p.model.index]
+		mainNode.nodes = mainNode.nodes[1:]
+		node := &p.model.nodes[p.model.index].nodes[0]
+		switch t := (*node).(type) {
+		case anonFuncExpr:
+			if t.capture == jnapi.LambdaByReference {
+				p.parser.pusherrmsgtok(p.token, "invalid_type_unary_amper")
+				break
+			}
+			t.capture = jnapi.LambdaByReference
+			*node = t
+		default:
+			p.parser.pusherrtok(p.token, "invalid_type_unary_amper")
+		}
+	default:
+		v.lvalue = true
+		if !canGetPointer(v) {
+			p.parser.pusherrtok(p.token, "invalid_type_unary_amper")
+		}
+		v.ast.Type.Val = "*" + v.ast.Type.Val
 	}
-	v.ast.Type.Val = "*" + v.ast.Type.Val
 	return v
 }
 
@@ -1484,9 +1503,8 @@ func (p *Parser) evalStrSubId(val value, idTok lexer.Token, m *exprModel) (v val
 		v.ast.Type = g.Type
 		v.lvalue = true
 		v.constant = g.Const
-	default:
 	}
-	return v
+	return
 }
 
 func (p *Parser) evalArraySubId(val value, idTok lexer.Token, m *exprModel) (v value) {
@@ -1496,7 +1514,7 @@ func (p *Parser) evalArraySubId(val value, idTok lexer.Token, m *exprModel) (v v
 		return
 	}
 	v = val
-	m.appendSubNode(exprNode{"."})
+	m.appendSubNode(exprNode{subIdAcessorOfType(val.ast.Type)})
 	switch t {
 	case 'g':
 		g := &arrDefs.Globals[i]
@@ -1504,9 +1522,37 @@ func (p *Parser) evalArraySubId(val value, idTok lexer.Token, m *exprModel) (v v
 		v.ast.Type = g.Type
 		v.lvalue = true
 		v.constant = g.Const
-	default:
 	}
-	return v
+	return
+}
+
+func (p *Parser) evalMapSubId(val value, idTok lexer.Token, m *exprModel) (v value) {
+	readyMapDefs(val.ast.Type)
+	i, t := mapDefs.defById(idTok.Kind)
+	if i == -1 {
+		p.pusherrtok(idTok, "obj_have_not_id", val.ast.Type.Val)
+		return
+	}
+	v = val
+	v.lvalue = false
+	v.ast.Data = idTok.Kind
+	m.appendSubNode(exprNode{subIdAcessorOfType(val.ast.Type)})
+	switch t {
+	case 'g':
+		g := &mapDefs.Globals[i]
+		m.appendSubNode(exprNode{g.Tag.(string)})
+		v.ast.Type = g.Type
+		v.lvalue = true
+		v.constant = g.Const
+	case 'f':
+		f := mapDefs.Funcs[i]
+		v.ast.Type.Id = jn.Func
+		v.ast.Type.Tag = f.Ast
+		v.ast.Type.Val = f.Ast.DataTypeString()
+		v.ast.Token = f.Ast.Token
+		m.appendSubNode(exprNode{f.Ast.Id})
+	}
+	return
 }
 
 func (p *Parser) evalIdExprPart(tokens []lexer.Token, m *exprModel) (v value) {
@@ -1525,11 +1571,17 @@ func (p *Parser) evalIdExprPart(tokens []lexer.Token, m *exprModel) (v value) {
 	valTok := tokens[i]
 	tokens = tokens[:i]
 	val := p.evalExprPart(tokens, m)
+	checkType := val.ast.Type
+	if typeIsPtr(checkType) {
+		checkType.Val = checkType.Val[1:]
+	}
 	switch {
-	case typeIsSingle(val.ast.Type) && val.ast.Type.Id == jn.Str:
+	case typeIsSingle(checkType) && checkType.Id == jn.Str:
 		return p.evalStrSubId(val, idTok, m)
-	case typeIsArray(val.ast.Type):
+	case typeIsArray(checkType):
 		return p.evalArraySubId(val, idTok, m)
+	case typeIsMap(checkType):
+		return p.evalMapSubId(val, idTok, m)
 	}
 	p.pusherrtok(valTok, "obj_not_support_sub_fields", val.ast.Type.Val)
 	return
@@ -1745,11 +1797,11 @@ func (p *Parser) evalParenthesesRangeExpr(tokens []lexer.Token, m *exprModel) (v
 	m.appendSubNode(exprNode{"("})
 	defer m.appendSubNode(exprNode{")"})
 
-	switch v.ast.Type.Id {
-	case jn.Func:
-		fun := v.ast.Type.Tag.(ast.Func)
-		p.parseFuncCall(fun, tokens[len(valueToks):], m)
-		v.ast.Type = fun.RetType
+	switch {
+	case typeIsFunc(v.ast.Type):
+		f := v.ast.Type.Tag.(ast.Func)
+		p.parseFuncCall(f, tokens[len(valueToks):], m)
+		v.ast.Type = f.RetType
 		v.lvalue = typeIsLvalue(v.ast.Type)
 	default:
 		p.pusherrtok(tokens[len(valueToks)], "invalid_syntax")
@@ -1786,16 +1838,20 @@ func (p *Parser) evalBraceRangeExpr(tokens []lexer.Token, m *exprModel) (v value
 	case lexer.Brace:
 		switch exprToks[0].Kind {
 		case "[":
-			ast := ast.NewBuilder(nil)
-			dt, ok := ast.DataType(exprToks, new(int), true)
+			b := ast.NewBuilder(nil)
+			t, ok := b.DataType(exprToks, new(int), true)
 			if !ok {
-				p.pusherrs(ast.Errs...)
+				p.pusherrs(b.Errs...)
 				return
 			}
 			exprToks = tokens[len(exprToks):]
 			var model iExpr
-			v, model = p.buildArray(p.buildEnumerableParts(exprToks),
-				dt, exprToks[0])
+			switch {
+			case typeIsArray(t):
+				v, model = p.buildArray(p.buildEnumerableParts(exprToks), t, exprToks[0])
+			case typeIsMap(t):
+				v, model = p.buildMap(p.buildEnumerableParts(exprToks), t, exprToks[0])
+			}
 			m.appendSubNode(model)
 			return
 		case "(":
@@ -1809,7 +1865,7 @@ func (p *Parser) evalBraceRangeExpr(tokens []lexer.Token, m *exprModel) (v value
 			v.ast.Type.Tag = f
 			v.ast.Type.Id = jn.Func
 			v.ast.Type.Val = f.DataTypeString()
-			m.appendSubNode(anonFunc{f})
+			m.appendSubNode(anonFuncExpr{f, jnapi.LambdaByCopy})
 			return
 		default:
 			p.pusherrtok(exprToks[0], "invalid_syntax")
@@ -1860,6 +1916,8 @@ func (p *Parser) evalEnumerableSelect(enumv, selectv value, errtok lexer.Token) 
 	switch {
 	case typeIsArray(enumv.ast.Type):
 		return p.evalArraySelect(enumv, selectv, errtok)
+	case typeIsMap(enumv.ast.Type):
+		return p.evalMapSelect(enumv, selectv, errtok)
 	case typeIsSingle(enumv.ast.Type):
 		return p.evalStrSelect(enumv, selectv, errtok)
 	}
@@ -1875,6 +1933,17 @@ func (p *Parser) evalArraySelect(arrv, selectv value, errtok lexer.Token) value 
 		p.pusherrtok(errtok, "notint_array_select")
 	}
 	return arrv
+}
+
+func (p *Parser) evalMapSelect(mapv, selectv value, errtok lexer.Token) value {
+	mapv.lvalue = true
+	types := mapv.ast.Type.Tag.([]ast.DataType)
+	keyType := types[0]
+	valType := types[1]
+	mapv.ast.Type = valType
+	p.wg.Add(1)
+	go p.checkTypeAsync(keyType, selectv.ast.Type, false, errtok)
+	return mapv
 }
 
 func (p *Parser) evalStrSelect(strv, selectv value, errtok lexer.Token) value {
@@ -1945,6 +2014,66 @@ func (p *Parser) buildArray(
 	return v, model
 }
 
+func (p *Parser) buildMap(parts [][]lexer.Token, t ast.DataType, errtok lexer.Token) (value, iExpr) {
+	var v value
+	v.ast.Type = t
+	model := mapExpr{dataType: t}
+	types := t.Tag.([]ast.DataType)
+	keyType := types[0]
+	valType := types[1]
+	for _, part := range parts {
+		braceCount := 0
+		colon := -1
+		for i, tok := range part {
+			if tok.Id == lexer.Brace {
+				switch tok.Kind {
+				case "(", "[", "{":
+					braceCount++
+				default:
+					braceCount--
+				}
+			}
+			if braceCount != 0 {
+				continue
+			}
+			if tok.Id == lexer.Colon {
+				colon = i
+				break
+			}
+		}
+		if colon < 1 || colon+1 >= len(part) {
+			p.pusherrtok(errtok, "missing_expr")
+			continue
+		}
+		colonTok := part[colon]
+		keyToks := part[:colon]
+		valToks := part[colon+1:]
+		key, keyModel := p.evalToks(keyToks)
+		model.keyExprs = append(model.keyExprs, keyModel)
+		val, valModel := p.evalToks(valToks)
+		model.valExprs = append(model.valExprs, valModel)
+		p.wg.Add(1)
+		go assignChecker{
+			p,
+			false,
+			keyType,
+			key,
+			false,
+			colonTok,
+		}.checkAssignTypeAsync()
+		p.wg.Add(1)
+		go assignChecker{
+			p,
+			false,
+			valType,
+			val,
+			false,
+			colonTok,
+		}.checkAssignTypeAsync()
+	}
+	return v, model
+}
+
 func (p *Parser) checkAnonFunc(f *ast.Func) {
 	globals := p.Defs.Globals
 	blockVariables := p.BlockVars
@@ -1982,10 +2111,12 @@ func (p *Parser) parseArgs(
 	if len(params) > 0 && params[len(params)-1].Variadic {
 		if len(*args) == 0 && len(params) == 1 {
 			return
-		} else if len(*args) < len(params)-1 {
+		}
+		if len(*args) < len(params)-1 {
 			p.pusherrtok(errTok, "missing_argument")
 			goto argParse
-		} else if len(*args) <= len(params)-1 {
+		}
+		if len(*args) <= len(params)-1 {
 			goto argParse
 		}
 		variadicArgs := (*args)[len(params)-1:]
@@ -2011,6 +2142,10 @@ func (p *Parser) parseArgs(
 	if len(*args) == 0 && len(params) == 0 {
 		return
 	} else if len(*args) < len(params) {
+		if len(*args) == 1 {
+			p.tryFuncMultiRetAsArgs(params, args, errTok, m)
+			return
+		}
 		p.pusherrtok(errTok, "missing_argument")
 	} else if len(*args) > len(params) {
 		p.pusherrtok(errTok, "argument_overflow")
@@ -2022,6 +2157,35 @@ argParse:
 		parsedArgs = append(parsedArgs, arg)
 	}
 	*args = parsedArgs
+}
+
+func (p *Parser) tryFuncMultiRetAsArgs(params []ast.Parameter, args *[]ast.Arg, errTok lexer.Token, m *exprModel) {
+	arg := (*args)[0]
+	val, model := p.evalExpr(arg.Expr)
+	arg.Expr.Model = model
+	if !val.ast.Type.MultiTyped {
+		p.pusherrtok(errTok, "missing_argument")
+		return
+	}
+	types := val.ast.Type.Tag.([]ast.DataType)
+	if len(types) < len(params) {
+		p.pusherrtok(errTok, "missing_argument")
+		return
+	} else if len(types) > len(params) {
+		p.pusherrtok(errTok, "argument_overflow")
+		return
+	}
+	fname := m.nodes[m.index].nodes[0]
+	m.nodes[m.index].nodes[0] = exprNode{"tuple_as_args"}
+	*args = make([]ast.Arg, 2)
+	(*args)[0] = ast.Arg{Expr: ast.Expr{Model: fname}}
+	(*args)[1] = arg
+	for i, param := range params {
+		rt := types[i]
+		p.wg.Add(1)
+		val := value{ast: ast.Value{Type: rt}}
+		go p.checkArgTypeAsync(param, val, false, arg.Token)
+	}
 }
 
 func (p *Parser) parseArg(param ast.Parameter, arg *ast.Arg, variadiced *bool) {
@@ -2193,7 +2357,8 @@ func (rc *retChecker) checkExprTypes() {
 	rc.retAST.Expr.Model = rc.expModel
 	types := rc.fun.RetType.Tag.([]ast.DataType)
 	if valLength == 1 {
-		rc.p.pusherrtok(rc.retAST.Token, "missing_multi_return")
+		rc.checkMultiRetAsMultiRet()
+		return
 	} else if valLength > len(types) {
 		rc.p.pusherrtok(rc.retAST.Token, "overflow_return")
 	}
@@ -2207,6 +2372,37 @@ func (rc *retChecker) checkExprTypes() {
 			constant:  false,
 			t:         t,
 			v:         rc.values[i],
+			ignoreAny: false,
+			errtok:    rc.retAST.Token,
+		}.checkAssignTypeAsync()
+	}
+}
+
+func (rc *retChecker) checkMultiRetAsMultiRet() {
+	val := rc.values[0]
+	if !val.ast.Type.MultiTyped {
+		rc.p.pusherrtok(rc.retAST.Token, "missing_multi_return")
+		return
+	}
+	valTypes := val.ast.Type.Tag.([]ast.DataType)
+	retTypes := rc.fun.RetType.Tag.([]ast.DataType)
+	if len(valTypes) < len(retTypes) {
+		rc.p.pusherrtok(rc.retAST.Token, "missing_multi_return")
+		return
+	} else if len(valTypes) < len(retTypes) {
+		rc.p.pusherrtok(rc.retAST.Token, "overflow_return")
+		return
+	}
+	rc.retAST.Expr.Model = rc.expModel.models[0]
+	for i, rt := range retTypes {
+		vt := valTypes[i]
+		val := value{ast: ast.Value{Type: vt}}
+		rc.p.wg.Add(1)
+		go assignChecker{
+			p:         rc.p,
+			constant:  false,
+			t:         rt,
+			v:         val,
 			ignoreAny: false,
 			errtok:    rc.retAST.Token,
 		}.checkAssignTypeAsync()
@@ -2417,90 +2613,110 @@ func (p *Parser) checkWhileProfile(iter *ast.Iter) {
 	p.checkBlock(&iter.Block)
 }
 
-type foreachTypeChecker struct {
+type foreachChecker struct {
 	p       *Parser
 	profile *ast.ForeachProfile
-	value   value
+	val     value
 }
 
-func (frc *foreachTypeChecker) array() {
-	if !jnapi.IsIgnoreId(frc.profile.KeyA.Id) {
-		keyA := &frc.profile.KeyA
-		if keyA.Type.Id == jn.Void {
-			keyA.Type.Id = jn.Size
-			keyA.Type.Val = jn.CxxTypeIdFromType(keyA.Type.Id)
-		} else {
-			var ok bool
-			keyA.Type, ok = frc.p.readyType(keyA.Type, true)
-			if ok {
-				if !typeIsSingle(keyA.Type) || !jn.IsNumericType(keyA.Type.Id) {
-					frc.p.pusherrtok(keyA.IdToken, "incompatible_datatype",
-						keyA.Type.Val, jn.NumericTypeStr)
-				}
-			}
-		}
-	}
-	if !jnapi.IsIgnoreId(frc.profile.KeyB.Id) {
-		elementType := frc.profile.ExprType
-		elementType.Val = elementType.Val[2:]
-		keyB := &frc.profile.KeyB
-		if keyB.Type.Id == jn.Void {
-			keyB.Type = elementType
-		} else {
-			frc.p.wg.Add(1)
-			go frc.p.checkTypeAsync(elementType, frc.profile.KeyB.Type, true, frc.profile.InToken)
-		}
-	}
-}
-
-func (frc *foreachTypeChecker) keyA() {
-	if jnapi.IsIgnoreId(frc.profile.KeyA.Id) {
+func (fc *foreachChecker) array() {
+	fc.checkKeyASize()
+	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
 		return
 	}
-	keyA := &frc.profile.KeyA
+	elementType := fc.profile.ExprType
+	elementType.Val = elementType.Val[2:]
+	keyB := &fc.profile.KeyB
+	if keyB.Type.Id == jn.Void {
+		keyB.Type = elementType
+		return
+	}
+	fc.p.wg.Add(1)
+	go fc.p.checkTypeAsync(elementType, keyB.Type, true, fc.profile.InToken)
+}
+
+func (fc *foreachChecker) jnmap() {
+	fc.checkKeyAMapKey()
+	fc.checkKeyBMapVal()
+}
+
+func (fc *foreachChecker) checkKeyASize() {
+	if jnapi.IsIgnoreId(fc.profile.KeyA.Id) {
+		return
+	}
+	keyA := &fc.profile.KeyA
 	if keyA.Type.Id == jn.Void {
 		keyA.Type.Id = jn.Size
 		keyA.Type.Val = jn.CxxTypeIdFromType(keyA.Type.Id)
 		return
 	}
 	var ok bool
-	keyA.Type, ok = frc.p.readyType(keyA.Type, true)
+	keyA.Type, ok = fc.p.readyType(keyA.Type, true)
 	if ok {
 		if !typeIsSingle(keyA.Type) || !jn.IsNumericType(keyA.Type.Id) {
-			frc.p.pusherrtok(keyA.IdToken, "incompatible_datatype",
+			fc.p.pusherrtok(keyA.IdToken, "incompatible_datatype",
 				keyA.Type.Val, jn.NumericTypeStr)
 		}
 	}
 }
 
-func (frc *foreachTypeChecker) keyB() {
-	if jnapi.IsIgnoreId(frc.profile.KeyB.Id) {
+func (fc *foreachChecker) checkKeyAMapKey() {
+	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
 		return
 	}
 	runeType := ast.DataType{
 		Id:  jn.Rune,
 		Val: jn.CxxTypeIdFromType(jn.Rune),
 	}
-	keyB := &frc.profile.KeyB
+	keyB := &fc.profile.KeyB
 	if keyB.Type.Id == jn.Void {
 		keyB.Type = runeType
 		return
 	}
-	frc.p.wg.Add(1)
-	go frc.p.checkTypeAsync(runeType, frc.profile.KeyB.Type, true, frc.profile.InToken)
+	fc.p.wg.Add(1)
+	go fc.p.checkTypeAsync(runeType, fc.profile.KeyB.Type, true, fc.profile.InToken)
 }
 
-func (frc *foreachTypeChecker) str() {
-	frc.keyA()
-	frc.keyB()
+func (fc *foreachChecker) checkKeyBMapVal() {
+	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
+		return
+	}
+	valType := fc.val.ast.Type.Tag.([]ast.DataType)[1]
+	keyB := &fc.profile.KeyB
+	if keyB.Type.Id == jn.Void {
+		keyB.Type = valType
+		return
+	}
+	fc.p.wg.Add(1)
+	go fc.p.checkTypeAsync(valType, keyB.Type, true, fc.profile.InToken)
 }
 
-func (ftc *foreachTypeChecker) check() {
+func (fc *foreachChecker) str() {
+	fc.checkKeyASize()
+	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
+		return
+	}
+	runeType := ast.DataType{
+		Id:  jn.Rune,
+		Val: jn.CxxTypeIdFromType(jn.Rune),
+	}
+	keyB := &fc.profile.KeyB
+	if keyB.Type.Id == jn.Void {
+		keyB.Type = runeType
+		return
+	}
+	fc.p.wg.Add(1)
+	go fc.p.checkTypeAsync(runeType, keyB.Type, true, fc.profile.InToken)
+}
+
+func (fc *foreachChecker) check() {
 	switch {
-	case typeIsArray(ftc.value.ast.Type):
-		ftc.array()
-	case ftc.value.ast.Type.Id == jn.Str:
-		ftc.str()
+	case typeIsArray(fc.val.ast.Type):
+		fc.array()
+	case typeIsMap(fc.val.ast.Type):
+		fc.jnmap()
+	case fc.val.ast.Type.Id == jn.Str:
+		fc.str()
 	}
 }
 
@@ -2512,7 +2728,7 @@ func (p *Parser) checkForeachProfile(iter *ast.Iter) {
 	if !isForeachIterExpr(val) {
 		p.pusherrtok(iter.Token, "iter_foreach_nonenumerable_expr")
 	} else {
-		checker := foreachTypeChecker{p, &profile, val}
+		checker := foreachChecker{p, &profile, val}
 		checker.check()
 	}
 	iter.Profile = profile
@@ -2730,7 +2946,7 @@ func (p *Parser) checkTypeAsync(real, check ast.DataType, ignoreAny bool, errTok
 		}
 		return
 	}
-	if (typeIsPtr(real) || typeIsArray(real)) && check.Id == jn.Nil {
+	if typeIsNilCompatible(real) && check.Id == jn.Nil {
 		return
 	}
 	if real.Val != check.Val {

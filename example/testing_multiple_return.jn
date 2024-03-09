@@ -1,0 +1,28 @@
+testing_multipe_return_as_argument() {
+    test: = (a i32, b str, c rune) {
+        println(a)
+        println(b)
+        println(c)
+    }
+    multiret: = () [i32, str, rune] {
+        < 120, "STR", 'A'
+    }
+    test(multiret())
+}
+
+testing_multiple_return_as_multiple_return() {
+    testing1: = () [i32, str, rune] { < 152, "STR", 'B'}
+    testing2: = () [i32, str, rune] { < testing1() }
+    a:, b:, c: = testing2()
+    println(a)
+    println(b)
+    println(c)
+}
+
+main() {
+    println("testing multiple return as argument")
+    testing_multipe_return_as_argument()
+
+    println("testing multiple return as multiple return")
+    testing_multiple_return_as_multiple_return()
+}

@@ -1,6 +1,6 @@
 package parser
 
-import "github.com/De-Rune/jane/ast"
+import "github.com/DeRuneLabs/jane/ast"
 
 type defmap struct {
 	Funcs   []*function
@@ -60,9 +60,14 @@ func (dm *defmap) globalById(id string) *ast.Var {
 }
 
 func (dm *defmap) defById(id string) (int, byte) {
-	i := dm.findGlobalById(id)
+	var i int
+	i = dm.findGlobalById(id)
 	if i != -1 {
 		return i, 'g'
+	}
+	i = dm.findFuncById(id)
+	if i != -1 {
+		return i, 'f'
 	}
 	return -1, ' '
 }

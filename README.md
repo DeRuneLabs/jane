@@ -5,6 +5,12 @@ flow of jane source compiled, its to translate to C++ code and compiled it from
 C++ code. Transpile to C++ only instead of compiling is also an Optional. the
 mission to be advance, readable and good choic for system programming
 
+```py
+main() {
+    println("welcome")
+}
+```
+
 | name      | description                   |
 | --------- | ----------------------------- |
 | `ast`     | abstact syntax tree builder   |

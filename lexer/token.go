@@ -1,6 +1,6 @@
 package lexer
 
-import "github.com/De-Rune/jane/package/jnio"
+import "github.com/DeRuneLabs/jane/package/jnio"
 
 type Token struct {
 	File   *jnio.File

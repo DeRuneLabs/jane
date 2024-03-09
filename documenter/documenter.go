@@ -3,9 +3,9 @@ package documenter
 import (
 	"encoding/json"
 
-	"github.com/De-Rune/jane/ast"
-	"github.com/De-Rune/jane/package/jn"
-	"github.com/De-Rune/jane/parser"
+	"github.com/DeRuneLabs/jane/ast"
+	"github.com/DeRuneLabs/jane/package/jn"
+	"github.com/DeRuneLabs/jane/parser"
 )
 
 type use struct {
