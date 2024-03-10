@@ -1,0 +1,18 @@
+testing_inblock_type_alias() i32 {
+  type int i32
+  x: int = 10
+  < x + 10
+}
+
+testing_inblock_block_code() {
+  {
+    println("inblock block code")
+  }
+}
+
+main() {
+  println("testing inblock type alias")
+  println(testing_inblock_type_alias())
+
+  testing_inblock_block_code()
+}

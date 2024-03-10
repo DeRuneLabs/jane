@@ -51,7 +51,7 @@ func typeIsSingle(t ast.DataType) bool {
 		!typeIsFunc(t)
 }
 
-func subIdAcessorOfType(t ast.DataType) string {
+func subIdAccessorOfType(t ast.DataType) string {
 	if typeIsPtr(t) {
 		return "->"
 	}

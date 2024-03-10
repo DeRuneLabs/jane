@@ -1,3 +1,0 @@
-main() {
-	println("testing parser")
-}

@@ -1,0 +1,12 @@
+testing_under_variable() {
+  a:size
+  _ = a
+  num: = 10
+  num = 100
+  println(num)
+}
+
+main() {
+  println("testing control system variable")
+  testing_under_variable()
+}

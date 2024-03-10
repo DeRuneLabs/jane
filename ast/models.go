@@ -25,13 +25,13 @@ func (s Statement) String() string {
 	return fmt.Sprint(s.Val)
 }
 
-type BlockAST struct {
+type Block struct {
 	Tree []Statement
 }
 
 var Indent int32 = 0
 
-func (b BlockAST) String() string {
+func (b Block) String() string {
 	atomic.SwapInt32(&Indent, Indent+1)
 	defer func() { atomic.SwapInt32(&Indent, Indent-1) }()
 	return ParseBlock(b, int(Indent))
@@ -39,7 +39,7 @@ func (b BlockAST) String() string {
 
 const IndentSpace = 2
 
-func ParseBlock(b BlockAST, indent int) string {
+func ParseBlock(b Block, indent int) string {
 	var cxx strings.Builder
 	cxx.WriteByte('{')
 	for _, s := range b.Tree {
@@ -148,6 +148,7 @@ type Type struct {
 	Id    string
 	Type  DataType
 	Desc  string
+	Used  bool
 }
 
 func (t Type) String() string {
@@ -166,7 +167,7 @@ type Func struct {
 	Id      string
 	Params  []Parameter
 	RetType DataType
-	Block   BlockAST
+	Block   Block
 }
 
 func (fc Func) DataTypeString() string {
@@ -323,6 +324,7 @@ type Var struct {
 	New         bool
 	Tag         interface{}
 	Desc        string
+	Used        bool
 }
 
 func (v Var) String() string {
@@ -562,7 +564,7 @@ func (fp ForeachProfile) IterationSring(iter Iter) string {
 
 type Iter struct {
 	Token   lexer.Token
-	Block   BlockAST
+	Block   Block
 	Profile IterProfile
 }
 
@@ -595,7 +597,7 @@ func (c Continue) String() string {
 type If struct {
 	Token lexer.Token
 	Expr  Expr
-	Block BlockAST
+	Block Block
 }
 
 func (ifast If) String() string {
@@ -610,7 +612,7 @@ func (ifast If) String() string {
 type ElseIf struct {
 	Token lexer.Token
 	Expr  Expr
-	Block BlockAST
+	Block Block
 }
 
 func (elif ElseIf) String() string {
@@ -624,7 +626,7 @@ func (elif ElseIf) String() string {
 
 type Else struct {
 	Token lexer.Token
-	Block BlockAST
+	Block Block
 }
 
 func (elseast Else) String() string {

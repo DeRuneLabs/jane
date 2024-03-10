@@ -742,14 +742,14 @@ func nextStatementPos(tokens []lexer.Token, start int) (int, bool) {
 }
 
 type blockStatement struct {
-	block          *BlockAST
+	block          *Block
 	blockTokens    *[]lexer.Token
 	tokens         []lexer.Token
 	nextTokens     []lexer.Token
 	withTerminator bool
 }
 
-func (b *Builder) Block(tokens []lexer.Token) (block BlockAST) {
+func (b *Builder) Block(tokens []lexer.Token) (block Block) {
 	for {
 		if b.Pos == -1 {
 			return
@@ -816,8 +816,23 @@ func (b *Builder) Statement(bs *blockStatement) (s Statement) {
 		}
 	case lexer.Comment:
 		return b.CommentStatement(bs.tokens[0])
+	case lexer.Brace:
+		if tok.Kind == "{" {
+			return b.blockStatement(bs.tokens)
+		}
 	}
 	return b.ExprStatement(bs.tokens)
+}
+
+func (b *Builder) blockStatement(tokens []lexer.Token) Statement {
+	i := new(int)
+	token := tokens[0]
+	tokens = getrange(i, "{", "}", tokens)
+	if *i < len(tokens) {
+		b.pusherr(tokens[*i], "invalid_syntax")
+	}
+	block := b.Block(tokens)
+	return Statement{Token: token, Val: block}
 }
 
 type assignInfo struct {

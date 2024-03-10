@@ -100,5 +100,6 @@
   "obj_not_support_sub_fields": "objek tidak support untuk sub fields: %s",
   "obj_have_not_id": "objek tidak memiliki sub bidang dalam pengidentifikasi ini: %s",
   "doc_couldnt_generated": "%s: gagal generate dokumentasi karena sumber kode terdapat error",
+  "declared_but_not_used": "%s dideklarasikan tapi tidak terpakai",
   "error": "error: %s"
 }
