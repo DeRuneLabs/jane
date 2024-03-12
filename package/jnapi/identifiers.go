@@ -7,5 +7,5 @@ func IsIgnoreId(id string) bool {
 }
 
 func AsId(id string) string {
-	return Ignore + id
+	return "JNID(" + id + ")"
 }

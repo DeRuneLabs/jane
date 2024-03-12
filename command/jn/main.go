@@ -534,10 +534,10 @@ inline auto tuple_as_args(_Function_t _Function, _Tuple_t _Tuple) {
 }
 
 struct defer {
-  typedef std::function<void(void)> _Function_t;
+  typedef func<void(void)> _Function_t;
   template<class Callable>
   defer(Callable &&_function): _function(std::forward<Callable>(_function)) {}
-  defer(defer &&_other): _function(std::move(_other._function))             { _other._function = nullptr; }
+  defer(defer &&_Src): _function(std::move(_Src._function))                 { _Src._function = nullptr; }
   ~defer() noexcept                                                         { if (this->_function) { this->_function(); } }
   defer(const defer &)          = delete;
   void operator=(const defer &) = delete;
@@ -548,18 +548,18 @@ struct defer {
 #define _CONCAT(_A, _B) _A ## _B
 #define CONCAT(_A, _B) _CONCAT(_A, _B)
 #define DEFER(_Expr) defer CONCAT(JNDEFER_, __LINE__){[&](void) mutable -> void { _Expr; }}
-
-
-
+#define JNID(_Identifier) CONCAT(_, _Identifier)
 // endregion JN_MISC
 
 // region JN_BUILTIN_FUNCTIONS
-template <typename _Obj_t> static inline void _print(_Obj_t _Obj) noexcept {
+template <typename _Obj_t>
+static inline void JNID(print) (const _Obj_t _Obj) noexcept {
   std::wcout << _Obj;
 }
 
-template <typename _Obj_t> static inline void _println(_Obj_t _Obj) noexcept {
-  _print<_Obj_t>(_Obj);
+template <typename _Obj_t>
+static inline void JNID(println) (const _Obj_t _Obj) noexcept {
+  JNID(print)<_Obj_t>(_Obj);
   std::wcout << std::endl;
 }
 // endregion JN_BUILTIN_FUNCTIONS
