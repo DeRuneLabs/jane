@@ -426,7 +426,8 @@ func (lex *Lexer) Token() Token {
 		lex.kw(txt, "else", Else, &tok),
 		lex.kw(txt, "volatile", Volatile, &tok),
 		lex.kw(txt, "use", Use, &tok),
-		lex.kw(txt, "pub", Pub, &tok):
+		lex.kw(txt, "pub", Pub, &tok),
+		lex.kw(txt, "defer", Defer, &tok):
 	default:
 		l := lex.id(txt)
 		if l != "" {

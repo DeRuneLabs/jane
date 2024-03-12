@@ -101,5 +101,6 @@
   "obj_have_not_id": "objek tidak memiliki sub bidang dalam pengidentifikasi ini: %s",
   "doc_couldnt_generated": "%s: gagal generate dokumentasi karena sumber kode terdapat error",
   "declared_but_not_used": "%s dideklarasikan tapi tidak terpakai",
+  "defer_expr_not_func_call": "defer harus memiliki fungsi ekspresi pemanggilan",
   "error": "error: %s"
 }

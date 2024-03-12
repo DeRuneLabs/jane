@@ -699,3 +699,12 @@ type EnofiDirective struct{}
 func (EnofiDirective) String() string {
 	return ""
 }
+
+type Defer struct {
+	Token lexer.Token
+	Expr  Expr
+}
+
+func (d Defer) String() string {
+	return jnapi.ToDefer(d.Expr.String())
+}

@@ -38,4 +38,5 @@ const (
 	Dot          uint8 = 24
 	Pub          uint8 = 25
 	Preprocessor uint8 = 26
+	Defer        uint8 = 27
 )

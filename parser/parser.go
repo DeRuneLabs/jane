@@ -1823,7 +1823,7 @@ func (p *Parser) evalParenthesesRangeExpr(tokens []lexer.Token, m *exprModel) (v
 	switch {
 	case typeIsFunc(v.ast.Type):
 		f := v.ast.Type.Tag.(ast.Func)
-		p.parseFuncCall(f, tokens[len(valueToks):], m)
+		p.parseFuncCallToks(f, tokens[len(valueToks):], m)
 		v.ast.Type = f.RetType
 		v.lvalue = typeIsLvalue(v.ast.Type)
 	default:
@@ -2111,8 +2111,7 @@ func (p *Parser) checkAnonFunc(f *ast.Func) {
 	p.BlockVars = blockVariables
 }
 
-func (p *Parser) parseFuncCall(f ast.Func, tokens []lexer.Token, m *exprModel) {
-	errTok := tokens[0]
+func (p *Parser) getArgs(tokens []lexer.Token) []ast.Arg {
 	tokens, _ = p.getRange("(", ")", tokens)
 	if tokens == nil {
 		tokens = make([]lexer.Token, 0)
@@ -2121,11 +2120,23 @@ func (p *Parser) parseFuncCall(f ast.Func, tokens []lexer.Token, m *exprModel) {
 	args := b.Args(tokens)
 	if len(b.Errs) > 0 {
 		p.pusherrs(b.Errs...)
+		args = nil
+	}
+	return args
+}
+
+func (p *Parser) parseFuncCall(f ast.Func, args []ast.Arg, m *exprModel, errTok lexer.Token) {
+	if args == nil {
+		return
 	}
 	p.parseArgs(f.Params, &args, errTok, m)
 	if m != nil {
 		m.appendSubNode(argsExpr{args})
 	}
+}
+
+func (p *Parser) parseFuncCallToks(f ast.Func, argsToks []lexer.Token, m *exprModel) {
+	p.parseFuncCall(f, p.getArgs(argsToks), m, argsToks[0])
 }
 
 func (p *Parser) parseArgs(
@@ -2207,11 +2218,13 @@ func (p *Parser) tryFuncMultiRetAsArgs(
 		p.pusherrtok(errTok, "argument_overflow")
 		return
 	}
-	fname := m.nodes[m.index].nodes[0]
-	m.nodes[m.index].nodes[0] = exprNode{"tuple_as_args"}
-	*args = make([]ast.Arg, 2)
-	(*args)[0] = ast.Arg{Expr: ast.Expr{Model: fname}}
-	(*args)[1] = arg
+	if m != nil {
+		fname := m.nodes[m.index].nodes[0]
+		m.nodes[m.index].nodes[0] = exprNode{"tuple_as_args"}
+		*args = make([]ast.Arg, 2)
+		(*args)[0] = ast.Arg{Expr: ast.Expr{Model: fname}}
+		(*args)[1] = arg
+	}
 	for i, param := range params {
 		rt := types[i]
 		p.wg.Add(1)
@@ -2341,7 +2354,10 @@ func (p *Parser) checkBlock(b *ast.Block) {
 			p.BlockTypes = append(p.BlockTypes, &t)
 			model.Val = nil
 		case ast.Block:
-			p.checkBlock(&t)
+			p.checkNewBlock(&t)
+			model.Val = t
+		case ast.Defer:
+			p.checkDeferStatement(&t)
 			model.Val = t
 		case ast.CxxEmbed:
 		case ast.Comment:
@@ -2516,6 +2532,44 @@ func (p *Parser) checkVarStatement(v *ast.Var, noParse bool) {
 		*v = *p.Var(*v)
 	}
 	p.BlockVars = append(p.BlockVars, v)
+}
+
+func (p *Parser) checkDeferStatement(d *ast.Defer) {
+	tokens := d.Expr.Tokens
+	if t := tokens[len(tokens)-1]; t.Id != lexer.Brace && t.Kind != ")" {
+		p.pusherrtok(d.Token, "defer_expr_not_func_call")
+		return
+	}
+	var exprToks []lexer.Token
+	braceCount := 0
+	for i := len(tokens) - 1; i >= 0; i-- {
+		tok := tokens[i]
+		if tok.Id == lexer.Brace {
+			switch tok.Kind {
+			case ")":
+				braceCount++
+			case "(":
+				braceCount--
+			}
+			if braceCount == 0 {
+				exprToks = tokens[:i]
+				break
+			}
+		}
+	}
+	if len(exprToks) == 0 {
+		p.pusherrtok(d.Token, "defer_expr_not_func_call")
+		return
+	}
+	m := new(exprModel)
+	m.nodes = make([]exprBuildNode, 1)
+	if !typeIsFunc(p.evalExprPart(exprToks, m).ast.Type) {
+		p.pusherrtok(d.Token, "defer_expr_not_func_call")
+		return
+	}
+	m.nodes[0].nodes = nil
+	_ = p.evalExprPart(tokens, m)
+	d.Expr.Model = m
 }
 
 func (p *Parser) checkAssignment(selected value, errtok lexer.Token) bool {

@@ -490,8 +490,6 @@ public:
 	const char *what() const throw() { return this->_buffer.c_str(); }
 };
 
-#define JNTHROW(_Msg) throw exception(_Msg)
-
 template<typename _Alloc_t>
 static inline _Alloc_t *jnalloc() {
 	return new(std::nothrow) _Alloc_t;
@@ -534,6 +532,25 @@ inline auto tuple_as_args(_Function_t _Function, _Tuple_t _Tuple) {
 	static constexpr auto _size = std::tuple_size<_Tuple_t>::value;
 	return tuple_as_args(_Function, _Tuple, std::make_index_sequence<_size>{});
 }
+
+struct defer {
+  typedef std::function<void(void)> _Function_t;
+  template<class Callable>
+  defer(Callable &&_function): _function(std::forward<Callable>(_function)) {}
+  defer(defer &&_other): _function(std::move(_other._function))             { _other._function = nullptr; }
+  ~defer() noexcept                                                         { if (this->_function) { this->_function(); } }
+  defer(const defer &)          = delete;
+  void operator=(const defer &) = delete;
+  _Function_t _function;
+};
+
+#define JNTHROW(_Msg) throw exception(_Msg)
+#define _CONCAT(_A, _B) _A ## _B
+#define CONCAT(_A, _B) _CONCAT(_A, _B)
+#define DEFER(_Expr) defer CONCAT(JNDEFER_, __LINE__){[&](void) mutable -> void { _Expr; }}
+
+
+
 // endregion JN_MISC
 
 // region JN_BUILTIN_FUNCTIONS

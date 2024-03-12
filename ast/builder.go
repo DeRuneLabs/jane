@@ -816,6 +816,8 @@ func (b *Builder) Statement(bs *blockStatement) (s Statement) {
 		}
 	case lexer.Comment:
 		return b.CommentStatement(bs.tokens[0])
+	case lexer.Defer:
+		return b.DeferStatement(bs.tokens)
 	case lexer.Brace:
 		if tok.Kind == "{" {
 			return b.blockStatement(bs.tokens)
@@ -1191,6 +1193,20 @@ func (b *Builder) CommentStatement(token lexer.Token) (s Statement) {
 	} else {
 		s.Val = Comment{token.Kind}
 	}
+	return
+}
+
+func (b *Builder) DeferStatement(tokens []lexer.Token) (s Statement) {
+	var d Defer
+	d.Token = tokens[0]
+	tokens = tokens[1:]
+	if len(tokens) == 0 {
+		b.pusherr(d.Token, "missing_expr")
+		return
+	}
+	d.Expr = b.Expr(tokens)
+	s.Token = d.Token
+	s.Val = d
 	return
 }
 
