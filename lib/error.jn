@@ -1,0 +1,21 @@
+#pragma enofi
+
+//doc:
+// this is a error handling structure of standard library.
+// It is used for error handling and panics.
+//
+// example to error handling:
+// you have a "compute" method have two float64 parameter: "x" and "y".
+// this function returns division of given arguments.
+// actually returns: [f64, *error]
+// the first return value naturally result of computation.
+// returns result and nil pointer for if the "x" and "y" is not equals to 0.
+// if not, returns 0 and returns heap-allocated error instance.
+//
+// result:, err: = compute(x, y)
+// if err {
+//   // If has error...
+// }
+pub struct error {
+	pub message:str
+}

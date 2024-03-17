@@ -1,4 +1,7 @@
-print(const v any) { }
+//doc: Prints specified value to command line.
+//@inline
+//pub print(const v{""} any)
 
-// print specified value to command line with the line
-println(const v any) { }
+//doc: Prints specified value to command line with new line.
+//@inline
+//pub println(const v{""} any)

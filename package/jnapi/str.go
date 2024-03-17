@@ -2,30 +2,31 @@ package jnapi
 
 import "strings"
 
-const RawStrMark = "LR"
-const StrMark = "L"
+const (
+	StrMark    = "u8"
+	RawStrMark = StrMark + "R"
+)
 
 func ToStr(literal string) string {
 	var cxx strings.Builder
-	cxx.WriteString("str(")
+	cxx.WriteString("str_jnt{")
 	cxx.WriteString(StrMark)
 	cxx.WriteString(literal)
-	cxx.WriteByte(')')
+	cxx.WriteByte('}')
 	return cxx.String()
 }
 
 func ToRawStr(literal string) string {
 	var cxx strings.Builder
-	cxx.WriteString("str(")
+	cxx.WriteString("str_jnt{")
 	cxx.WriteString(RawStrMark)
 	cxx.WriteString(literal)
-	cxx.WriteByte(')')
+	cxx.WriteByte('}')
 	return cxx.String()
 }
 
-func ToRune(literal string) string {
+func ToChar(literal string) string {
 	var cxx strings.Builder
-	cxx.WriteString(StrMark)
 	cxx.WriteString(literal)
 	return cxx.String()
 }

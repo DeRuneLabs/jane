@@ -1,73 +1,170 @@
 package parser
 
-import "github.com/DeRuneLabs/jane/ast"
+import "github.com/DeRuneLabs/jane/package/jntype"
 
-type defmap struct {
-	Funcs   []*function
-	Globals []*ast.Var
-	Types   []*ast.Type
+type Defmap struct {
+	Namespaces []*namespace
+	Enums      []*Enum
+	Structs    []*jnstruct
+	Types      []*Type
+	Funcs      []*function
+	Globals    []*Var
+	parent     *Defmap
 }
 
-func (dm *defmap) findTypeById(id string) int {
+func (dm *Defmap) findNsById(id string, parent bool) (int, *Defmap) {
+	for i, t := range dm.Namespaces {
+		if t != nil && t.Id == id {
+			return i, dm
+		}
+	}
+	if parent && dm.parent != nil {
+		return dm.parent.findNsById(id, parent)
+	}
+	return -1, nil
+}
+
+func (dm *Defmap) nsById(id string, parent bool) *namespace {
+	i, m := dm.findNsById(id, parent)
+	if i == -1 {
+		return nil
+	}
+	return m.Namespaces[i]
+}
+
+func (dm *Defmap) findStructById(id string, f *File) (int, *Defmap, bool) {
+	for i, s := range dm.Structs {
+		if s != nil && s.Ast.Id == id {
+			if f == s.Ast.Tok.File || s.Ast.Pub {
+				return i, dm, false
+			}
+		}
+	}
+	if dm.parent != nil {
+		i, m, _ := dm.parent.findStructById(id, f)
+		return i, m, true
+	}
+	return -1, nil, false
+}
+
+func (dm *Defmap) structById(id string, f *File) (*jnstruct, *Defmap, bool) {
+	i, m, canshadow := dm.findStructById(id, f)
+	if i == -1 {
+		return nil, nil, false
+	}
+	return m.Structs[i], m, canshadow
+}
+
+func (dm *Defmap) findEnumById(id string, f *File) (int, *Defmap, bool) {
+	for i, e := range dm.Enums {
+		if e != nil && e.Id == id {
+			if f == e.Tok.File || e.Pub {
+				return i, dm, false
+			}
+		}
+	}
+	if dm.parent != nil {
+		i, m, _ := dm.parent.findEnumById(id, f)
+		return i, m, true
+	}
+	return -1, nil, false
+}
+
+func (dm *Defmap) enumById(id string, f *File) (*Enum, *Defmap, bool) {
+	i, m, canshadow := dm.findEnumById(id, f)
+	if i == -1 {
+		return nil, nil, false
+	}
+	return m.Enums[i], m, canshadow
+}
+
+func (dm *Defmap) findTypeById(id string, f *File) (int, *Defmap, bool) {
 	for i, t := range dm.Types {
-		if t.Id == id {
-			return i
+		if t != nil && t.Id == id {
+			if f == t.Tok.File || t.Pub {
+				return i, dm, false
+			}
 		}
 	}
-	return -1
-}
-
-func (dm *defmap) typeById(id string) *ast.Type {
-	i := dm.findTypeById(id)
-	if i == -1 {
-		return nil
+	if dm.parent != nil {
+		i, m, _ := dm.parent.findTypeById(id, f)
+		return i, m, true
 	}
-	return dm.Types[i]
+	return -1, nil, false
 }
 
-func (dm *defmap) findFuncById(id string) int {
-	for i, f := range dm.Funcs {
-		if f.Ast.Id == id {
-			return i
+func (dm *Defmap) typeById(id string, f *File) (*Type, *Defmap, bool) {
+	i, m, canshadow := dm.findTypeById(id, f)
+	if i == -1 {
+		return nil, nil, false
+	}
+	return m.Types[i], m, canshadow
+}
+
+func (dm *Defmap) findFuncById(id string, f *File) (int, *Defmap, bool) {
+	for i, fn := range dm.Funcs {
+		if fn != nil && fn.Ast.Id == id {
+			if f == fn.Ast.Tok.File || fn.Ast.Pub {
+				return i, dm, false
+			}
 		}
 	}
-	return -1
-}
-
-func (dm *defmap) funcById(id string) *function {
-	i := dm.findFuncById(id)
-	if i == -1 {
-		return nil
+	if dm.parent != nil {
+		i, m, _ := dm.parent.findFuncById(id, f)
+		return i, m, true
 	}
-	return dm.Funcs[i]
+	return -1, nil, false
 }
 
-func (dm *defmap) findGlobalById(id string) int {
+func (dm *Defmap) funcById(id string, f *File) (*function, *Defmap, bool) {
+	i, m, canshadow := dm.findFuncById(id, f)
+	if i == -1 {
+		return nil, nil, false
+	}
+	return m.Funcs[i], m, canshadow
+}
+
+func (dm *Defmap) findGlobalById(id string, f *File) (int, *Defmap, bool) {
 	for i, v := range dm.Globals {
-		if v.Id == id {
-			return i
+		if v != nil && v.Type.Id != jntype.Void && v.Id == id {
+			if f == v.IdTok.File || v.Pub {
+				return i, dm, false
+			}
 		}
 	}
-	return -1
+	if dm.parent != nil {
+		i, m, _ := dm.parent.findGlobalById(id, f)
+		return i, m, true
+	}
+	return -1, nil, false
 }
 
-func (dm *defmap) globalById(id string) *ast.Var {
-	i := dm.findGlobalById(id)
+func (dm *Defmap) globalById(id string, f *File) (*Var, *Defmap, bool) {
+	i, m, canshadow := dm.findGlobalById(id, f)
 	if i == -1 {
-		return nil
+		return nil, nil, false
 	}
-	return dm.Globals[i]
+	return m.Globals[i], m, canshadow
 }
 
-func (dm *defmap) defById(id string) (int, byte) {
+func (dm *Defmap) defById(id string, f *File) (int, *Defmap, byte) {
 	var i int
-	i = dm.findGlobalById(id)
+	var m *Defmap
+	i, m, _ = dm.findGlobalById(id, f)
 	if i != -1 {
-		return i, 'g'
+		return i, m, 'g'
 	}
-	i = dm.findFuncById(id)
+	i, m, _ = dm.findFuncById(id, f)
 	if i != -1 {
-		return i, 'f'
+		return i, m, 'f'
 	}
-	return -1, ' '
+	i, m, _ = dm.findEnumById(id, f)
+	if i != -1 {
+		return i, m, 'e'
+	}
+	i, m, _ = dm.findStructById(id, f)
+	if i != -1 {
+		return i, m, 's'
+	}
+	return -1, m, ' '
 }

@@ -6,27 +6,33 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
 	"github.com/DeRuneLabs/jane/documenter"
 	"github.com/DeRuneLabs/jane/package/jn"
+	"github.com/DeRuneLabs/jane/package/jnapi"
 	"github.com/DeRuneLabs/jane/package/jnio"
 	"github.com/DeRuneLabs/jane/package/jnlog"
 	"github.com/DeRuneLabs/jane/package/jnset"
 	"github.com/DeRuneLabs/jane/parser"
 )
 
+type Parser = parser.Parser
+
 func help(cmd string) {
 	if cmd != "" {
-		println("this module can only be used on a single")
+		println("this module can only be using as single")
+		return
 	}
 	helpmap := [][]string{
-		{"help", "show help message"},
+		{"help", "show help"},
 		{"version", "show version"},
-		{"init", "initialize project"},
-		{"doc", "documentize jn source code"},
+		{"init", "initialize jane module project"},
+		{"doc", "documenting jane source code"},
 	}
 	max := len(helpmap[0][0])
 	for _, key := range helpmap {
@@ -48,29 +54,28 @@ func help(cmd string) {
 
 func version(cmd string) {
 	if cmd != "" {
-		println("this module can only be used on a single")
+		println("this module can only be using as single")
 		return
 	}
-	println("Jane Programming Language\n" + jn.Version)
+	println("jane version", jn.Version)
 }
 
 func initProject(cmd string) {
 	if cmd != "" {
-		println("this module can only be used on a single")
+		println("this module can only be using as single")
 		return
 	}
-	txt := []byte(`{
-  "cxx_out_dir": "./dist/",
-  "cxx_out_name": "jn.cxx",
-  "out_name": "main",
-  "language": ""
-}`)
-	err := os.WriteFile(jn.SettingsFile, txt, 0666)
+	bytes, err := json.MarshalIndent(*jnset.Default, "", "\t")
+	if err != nil {
+		println(err)
+		os.Exit(0)
+	}
+	err = ioutil.WriteFile(jn.SettingsFile, bytes, 0666)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
 	}
-	println("project initialized")
+	println("intialized project")
 }
 
 func doc(cmd string) {
@@ -91,8 +96,9 @@ func doc(cmd string) {
 			fmt.Println(jn.GetErr("error", err.Error()))
 			continue
 		}
-		path = filepath.Join(jn.JnSet.CxxOutDir, path+jn.DocExt)
-		writeOuput(path, docjson)
+		path = path[len(filepath.Dir(path)):]
+		path = filepath.Join(jn.Set.CxxOutDir, path+jn.DocExt)
+		writeOutput(path, docjson)
 	}
 }
 
@@ -121,8 +127,7 @@ func init() {
 	execp = filepath.Dir(execp)
 	jn.ExecPath = execp
 	jn.StdlibPath = filepath.Join(jn.ExecPath, jn.Stdlib)
-	jn.LangsPath = filepath.Join(jn.ExecPath, jn.Langs)
-
+	jn.LangsPath = filepath.Join(jn.ExecPath, jn.Localizations)
 	if len(os.Args) < 2 {
 		os.Exit(0)
 	}
@@ -154,15 +159,15 @@ func loadLangWarns(path string, infos []fs.FileInfo) {
 	if i == -1 {
 		return
 	}
-	bytes, err := os.ReadFile(path)
+	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
-		println("language's warning couldn't loaded (using default)")
+		println("language warning's couldn't loaded (use default)")
 		println(err.Error())
 		return
 	}
 	err = json.Unmarshal(bytes, &jn.Warns)
 	if err != nil {
-		println("language's warning couldn't loaded (using default)")
+		println("language warning's couldn't loaded (use default)")
 		println(err.Error())
 		return
 	}
@@ -181,29 +186,29 @@ func loadLangErrs(path string, infos []fs.FileInfo) {
 	if i == -1 {
 		return
 	}
-	bytes, err := os.ReadFile(path)
+	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
-		println("language's error couldn't loaded (using default)")
+		println("language warning's couldn't loaded (use default)")
 		println(err.Error())
 		return
 	}
 	err = json.Unmarshal(bytes, &jn.Errs)
 	if err != nil {
-		println("language's error couldn't loaded (using default)")
+		println("language warning's couldn't loaded (use default)")
 		println(err.Error())
 		return
 	}
 }
 
 func loadLang() {
-	lang := strings.TrimSpace(jn.JnSet.Language)
+	lang := strings.TrimSpace(jn.Set.Language)
 	if lang == "" || lang == "default" {
 		return
 	}
 	path := filepath.Join(jn.LangsPath, lang)
 	infos, err := ioutil.ReadDir(path)
 	if err != nil {
-		println("language's couldn't loaded (using default)")
+		println("language warning's couldn't loaded (use default)")
 		println(err.Error())
 		return
 	}
@@ -211,10 +216,22 @@ func loadLang() {
 	loadLangErrs(path, infos)
 }
 
+func checkMode() {
+	lower := strings.ToLower(jn.Set.Mode)
+	if lower != jnset.ModeTranspile && lower != jnset.ModeCompile {
+		key, _ := reflect.TypeOf(jn.Set).Elem().FieldByName("Mode")
+		tag := string(key.Tag)
+		tag = tag[6 : len(tag)-1]
+		println(jn.GetErr("invalid_value_for_key", jn.Set.Mode, tag))
+		os.Exit(0)
+	}
+	jn.Set.Mode = lower
+}
+
 func loadJnSet() {
 	info, err := os.Stat(jn.SettingsFile)
 	if err != nil || info.IsDir() {
-		println(`jn settings file ("` + jn.SettingsFile + `") not found`)
+		println(`Jane settings file ("` + jn.SettingsFile + `") is not found!`)
 		os.Exit(0)
 	}
 	bytes, err := os.ReadFile(jn.SettingsFile)
@@ -222,16 +239,17 @@ func loadJnSet() {
 		println(err.Error())
 		os.Exit(0)
 	}
-	jn.JnSet, err = jnset.Load(bytes)
+	jn.Set, err = jnset.Load(bytes)
 	if err != nil {
-		println("jn settings errors;")
+		println("X settings has errors;")
 		println(err.Error())
 		os.Exit(0)
 	}
 	loadLang()
+	checkMode()
 }
 
-func printlogs(p *parser.Parser) bool {
+func printlogs(p *Parser) bool {
 	var str strings.Builder
 	for _, log := range p.Warns {
 		switch log.Type {
@@ -256,7 +274,6 @@ func printlogs(p *parser.Parser) bool {
 			str.WriteString("ERROR: ")
 			str.WriteString(log.Msg)
 		case jnlog.Err:
-			str.WriteString("ERROR: ")
 			str.WriteString(log.Path)
 			str.WriteByte(':')
 			str.WriteString(fmt.Sprint(log.Row))
@@ -274,318 +291,32 @@ func printlogs(p *parser.Parser) bool {
 func appendStandard(code *string) {
 	year, month, day := time.Now().Date()
 	hour, min, _ := time.Now().Clock()
-	timeStr := fmt.Sprintf("%d/%d/%d %d.%d (DD/MM/YYYY) (HH.MM)", day, month, year, hour, min)
-	*code = `// JN compiler version: ` + jn.Version + `
-// Date: ` + timeStr + `
-// Author: ` + jn.Author + `
-// License: ` + jn.License + `
-
-// this file contains cxx module code which is automatically generated by JN
-// compiler. generated code in this file provide cxx functions and structures
-// corresponding to the definition in the JN source files
-
-// region JN_STANDARD_IMPORTS
-#include <codecvt>
-#include <cstdint>
-#include <functional>
-#include <iostream>
-#include <locale>
-#include <map>
-#include <string>
-#include <type_traits>
-#include <vector>
-// endregion JN_STANDARD_IMPORTS
-
-// region JN_CXX_API
-// region JN_BUILTIN_VALUES
-#define nil nullptr
-// endregion JN_BUILTIN_VALUES
-
-// region JN_BUILTIN_TYPES
-typedef int8_t i8;
-typedef int16_t i16;
-typedef int32_t i32;
-typedef int64_t i64;
-typedef ssize_t ssize;
-typedef uint8_t u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef size_t size;
-typedef float f32;
-typedef double f64;
-typedef wchar_t rune;
-
-#define func std::function
-
-class str : public std::basic_string<rune> {
-public:
-// region CONSTRUCTOR
-  str(void) noexcept {}
-  str(const std::basic_string<rune> _Src): str(_Src.c_str()) {}
-  str(const rune* _Str) noexcept { this->assign(_Str); }
-// endregion CONSTRUCTOR
-};
-// endregion JN_BUILTIN_TYPES
-
-// region JN_STRUCTURES
-template <typename _Item_t> class array {
-public:
-  // region FIELDS
-  std::vector<_Item_t> _buffer{};
-  // endregion FIELDS
-
-  // region CONSTRUCTORS
-  array<_Item_t>(void) noexcept {}
-  array<_Item_t>(const std::nullptr_t) noexcept {}
-  array<_Item_t>(const array<_Item_t>& _Src) noexcept { this->_buffer = _Src._buffer; }
-
-  array<_Item_t>(const std::initializer_list<_Item_t> &_Src) noexcept {
-	this->_buffer = std::vector<_Item_t>(_Src.begin(), _Src.end());
-  }
-
-  array<_Item_t>(const str _Str) noexcept {
-    if (std::is_same<_Item_t, rune>::value) {
-      this->_buffer = std::vector<_Item_t>(_Str.begin(), _Str.end());
-      return;
-    }
-    if (std::is_same<_Item_t, u8>::value) {
-      std::wstring_convert<std::codecvt_utf8_utf16<rune>> _conv;
-      const std::string _bytes = _conv.to_bytes(_Str);
-      this->_buffer = std::vector<_Item_t>(_bytes.begin(), _bytes.end());
-      return;
-    }
-  }
-  // endregion CONSTRUCTORS
-
-  // region DESTRUCTOR
-  ~array<_Item_t>(void) noexcept { this->_buffer.clear(); }
-  // endregion DESTRUCTOR
-
-  // region FOREACH_SUPPORT
-  typedef _Item_t *iterator;
-  typedef const _Item_t *const_iterator;
-  iterator begin(void) noexcept { return &this->_buffer[0]; }
-  const_iterator begin(void) const noexcept { return &this->_buffer[0]; }
-  iterator end(void) noexcept { return &this->_buffer[this->_buffer.size()]; }
-  const_iterator end(void) const noexcept {
-    return &this->_buffer[this->_buffer.size()];
-  }
-  // endregion FOREACH_SUPPORT
-
-  // region OPERATOR_OVERFLOWS
-  operator str(void) const noexcept {
-    if (std::is_same<_Item_t, rune>::value) {
-      return str(std::basic_string<rune>(this->begin(), this->end()));
-    }
-    if (std::is_same<_Item_t, u8>::value) {
-      std::wstring_convert<std::codecvt_utf8_utf16<rune>> _conv;
-      const std::string _bytes(this->begin(), this->end());
-      return str(std::wstring(_bytes.begin(), _bytes.end()));
-    }
-  }
-
-  bool operator==(const array<_Item_t> &_Src) const noexcept {
-    const size _length = this->_buffer.size();
-    const size _Src_length = _Src._buffer.size();
-    if (_length != _Src_length) {
-      return false;
-    }
-    for (size _index = 0; _index < _length; ++_index) {
-      if (this->_buffer[_index] != _Src._buffer[_index]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  bool operator==(const std::nullptr_t) const noexcept {
-    return this->_buffer.empty();
-  }
-  bool operator!=(const array<_Item_t> &_Src) const noexcept {
-    return !(*this == _Src);
-  }
-  bool operator!=(const std::nullptr_t) const noexcept {
-    return !this->_buffer.empty();
-  }
-  _Item_t &operator[](const size _Index) { return this->_buffer[_Index]; }
-
-  friend std::wostream &operator<<(std::wostream &_Stream,
-                                   const array<_Item_t> &_Src) {
-    _Stream << L'[';
-    const size _length = _Src._buffer.size();
-    for (size _index = 0; _index < _length;) {
-      _Stream << _Src._buffer[_index++];
-      if (_index < _length) {
-        _Stream << L", ";
-      }
-    }
-    _Stream << L']';
-    return _Stream;
-  }
-  // endregion OPERATOR_OVERFLOWS
-};
-
-template<typename _Key_t, typename _Value_t>
-class map: public std::map<_Key_t, _Value_t> {
-public:
-// region CONSTRUCTORS
-	map<_Key_t, _Value_t>(void) noexcept  {}
-	map<_Key_t, _Value_t>(const std::nullptr_t) noexcept {}
-	map<_Key_t, _Value_t>(const std::initializer_list<std::pair<_Key_t, _Value_t>> _Src)
-	{ for (const auto _data: _Src) { this->insert(_data); } }
-// endregion CONSTRUCTORS
-
-// region METHODS
-array<_Key_t> keys(void) const noexcept {
-    array<_Key_t> _keys{};
-    for (const auto _pair: *this)
-    { _keys._buffer.push_back(_pair.first); }
-    return _keys;
-  }
-
-  array<_Value_t> values(void) const noexcept {
-    array<_Value_t> _values{};
-    for (const auto _pair: *this)
-    { _values._buffer.push_back(_pair.second); }
-    return _values;
-  }
-
-  bool has(const _Key_t _Key) const noexcept {
-	return this->find(_Key) != this->end();
-  }
-
-  bool del(const _Key_t _Key) const noexcept {
-	return this->erase(_Key) != this->end();
-  }
-// endregion METHODS
-
-// region OPERATOR_OVERFLOWS
-	bool operator==(const std::nullptr_t) const noexcept { return this->empty(); }
-	bool operator!=(const std::nullptr_t) const noexcept { return !this->empty(); }
-
-	friend std::wostream& operator<<(std::wostream &_Stream,
-		const map<_Key_t, _Value_t> &_Src) {
-		_Stream << L'{';
-		size _length = _Src.size();
-		for (const auto _pair: _Src) {
-		_Stream << _pair.first;
-		_Stream << L':';
-		_Stream << _pair.second;
-		if (--_length > 0) { _Stream << L", "; }
-		}
-		_Stream << L'}';
-		return _Stream;
-	}
-// endregion OPERATOR_OVERFLOWS
-};
-// endregion JN_STRUCTURES
-
-// region JN_MISC
-class exception: public std::exception {
-private:
-	std::basic_string<char> _buffer;
-public:
-	exception(const char *_Str)      { this->_buffer = _Str; }
-	const char *what() const throw() { return this->_buffer.c_str(); }
-};
-
-template<typename _Alloc_t>
-static inline _Alloc_t *jnalloc() {
-	return new(std::nothrow) _Alloc_t;
+	timeStr := fmt.Sprintf("%d/%d/%d %d.%d (DD/MM/YYYY) (HH.MM)",
+		day, month, year, hour, min)
+	var sb strings.Builder
+	sb.WriteString("// Auto generated by JN compiler.\n")
+	sb.WriteString("// JN compiler version:")
+	sb.WriteString(jn.Version)
+	sb.WriteByte('\n')
+	sb.WriteString("// Date: ")
+	sb.WriteString(timeStr)
+	sb.WriteString("\n\n")
+	sb.WriteString("// this file contains cxx module code which is automatically generated by JN")
+	sb.WriteString("\n")
+	sb.WriteString("// compiler. generated code in this file provide cxx functions and structures")
+	sb.WriteString("\n")
+	sb.WriteString("// corresponding to the definition in the JN source files")
+	sb.WriteString("\n\n")
+	sb.WriteString(jnapi.CxxDefault)
+	sb.WriteString("\n\n// region TRANSPILED_JN_CODE\n")
+	sb.WriteString(*code)
+	sb.WriteString("\n// endregion TRANSPILED_JN_CODE\n\n")
+	sb.WriteString(jnapi.CxxMain)
+	*code = sb.String()
 }
 
-template <typename _Enum_t, typename _Index_t, typename _Item_t>
-static inline void foreach(const _Enum_t _Enum,
-                           const func<void(_Index_t, _Item_t)> _Body) {
-  _Index_t _index{0};
-  for (auto _item: _Enum) { _Body(_index++, _item); }
-}
-
-template <typename _Enum_t, typename _Index_t>
-static inline void foreach(const _Enum_t _Enum,
-                           const func<void(_Index_t)> _Body) {
-  _Index_t _index{0};
-  for (auto begin = _Enum.begin(), end = _Enum.end(); begin < end; ++begin)
-  { _Body(_index++); }
-}
-
-template <typename _Key_t, typename _Value_t>
-static inline void foreach(const map<_Key_t, _Value_t> _Map,
-                           const func<void(_Key_t)> _Body) {
-  for (const auto _pair: _Map) { _Body(_pair.first); }
-}
-
-template <typename _Key_t, typename _Value_t>
-static inline void foreach(const map<_Key_t, _Value_t> _Map,
-                           const func<void(_Key_t, _Value_t)> _Body) {
-  for (const auto _pair: _Map) { _Body(_pair.first, _pair.second); }
-}
-
-template<typename _Function_t, typename _Tuple_t, size_t ... _I_t>
-inline auto tuple_as_args (_Function_t _Function, _Tuple_t _Tuple, std::index_sequence<_I_t ...>) {
-	return _Function(std::get<_I_t>(_Tuple) ...);
-}
-
-template<typename _Function_t, typename _Tuple_t>
-inline auto tuple_as_args(_Function_t _Function, _Tuple_t _Tuple) {
-	static constexpr auto _size = std::tuple_size<_Tuple_t>::value;
-	return tuple_as_args(_Function, _Tuple, std::make_index_sequence<_size>{});
-}
-
-struct defer {
-  typedef func<void(void)> _Function_t;
-  template<class Callable>
-  defer(Callable &&_function): _function(std::forward<Callable>(_function)) {}
-  defer(defer &&_Src): _function(std::move(_Src._function))                 { _Src._function = nullptr; }
-  ~defer() noexcept                                                         { if (this->_function) { this->_function(); } }
-  defer(const defer &)          = delete;
-  void operator=(const defer &) = delete;
-  _Function_t _function;
-};
-
-#define JNTHROW(_Msg) throw exception(_Msg)
-#define _CONCAT(_A, _B) _A ## _B
-#define CONCAT(_A, _B) _CONCAT(_A, _B)
-#define DEFER(_Expr) defer CONCAT(JNDEFER_, __LINE__){[&](void) mutable -> void { _Expr; }}
-#define JNID(_Identifier) CONCAT(_, _Identifier)
-// endregion JN_MISC
-
-// region JN_BUILTIN_FUNCTIONS
-template <typename _Obj_t>
-static inline void JNID(print) (const _Obj_t _Obj) noexcept {
-  std::wcout << _Obj;
-}
-
-template <typename _Obj_t>
-static inline void JNID(println) (const _Obj_t _Obj) noexcept {
-  JNID(print)<_Obj_t>(_Obj);
-  std::wcout << std::endl;
-}
-// endregion JN_BUILTIN_FUNCTIONS
-// endregion JN_CXX_API
-
-// region TRANSPILED_JN_CODE
-` + *code + `
-// endregion TRANSPILED_JN_CODE
-
-// region JN_ENTRY_POINT
-int main() {
-// region JN_ENTRY_POINT_STANDARD_CODES
-  std::setlocale(LC_ALL, "");
-  std::wcin.imbue(std::locale::global(std::locale()));
-  std::wcout.imbue(std::locale::global(std::locale()));
-// endregion JN_ENTRY_POINT_STANDARD_CODES
-  _main();
-// region JN_ENTRY_POINT_END_STANDARD_CODES
-  return EXIT_SUCCESS;
-// endregion JN_ENTRY_POINT_END_STANDARD_CODES
-}
-// endergion JN_ENTRY_POINT`
-}
-
-func writeOuput(path, content string) {
-	err := os.MkdirAll(jn.JnSet.CxxOutDir, 0777)
+func writeOutput(path, content string) {
+	err := os.MkdirAll(jn.Set.CxxOutDir, 0777)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
@@ -598,9 +329,33 @@ func writeOuput(path, content string) {
 	}
 }
 
-func compile(path string, main, justDefs bool) *parser.Parser {
+func loadBuiltin() bool {
+	f, err := jnio.OpenJn(filepath.Join(jn.StdlibPath, "lib.jn"))
+	p := parser.New(f)
+	if err != nil {
+		println(err.Error())
+		return false
+	}
+	p.Defs = parser.Builtin
+	p.Parsef(false, false)
+	return true
+}
+
+func compile(path string, main, justDefs bool) *Parser {
 	loadJnSet()
 	p := parser.New(nil)
+	f, err := jnio.OpenJn(path)
+	if err != nil {
+		println(err.Error())
+		return nil
+	}
+	if !jnio.IsUseable(path) {
+		p.Errs = append(p.Errs, jnlog.CompilerLog{
+			Type: jnlog.FlatErr,
+			Msg:  "file is not useable for this platform",
+		})
+		return p
+	}
 	inf, err := os.Stat(jn.StdlibPath)
 	if err != nil || !inf.IsDir() {
 		p.Errs = append(p.Errs, jnlog.CompilerLog{
@@ -609,14 +364,33 @@ func compile(path string, main, justDefs bool) *parser.Parser {
 		})
 		return p
 	}
-	f, err := jnio.OpenJn(path)
-	if err != nil {
-		println(err.Error())
+	if !loadBuiltin() {
 		return nil
 	}
 	p.File = f
-	p.Parsef(true, false)
+	p.Parsef(main, justDefs)
 	return p
+}
+
+func execPostCommands() {
+	for _, cmd := range jn.Set.PostCommands {
+		fmt.Println(">", cmd)
+		parts := strings.SplitN(cmd, " ", -1)
+		err := exec.Command(parts[0], parts[1:]...).Run()
+		if err != nil {
+			println(err.Error())
+		}
+	}
+}
+
+func doSpell(path, cxx string) {
+	defer execPostCommands()
+	writeOutput(path, cxx)
+	switch jn.Set.Mode {
+	case jnset.ModeCompile:
+		defer os.Remove(path)
+		println("compilation is not supported yet")
+	}
 }
 
 func main() {
@@ -630,6 +404,6 @@ func main() {
 	}
 	cxx := p.Cxx()
 	appendStandard(&cxx)
-	path := filepath.Join(jn.JnSet.CxxOutDir, jn.JnSet.CxxOutName)
-	writeOuput(path, cxx)
+	path := filepath.Join(jn.Set.CxxOutDir, jn.Set.CxxOutName)
+	doSpell(path, cxx)
 }

@@ -1,17 +1,29 @@
 // doc: full-complete line from command-line
 @inline
 pub readln() str {
-  line:str
-  // cxx: std::getline(std::wcln, _line);
-  < line
+//cxx: #ifdef _WINDOWS
+  //cxx: std::wstring buffer{};
+  //cxx: std::wstring(std::wcin, buffer);
+  //cxx: return jn_stdlib_io_encode_utf8(buffer).c_str();
+//cxx: #else
+  //cxx: std::string buffer{};
+  //cxx: std::getline(std::wcin, buffer);
+  //cxx: return buffer.c_str();
+// cxx: #endif
 }
 
 // doc: read first pat of line from command-line
 @inline
 pub readin() str {
-  line:str
-  // cxx: stdd::wcin >> _line;
-  < line
+//cxx: #ifdef _WINDOWS
+	//cxx: std::wstring buffer{};
+	//cxx: std::wcin >> buffer;
+	//cxx: return jn_stdlib_io__encode_utf8(buffer).c_str();
+//cxx: #else
+	//cxx: std::string buffer{};
+	//cxx: std::cin >> buffer;
+	//cxx: return buffer.c_str();
+//cxx: #endif
 }
 
 #pragma enofi

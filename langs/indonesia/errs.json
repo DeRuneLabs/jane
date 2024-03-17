@@ -16,7 +16,7 @@
   "body_not_exist": "isi function tidak ditemukan",
   "operator_overflow": "operator overflow",
   "incompatible_datatype": "%s dan %s tipe data tidak kompatibel",
-  "operator_notfor_xtype": "operator ini tidak ditentukan untuk tipe %c",
+  "operator_notfor_jntype": "operator ini tidak ditentukan untuk tipe %c",
   "operator_notfor_float": "operator ini tidak ditentukan untuk tipe float(s)",
   "operator_notfor_int": "operator ini tidak ditentukan untuk tipe integer(s)",
   "operator_notfor_uint": "operator ini tidak ditentukan untuk tipe uint(s)",

@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/DeRuneLabs/jane/ast"
-	"github.com/DeRuneLabs/jane/lexer"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
@@ -13,7 +12,6 @@ type iExpr interface {
 }
 
 type exprBuildNode struct {
-	index int
 	nodes []iExpr
 }
 
@@ -22,12 +20,10 @@ type exprModel struct {
 	nodes []exprBuildNode
 }
 
-func newExprModel(processes [][]lexer.Token) *exprModel {
+func newExprModel(processes []Toks) *exprModel {
 	m := new(exprModel)
 	m.index = 0
-	for i := range processes {
-		m.nodes = append(m.nodes, exprBuildNode{index: i})
-	}
+	m.nodes = make([]exprBuildNode, len(processes))
 	return m
 }
 
@@ -46,8 +42,8 @@ func (m exprModel) String() string {
 	return expr.String()
 }
 
-func (m *exprModel) Expr() ast.Expr {
-	return ast.Expr{Model: m}
+func (m *exprModel) Expr() Expr {
+	return Expr{Model: m}
 }
 
 type exprNode struct {
@@ -59,7 +55,7 @@ func (node exprNode) String() string {
 }
 
 type anonFuncExpr struct {
-	ast     ast.Func
+	ast     Func
 	capture byte
 }
 
@@ -77,7 +73,7 @@ func (af anonFuncExpr) String() string {
 }
 
 type arrayExpr struct {
-	dataType ast.DataType
+	dataType DataType
 	expr     []iExpr
 }
 
@@ -91,13 +87,13 @@ func (a arrayExpr) String() string {
 	}
 	for _, exp := range a.expr {
 		cxx.WriteString(exp.String())
-		cxx.WriteString(", ")
+		cxx.WriteByte(',')
 	}
-	return cxx.String()[:cxx.Len()-2] + "})"
+	return cxx.String()[:cxx.Len()-1] + "})"
 }
 
 type mapExpr struct {
-	dataType ast.DataType
+	dataType DataType
 	keyExprs []iExpr
 	valExprs []iExpr
 }
@@ -123,7 +119,7 @@ type argsExpr struct {
 }
 
 func (a argsExpr) String() string {
-	if a.args == nil {
+	if len(a.args) == 0 {
 		return ""
 	}
 	var cxx strings.Builder
@@ -149,11 +145,12 @@ func (mre multiRetExpr) String() string {
 }
 
 type newHeapAllocExpr struct {
-	typeAST ast.DataType
+	typeAST DataType
+	expr    Expr
 }
 
 func (nha newHeapAllocExpr) String() string {
-	return jnapi.ToJnAlloc(nha.typeAST.String())
+	return jnapi.ToJnAlloc(nha.typeAST.String(), nha.expr.String())
 }
 
 type assignExpr struct {

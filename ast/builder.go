@@ -6,63 +6,135 @@ import (
 	"sync"
 
 	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/lexer/tokens"
 	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 	"github.com/DeRuneLabs/jane/package/jnbits"
 	"github.com/DeRuneLabs/jane/package/jnlog"
+	"github.com/DeRuneLabs/jane/package/jntype"
+)
+
+type (
+	Tok  = lexer.Tok
+	Toks = []Tok
 )
 
 type Builder struct {
 	wg  sync.WaitGroup
 	pub bool
 
-	Tree   []Obj
-	Errs   []jnlog.CompilerLog
-	Tokens []lexer.Token
-	Pos    int
+	Tree []Obj
+	Errs []jnlog.CompilerLog
+	Toks Toks
+	Pos  int
 }
 
-func NewBuilder(tokens []lexer.Token) *Builder {
+func NewBuilder(toks Toks) *Builder {
 	b := new(Builder)
-	b.Tokens = tokens
+	b.Toks = toks
 	b.Pos = 0
 	return b
 }
 
-func (b *Builder) pusherr(token lexer.Token, key string, args ...interface{}) {
-	b.Errs = append(b.Errs, jnlog.CompilerLog{
+func compilerErr(tok Tok, key string, args ...any) jnlog.CompilerLog {
+	return jnlog.CompilerLog{
 		Type:   jnlog.Err,
-		Row:    token.Row,
-		Column: token.Column,
-		Path:   token.File.Path,
+		Row:    tok.Row,
+		Column: tok.Column,
+		Path:   tok.File.Path,
 		Msg:    jn.GetErr(key, args...),
-	})
+	}
+}
+
+func (b *Builder) pusherr(tok Tok, key string, args ...any) {
+	b.Errs = append(b.Errs, compilerErr(tok, key, args...))
+}
+
+func Parts(toks Toks, id uint8) ([]Toks, []jnlog.CompilerLog) {
+	if len(toks) == 0 {
+		return nil, nil
+	}
+	parts := make([]Toks, 0)
+	errs := make([]jnlog.CompilerLog, 0)
+	braceCount := 0
+	last := 0
+	for i, tok := range toks {
+		if tok.Id == tokens.Brace {
+			switch tok.Kind {
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
+				braceCount++
+				continue
+			default:
+				braceCount--
+			}
+		}
+		if braceCount > 0 {
+			continue
+		}
+		if tok.Id == id {
+			if i-last <= 0 {
+				errs = append(errs, compilerErr(tok, "missing_expr"))
+			}
+			parts = append(parts, toks[last:i])
+			last = i + 1
+		}
+	}
+	if last < len(toks) {
+		parts = append(parts, toks[last:])
+	}
+	return parts, errs
+}
+
+func GetRangeLast(toks Toks) (cutted, cut Toks) {
+	if len(toks) == 0 {
+		return toks, nil
+	} else if toks[len(toks)-1].Id != tokens.Brace {
+		return toks, nil
+	}
+	braceCount := 0
+	for i := len(toks) - 1; i >= 0; i-- {
+		tok := toks[i]
+		if tok.Id == tokens.Brace {
+			switch tok.Kind {
+			case tokens.RBRACE, tokens.RBRACKET, tokens.RPARENTHESES:
+				braceCount++
+				continue
+			default:
+				braceCount--
+			}
+		}
+		if braceCount == 0 {
+			return toks[:i], toks[i:]
+		}
+	}
+	return toks, nil
 }
 
 func (ast *Builder) Ended() bool {
-	return ast.Pos >= len(ast.Tokens)
+	return ast.Pos >= len(ast.Toks)
 }
 
-func (b *Builder) buildNode(tokens []lexer.Token) {
-	tok := tokens[0]
+func (b *Builder) buildNode(toks Toks) {
+	tok := toks[0]
 	switch tok.Id {
-	case lexer.Use:
-		b.Use(tokens)
-	case lexer.At:
-		b.Attribute(tokens)
-	case lexer.Id:
-		b.Id(tokens)
-	case lexer.Const, lexer.Volatile:
-		b.GlobalVar(tokens)
-	case lexer.Type:
-		t := b.Type(tokens)
-		t.Pub = b.pub
-		b.pub = false
-		b.Tree = append(b.Tree, Obj{t.Token, t})
-	case lexer.Comment:
-		b.Comment(tokens[0])
-	case lexer.Preprocessor:
-		b.Preprocessor(tokens)
+	case tokens.Use:
+		b.Use(toks)
+	case tokens.At:
+		b.Attribute(toks)
+	case tokens.Id:
+		b.Id(toks)
+	case tokens.Const, tokens.Volatile:
+		b.GlobalVar(toks)
+	case tokens.Type:
+		b.Tree = append(b.Tree, b.TypeOrGenerics(toks))
+	case tokens.Enum:
+		b.Enum(toks)
+	case tokens.Struct:
+		b.Struct(toks)
+	case tokens.Comment:
+		b.Comment(toks[0])
+	case tokens.Preprocessor:
+		b.Preprocessor(toks)
 	default:
 		b.pusherr(tok, "invalid_syntax")
 		return
@@ -74,15 +146,15 @@ func (b *Builder) buildNode(tokens []lexer.Token) {
 
 func (b *Builder) Build() {
 	for b.Pos != -1 && !b.Ended() {
-		toks := b.skipStatement()
-		b.pub = toks[0].Id == lexer.Pub
+		toks := b.nextBuilderStatement()
+		b.pub = toks[0].Id == tokens.Pub
 		if b.pub {
 			if len(toks) == 1 {
 				if b.Ended() {
 					b.pusherr(toks[0], "invalid_syntax")
 					continue
 				}
-				toks = b.skipStatement()
+				toks = b.nextBuilderStatement()
 			} else {
 				toks = toks[1:]
 			}
@@ -92,73 +164,175 @@ func (b *Builder) Build() {
 	b.wg.Wait()
 }
 
-func (b *Builder) Type(tokens []lexer.Token) (t Type) {
+func (b *Builder) Type(toks Toks) (t Type) {
 	i := 1
-	if i >= len(tokens) {
-		b.pusherr(tokens[i-1], "invalid_syntax")
+	if i >= len(toks) {
+		b.pusherr(toks[i-1], "invalid_syntax")
 		return
 	}
-	tok := tokens[i]
-	if tok.Id != lexer.Id {
+	tok := toks[i]
+	if tok.Id != tokens.Id {
 		b.pusherr(tok, "invalid_syntax")
 	}
 	i++
-	if i >= len(tokens) {
-		b.pusherr(tokens[i-1], "invalid_syntax")
+	if i >= len(toks) {
+		b.pusherr(toks[i-1], "invalid_syntax")
 		return
 	}
-	destType, _ := b.DataType(tokens[i:], new(int), true)
-	tok = tokens[1]
+	destType, _ := b.DataType(toks[i:], new(int), true)
+	tok = toks[1]
 	return Type{
-		Pub:   b.pub,
-		Token: tok,
-		Id:    tok.Kind,
-		Type:  destType,
+		Tok:  tok,
+		Id:   tok.Kind,
+		Type: destType,
 	}
 }
 
-func (b *Builder) Comment(token lexer.Token) {
-	token.Kind = strings.TrimSpace(token.Kind[2:])
-	if strings.HasPrefix(token.Kind, "cxx:") {
-		b.Tree = append(b.Tree, Obj{token, CxxEmbed{token.Kind[4:]}})
+func (b *Builder) buildEnumItemExpr(i *int, toks Toks) Expr {
+	braceCount := 0
+	exprStart := *i
+	for ; *i < len(toks); *i++ {
+		tok := toks[*i]
+		if tok.Id == tokens.Brace {
+			switch tok.Kind {
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
+				braceCount++
+				continue
+			default:
+				braceCount--
+			}
+		}
+		if braceCount > 0 {
+			continue
+		}
+		if tok.Id == tokens.Comma || *i+1 >= len(toks) {
+			var exprToks Toks
+			if tok.Id == tokens.Comma {
+				exprToks = toks[exprStart:*i]
+			} else {
+				exprToks = toks[exprStart:]
+			}
+			return b.Expr(exprToks)
+		}
+	}
+	return Expr{}
+}
+
+func (b *Builder) buildEnumItems(toks Toks) []*EnumItem {
+	items := make([]*EnumItem, 0)
+	for i := 0; i < len(toks); i++ {
+		tok := toks[i]
+		item := new(EnumItem)
+		item.Tok = tok
+		if item.Tok.Id != tokens.Id {
+			b.pusherr(item.Tok, "invalid_syntax")
+		}
+		item.Id = item.Tok.Kind
+		if i+1 >= len(toks) || toks[i+1].Id == tokens.Comma {
+			if i+1 < len(toks) {
+				i++
+			}
+			items = append(items, item)
+			continue
+		}
+		i++
+		tok = toks[i]
+		if tok.Id != tokens.Operator && tok.Kind != tokens.EQUAL {
+			b.pusherr(toks[0], "invalid_syntax")
+		}
+		i++
+		if i >= len(toks) || toks[i].Id == tokens.Comma {
+			b.pusherr(toks[0], "missing_expr")
+			continue
+		}
+		item.Expr = b.buildEnumItemExpr(&i, toks)
+		items = append(items, item)
+	}
+	return items
+}
+
+func (b *Builder) Enum(toks Toks) {
+	var enum Enum
+	if len(toks) < 2 || len(toks) < 3 {
+		b.pusherr(toks[0], "invalid_syntax")
+		return
+	}
+	enum.Tok = toks[1]
+	if enum.Tok.Id != tokens.Id {
+		b.pusherr(enum.Tok, "invalid_syntax")
+	}
+	enum.Id = enum.Tok.Kind
+	i := 2
+	if toks[i].Id == tokens.Colon {
+		i++
+		if i >= len(toks) {
+			b.pusherr(toks[i-1], "invalid_syntax")
+			return
+		}
+		enum.Type, _ = b.DataType(toks, &i, true)
+		i++
+		if i >= len(toks) {
+			b.pusherr(enum.Tok, "body_not_exist")
+			return
+		}
 	} else {
-		b.Tree = append(b.Tree, Obj{token, Comment{token.Kind}})
+		enum.Type = DataType{Id: jntype.U32, Val: tokens.U32}
 	}
+	itemToks := b.getrange(&i, tokens.LBRACE, tokens.RBRACE, &toks)
+	if itemToks == nil {
+		b.pusherr(enum.Tok, "body_not_exist")
+		return
+	} else if i < len(toks) {
+		b.pusherr(toks[i], "invalid_syntax")
+	}
+	enum.Pub = b.pub
+	b.pub = false
+	enum.Items = b.buildEnumItems(itemToks)
+	b.Tree = append(b.Tree, Obj{enum.Tok, enum})
 }
 
-func (b *Builder) Preprocessor(tokens []lexer.Token) {
-	if len(tokens) == 1 {
-		b.pusherr(tokens[0], "invalid_syntax")
+func (b *Builder) Comment(tok Tok) {
+	tok.Kind = strings.TrimSpace(tok.Kind[2:])
+	if strings.HasPrefix(tok.Kind, "cxx:") {
+		b.Tree = append(b.Tree, Obj{tok, CxxEmbed{tok, tok.Kind[4:]}})
+		return
+	}
+	b.Tree = append(b.Tree, Obj{tok, Comment{tok.Kind}})
+}
+
+func (b *Builder) Preprocessor(toks Toks) {
+	if len(toks) == 1 {
+		b.pusherr(toks[0], "invalid_syntax")
 		return
 	}
 	var pp Preprocessor
-	tokens = tokens[1:]
-	tok := tokens[0]
-	if tok.Id != lexer.Id {
-		b.pusherr(pp.Token, "invalid_syntax")
+	toks = toks[1:]
+	tok := toks[0]
+	if tok.Id != tokens.Id {
+		b.pusherr(pp.Tok, "invalid_syntax")
 		return
 	}
 	ok := false
 	switch tok.Kind {
 	case "pragma":
-		ok = b.Pragma(&pp, tokens)
+		ok = b.Pragma(&pp, toks)
 	default:
 		b.pusherr(tok, "invalid_preprocessor")
 		return
 	}
 	if ok {
-		b.Tree = append(b.Tree, Obj{pp.Token, pp})
+		b.Tree = append(b.Tree, Obj{pp.Tok, pp})
 	}
 }
 
-func (b *Builder) Pragma(pp *Preprocessor, tokens []lexer.Token) bool {
-	if len(tokens) == 1 {
-		b.pusherr(tokens[0], "missing_pragma_directive")
+func (b *Builder) Pragma(pp *Preprocessor, toks Toks) bool {
+	if len(toks) == 1 {
+		b.pusherr(toks[0], "missing_pragma_directive")
 		return false
 	}
-	tokens = tokens[1:]
-	tok := tokens[0]
-	if tok.Id != lexer.Id {
+	toks = toks[1:]
+	tok := toks[0]
+	if tok.Id != tokens.Id {
 		b.pusherr(tok, "invalid_syntax")
 		return false
 	}
@@ -166,7 +340,7 @@ func (b *Builder) Pragma(pp *Preprocessor, tokens []lexer.Token) bool {
 	ok := false
 	switch tok.Kind {
 	case "enofi":
-		ok = b.pragmaEnofi(&d, tokens)
+		ok = b.pragmaEnofi(&d, toks)
 	default:
 		b.pusherr(tok, "invalid_pragma_directive")
 	}
@@ -174,61 +348,163 @@ func (b *Builder) Pragma(pp *Preprocessor, tokens []lexer.Token) bool {
 	return ok
 }
 
-func (b *Builder) pragmaEnofi(d *Directive, tokens []lexer.Token) bool {
-	if len(tokens) > 1 {
-		b.pusherr(tokens[1], "invalid_syntax")
+func (b *Builder) pragmaEnofi(d *Directive, toks Toks) bool {
+	if len(toks) > 1 {
+		b.pusherr(toks[1], "invalid_syntax")
 		return false
 	}
 	d.Command = EnofiDirective{}
 	return true
 }
 
-func (b *Builder) Id(tokens []lexer.Token) {
-	if len(tokens) == 1 {
-		b.pusherr(tokens[0], "invalid_syntax")
+func (b *Builder) Id(toks Toks) {
+	if len(toks) == 1 {
+		b.pusherr(toks[0], "invalid_syntax")
 		return
 	}
-	tok := tokens[1]
+	tok := toks[1]
 	switch tok.Id {
-	case lexer.Colon:
-		b.GlobalVar(tokens)
+	case tokens.Colon:
+		b.GlobalVar(toks)
 		return
-	case lexer.Brace:
+	case tokens.DoubleColon:
+		b.Namespace(toks)
+		return
+	case tokens.Brace:
 		switch tok.Kind {
-		case "(":
-			f := b.Func(tokens, false)
-			s := Statement{f.Token, f, false}
-			b.Tree = append(b.Tree, Obj{f.Token, s})
+		case tokens.LBRACE:
+			b.Namespace(toks)
+			return
+		case tokens.LPARENTHESES:
+			f := b.Func(toks, false)
+			s := Statement{f.Tok, f, false}
+			b.Tree = append(b.Tree, Obj{f.Tok, s})
 			return
 		}
 	}
 	b.pusherr(tok, "invalid_syntax")
 }
 
-func (b *Builder) Use(tokens []lexer.Token) {
-	var use Use
-	use.Token = tokens[0]
-	if len(tokens) < 2 {
-		b.pusherr(use.Token, "missing_use_path")
-		return
+func (b *Builder) nsIds(toks Toks, i *int) []string {
+	var ids []string
+	for ; *i < len(toks); *i++ {
+		tok := toks[*i]
+		if (*i+1)%2 != 0 {
+			if tok.Id != tokens.Id {
+				b.pusherr(tok, "invalid_syntax")
+				continue
+			}
+			ids = append(ids, tok.Kind)
+			continue
+		}
+		switch tok.Id {
+		case tokens.DoubleColon:
+			continue
+		default:
+			goto ret
+		}
 	}
-	use.Path = b.usePath(tokens[1:])
-	b.Tree = append(b.Tree, Obj{use.Token, use})
+ret:
+	return ids
 }
 
-func (b *Builder) usePath(tokens []lexer.Token) string {
+func (b *Builder) Namespace(toks Toks) {
+	var ns Namespace
+	ns.Tok = toks[0]
+	i := new(int)
+	ns.Ids = b.nsIds(toks, i)
+	treeToks := b.getrange(i, tokens.LBRACE, tokens.RBRACE, &toks)
+	if treeToks == nil {
+		b.pusherr(ns.Tok, "body_not_exist")
+		return
+	}
+	if *i < len(toks) {
+		b.pusherr(toks[*i], "invalid_syntax")
+	}
+	tree := b.Tree
+	b.Tree = nil
+	btoks := b.Toks
+	pos := b.Pos
+	b.Toks = treeToks
+	b.Pos = 0
+	b.Build()
+	b.Toks = btoks
+	b.Pos = pos
+	ns.Tree = b.Tree
+	b.Tree = tree
+	b.Tree = append(b.Tree, Obj{ns.Tok, ns})
+}
+
+func (b *Builder) structFields(toks Toks) []*Var {
+	fields := make([]*Var, 0)
+	i := new(int)
+	for *i < len(toks) {
+		varToks := b.skipStatement(i, &toks)
+		pub := varToks[0].Id == tokens.Pub
+		if pub {
+			if len(varToks) == 1 {
+				b.pusherr(varToks[0], "invalid_syntax")
+				continue
+			}
+			varToks = varToks[1:]
+		}
+		vast := b.Var(varToks)
+		vast.Pub = pub
+		fields = append(fields, &vast)
+	}
+	return fields
+}
+
+func (b *Builder) Struct(toks Toks) {
+	var s Struct
+	s.Pub = b.pub
+	b.pub = false
+	if len(toks) < 3 {
+		b.pusherr(toks[0], "invalid_syntax")
+		return
+	}
+	s.Tok = toks[1]
+	if s.Tok.Id != tokens.Id {
+		b.pusherr(s.Tok, "invalid_syntax")
+	}
+	s.Id = s.Tok.Kind
+	i := 2
+	bodyToks := b.getrange(&i, tokens.LBRACE, tokens.RBRACE, &toks)
+	if bodyToks == nil {
+		b.pusherr(s.Tok, "body_not_exist")
+		return
+	}
+	if i < len(toks) {
+		b.pusherr(toks[i], "invalid_syntax")
+	}
+	s.Fields = b.structFields(bodyToks)
+	b.Tree = append(b.Tree, Obj{s.Tok, s})
+}
+
+func (b *Builder) Use(toks Toks) {
+	var use Use
+	use.Tok = toks[0]
+	if len(toks) < 2 {
+		b.pusherr(use.Tok, "missing_use_path")
+		return
+	}
+	use.Path = b.usePath(toks[1:])
+	b.Tree = append(b.Tree, Obj{use.Tok, use})
+}
+
+func (b *Builder) usePath(toks Toks) string {
 	var path strings.Builder
 	path.WriteString(jn.StdlibPath)
 	path.WriteRune(os.PathSeparator)
-	for i, tok := range tokens {
+	for i, tok := range toks {
 		if i%2 != 0 {
-			if tok.Id != lexer.Dot {
+			if tok.Id != tokens.Dot {
 				b.pusherr(tok, "invalid_syntax")
 			}
 			path.WriteRune(os.PathSeparator)
 			continue
 		}
-		if tok.Id != lexer.Id {
+		if tok.Id != tokens.Id {
 			b.pusherr(tok, "invalid_syntax")
 		}
 		path.WriteString(tok.Kind)
@@ -236,105 +512,145 @@ func (b *Builder) usePath(tokens []lexer.Token) string {
 	return path.String()
 }
 
-func (b *Builder) Attribute(tokens []lexer.Token) {
+func (b *Builder) Attribute(toks Toks) {
 	var a Attribute
 	i := 0
-	a.Token = tokens[i]
+	a.Tok = toks[i]
 	i++
 	if b.Ended() {
-		b.pusherr(tokens[i-1], "invalid_syntax")
+		b.pusherr(toks[i-1], "invalid_syntax")
 		return
 	}
-	a.Tag = tokens[i]
-	if a.Tag.Id != lexer.Id ||
-		a.Token.Column+1 != a.Tag.Column {
+	a.Tag = toks[i]
+	if a.Tag.Id != tokens.Id ||
+		a.Tok.Column+1 != a.Tag.Column {
 		b.pusherr(a.Tag, "invalid_syntax")
 		return
 	}
-	b.Tree = append(b.Tree, Obj{a.Token, a})
+	b.Tree = append(b.Tree, Obj{a.Tok, a})
 }
 
-func (b *Builder) Func(tokens []lexer.Token, anonymous bool) (f Func) {
-	f.Token = tokens[0]
+func (b *Builder) Func(toks Toks, anon bool) (f Func) {
+	f.Tok = toks[0]
 	i := 0
 	f.Pub = b.pub
 	b.pub = false
-	if anonymous {
-		f.Id = "anonymous"
+	if anon {
+		f.Id = jn.Anonymous
 	} else {
-		if f.Token.Id != lexer.Id {
-			b.pusherr(f.Token, "invalid_syntax")
+		if f.Tok.Id != tokens.Id {
+			b.pusherr(f.Tok, "invalid_syntax")
 		}
-		f.Id = f.Token.Kind
+		f.Id = f.Tok.Kind
 		i++
 	}
-	f.RetType.Id = jn.Void
-	paramToks := b.getrange(&i, "(", ")", &tokens)
+	f.RetType.Id = jntype.Void
+	f.RetType.Val = jntype.VoidTypeStr
+	paramToks := b.getrange(&i, tokens.LPARENTHESES, tokens.RPARENTHESES, &toks)
 	if len(paramToks) > 0 {
 		b.Params(&f, paramToks)
 	}
-	if i >= len(tokens) {
-		b.pusherr(f.Token, "body_not_exist")
-		return
+	if i >= len(toks) {
+		if b.Ended() {
+			b.pusherr(f.Tok, "body_not_exist")
+			return
+		}
+		i = 0
+		toks = b.nextBuilderStatement()
 	}
-	tok := tokens[i]
-	t, ok := b.FuncRetDataType(tokens, &i)
+	tok := toks[i]
+	t, ok := b.FuncRetDataType(toks, &i)
 	if ok {
 		f.RetType = t
 		i++
-		if i >= len(tokens) {
-			b.pusherr(f.Token, "body_not_exist")
-			return
+		if i >= len(toks) {
+			if b.Ended() {
+				b.pusherr(f.Tok, "body_not_exist")
+				return
+			}
+			i = 0
+			toks = b.nextBuilderStatement()
 		}
-		tok = tokens[i]
+		tok = toks[i]
 	}
-	if tok.Id != lexer.Brace || tok.Kind != "{" {
+	if tok.Id != tokens.Brace || tok.Kind != tokens.LBRACE {
 		b.pusherr(tok, "invalid_syntax")
 		return
 	}
-	blockToks := b.getrange(&i, "{", "}", &tokens)
+	blockToks := b.getrange(&i, tokens.LBRACE, tokens.RBRACE, &toks)
 	if blockToks == nil {
-		b.pusherr(f.Token, "body_not_exist")
+		b.pusherr(f.Tok, "body_not_exist")
 		return
-	}
-	if i < len(tokens) {
-		b.pusherr(tokens[i], "invalid_syntax")
+	} else if i < len(toks) {
+		b.pusherr(toks[i], "invalid_syntax")
 	}
 	f.Block = b.Block(blockToks)
 	return
 }
 
-func (b *Builder) GlobalVar(tokens []lexer.Token) {
-	if tokens == nil {
-		return
+func (b *Builder) generic(toks Toks) GenericType {
+	if len(toks) > 1 {
+		b.pusherr(toks[1], "invalid_syntax")
 	}
-	s := b.VarStatement(tokens)
-	b.Tree = append(b.Tree, Obj{s.Token, s})
+	var gt GenericType
+	gt.Tok = toks[0]
+	if gt.Tok.Id != tokens.Id {
+		b.pusherr(gt.Tok, "invalid_syntax")
+	}
+	gt.Id = gt.Tok.Kind
+	return gt
 }
 
-func (b *Builder) Params(fn *Func, tokens []lexer.Token) {
-	last := 0
-	braceCount := 0
-	for i, tok := range tokens {
-		if tok.Id == lexer.Brace {
-			switch tok.Kind {
-			case "{", "[", "(":
-				braceCount++
-			default:
-				braceCount--
-			}
-		}
-		if braceCount > 0 || tok.Id != lexer.Comma {
+func (b *Builder) Generics(toks Toks) []GenericType {
+	tok := toks[0]
+	i := 1
+	genericsToks := getrange(&i, tokens.LBRACKET, tokens.RBRACKET, toks)
+	if len(genericsToks) == 0 {
+		b.pusherr(tok, "missing_expr")
+		return make([]GenericType, 0)
+	} else if i < len(toks) {
+		b.pusherr(toks[i], "invalid_syntax")
+	}
+	parts, errs := Parts(genericsToks, tokens.Comma)
+	b.Errs = append(b.Errs, errs...)
+	generics := make([]GenericType, len(parts))
+	for i, part := range parts {
+		if len(parts) == 0 {
 			continue
 		}
-		b.pushParam(fn, tokens[last:i], tok)
-		last = i + 1
+		generics[i] = b.generic(part)
 	}
-	if last < len(tokens) {
-		if last == 0 {
-			b.pushParam(fn, tokens[last:], tokens[last])
-		} else {
-			b.pushParam(fn, tokens[last:], tokens[last-1])
+	return generics
+}
+
+func (b *Builder) TypeOrGenerics(toks Toks) Obj {
+	if len(toks) > 1 {
+		tok := toks[1]
+		if tok.Id == tokens.Brace && tok.Kind == tokens.LBRACKET {
+			generics := b.Generics(toks)
+			return Obj{tok, generics}
+		}
+	}
+	t := b.Type(toks)
+	t.Pub = b.pub
+	b.pub = false
+	return Obj{t.Tok, t}
+}
+
+func (b *Builder) GlobalVar(toks Toks) {
+	if toks == nil {
+		return
+	}
+	s := b.VarStatement(toks)
+	b.Tree = append(b.Tree, Obj{s.Tok, s})
+}
+
+func (b *Builder) Params(fn *Func, toks Toks) {
+	parts, errs := Parts(toks, tokens.Comma)
+	b.Errs = append(b.Errs, errs...)
+	for _, part := range parts {
+		if len(parts) > 0 {
+			b.pushParam(fn, part)
 		}
 	}
 	b.wg.Add(1)
@@ -343,106 +659,227 @@ func (b *Builder) Params(fn *Func, tokens []lexer.Token) {
 
 func (b *Builder) checkParamsAsync(f *Func) {
 	defer func() { b.wg.Done() }()
-	for _, p := range f.Params {
-		if p.Type.Token.Id == lexer.NA {
-			b.pusherr(p.Token, "missing_type")
+	for i, p := range f.Params {
+		if p.Type.Tok.Id == tokens.NA {
+			if p.Tok.Id == tokens.NA {
+				b.pusherr(p.Tok, "missing_type")
+			} else {
+				p.Type.Tok = p.Tok
+				p.Type.Id = jntype.Id
+				p.Type.Val = p.Type.Tok.Kind
+				f.Params[i] = p
+				p.Tok = lexer.Tok{}
+			}
 		}
 	}
 }
 
-func (b *Builder) pushParam(f *Func, tokens []lexer.Token, errtok lexer.Token) {
-	if len(tokens) == 0 {
-		b.pusherr(errtok, "invalid_syntax")
-		return
-	}
-	past := Parameter{Token: tokens[0]}
-	for i, tok := range tokens {
+func (b *Builder) paramBegin(p *Param, i *int, toks Toks) {
+	for ; *i < len(toks); *i++ {
+		tok := toks[*i]
 		switch tok.Id {
-		case lexer.Const:
-			if past.Const {
+		case tokens.Const:
+			if p.Const {
 				b.pusherr(tok, "already_constant")
 				continue
 			}
-			past.Const = true
-		case lexer.Volatile:
-			if past.Volatile {
+			p.Const = true
+		case tokens.Volatile:
+			if p.Volatile {
 				b.pusherr(tok, "already_volatile")
 				continue
 			}
-			past.Volatile = true
-		case lexer.Operator:
-			if tok.Kind != "..." {
+			p.Volatile = true
+		case tokens.Operator:
+			switch tok.Kind {
+			case tokens.TRIPLE_DOT:
+				if p.Variadic {
+					b.pusherr(tok, "already_variadic")
+					continue
+				}
+				p.Variadic = true
+			case tokens.AMPER:
+				if p.Reference {
+					b.pusherr(tok, "already_reference")
+					continue
+				}
+				p.Reference = true
+			default:
 				b.pusherr(tok, "invalid_syntax")
-				continue
 			}
-			if past.Variadic {
-				b.pusherr(tok, "already_variadic")
-				continue
-			}
-			past.Variadic = true
-		case lexer.Id:
-			tokens = tokens[i:]
-			if !jnapi.IsIgnoreId(tok.Kind) {
-				for _, param := range f.Params {
-					if param.Id == tok.Kind {
-						b.pusherr(tok, "parameter_exist", tok.Kind)
-						break
-					}
-				}
-				past.Id = tok.Kind
-			}
-			if len(tokens) > 1 {
-				i := 1
-				past.Type, _ = b.DataType(tokens, &i, true)
-				i++
-				if i < len(tokens) {
-					b.pusherr(tokens[i], "invalid_syntax")
-				}
-				i = len(f.Params) - 1
-				for ; i >= 0; i-- {
-					param := &f.Params[i]
-					if param.Type.Token.Id != lexer.NA {
-						break
-					}
-					param.Type = past.Type
-				}
-			}
-			goto end
 		default:
-			if t, ok := b.DataType(tokens, &i, true); ok {
-				if i+1 == len(tokens) {
-					past.Type = t
-					goto end
-				}
-			}
-			b.pusherr(tok, "invalid_syntax")
-			goto end
+			return
 		}
 	}
-end:
-	f.Params = append(f.Params, past)
 }
 
-func (b *Builder) DataType(tokens []lexer.Token, i *int, err bool) (t DataType, ok bool) {
+func (b *Builder) paramBodyId(f *Func, p *Param, tok Tok) {
+	if jnapi.IsIgnoreId(tok.Kind) {
+		p.Id = jn.Anonymous
+		return
+	}
+	for _, param := range f.Params {
+		if param.Id == tok.Kind {
+			b.pusherr(tok, "parameter_exist", tok.Kind)
+			break
+		}
+	}
+	p.Id = tok.Kind
+}
+
+func (b *Builder) paramBodyDefaultExpr(p *Param, toks *Toks) {
+	braceCount := 0
+	for i, tok := range *toks {
+		if tok.Id == tokens.Brace {
+			switch tok.Kind {
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
+				braceCount++
+				continue
+			default:
+				braceCount--
+			}
+		}
+		if braceCount > 0 {
+			continue
+		}
+		exprToks := (*toks)[1:i]
+		*toks = (*toks)[i+1:]
+		if len(exprToks) > 0 {
+			p.Default = b.Expr(exprToks)
+		}
+		break
+	}
+}
+
+func (b *Builder) paramBodyDataType(f *Func, p *Param, toks Toks) {
+	i := 0
+	p.Type, _ = b.DataType(toks, &i, true)
+	i++
+	if i < len(toks) {
+		b.pusherr(toks[i], "invalid_syntax")
+	}
+	i = len(f.Params) - 1
+	for ; i >= 0; i-- {
+		param := &f.Params[i]
+		if param.Type.Tok.Id != tokens.NA {
+			break
+		}
+		param.Type = p.Type
+	}
+}
+
+func (b *Builder) paramBody(f *Func, p *Param, i *int, toks Toks) {
+	b.paramBodyId(f, p, toks[*i])
+	toks = toks[*i+1:]
+	if len(toks) == 0 {
+		return
+	}
+	if tok := toks[0]; tok.Id == tokens.Brace && tok.Kind == tokens.LBRACE {
+		b.paramBodyDefaultExpr(p, &toks)
+	}
+	if len(toks) > 0 {
+		b.paramBodyDataType(f, p, toks)
+	}
+}
+
+func (b *Builder) pushParam(f *Func, toks Toks) {
+	var p Param
+	i := 0
+	b.paramBegin(&p, &i, toks)
+	if i >= len(toks) {
+		return
+	}
+	tok := toks[i]
+	p.Tok = tok
+	if tok.Id != tokens.Id {
+		if t, ok := b.DataType(toks, &i, true); ok {
+			if i+1 == len(toks) {
+				p.Type = t
+				goto end
+			}
+		}
+		b.pusherr(tok, "invalid_syntax")
+		goto end
+	}
+	b.paramBody(f, &p, &i, toks)
+end:
+	f.Params = append(f.Params, p)
+}
+
+func (b *Builder) idGenericsParts(toks Toks, i *int) []Toks {
+	first := *i
+	braceCount := 0
+	for ; *i < len(toks); *i++ {
+		tok := toks[*i]
+		if tok.Id == tokens.Brace {
+			switch tok.Kind {
+			case tokens.LBRACKET:
+				braceCount++
+			case tokens.RBRACKET:
+				braceCount--
+			}
+		}
+		if braceCount == 0 {
+			break
+		}
+	}
+	toks = toks[first+1 : *i]
+	parts, errs := Parts(toks, tokens.Comma)
+	b.Errs = append(b.Errs, errs...)
+	return parts
+}
+
+func (b *Builder) idDataTypePartEnd(t *DataType, dtv *strings.Builder, toks Toks, i *int) {
+	if *i+1 >= len(toks) {
+		return
+	}
+	*i++
+	tok := toks[*i]
+	if tok.Id != tokens.Brace || tok.Kind != tokens.LBRACKET {
+		*i--
+		return
+	}
+	dtv.WriteByte('[')
+	var genericsStr strings.Builder
+	parts := b.idGenericsParts(toks, i)
+	generics := make([]DataType, len(parts))
+	for i, part := range parts {
+		index := 0
+		t, _ := b.DataType(part, &index, true)
+		if index+1 < len(part) {
+			b.pusherr(part[index+1], "invalid_syntax")
+		}
+		genericsStr.WriteString(t.String())
+		genericsStr.WriteByte(',')
+		generics[i] = t
+	}
+	dtv.WriteString(genericsStr.String()[:genericsStr.Len()-1])
+	dtv.WriteByte(']')
+	t.Tag = generics
+}
+
+func (b *Builder) DataType(toks Toks, i *int, err bool) (t DataType, ok bool) {
+	defer func() { t.Original = t }()
 	first := *i
 	var dtv strings.Builder
-	for ; *i < len(tokens); *i++ {
-		tok := tokens[*i]
+	for ; *i < len(toks); *i++ {
+		tok := toks[*i]
 		switch tok.Id {
-		case lexer.DataType:
-			t.Token = tok
-			t.Id = jn.TypeFromId(t.Token.Kind)
-			dtv.WriteString(t.Token.Kind)
+		case tokens.DataType:
+			t.Tok = tok
+			t.Id = jntype.TypeFromId(t.Tok.Kind)
+			dtv.WriteString(t.Tok.Kind)
 			ok = true
 			goto ret
-		case lexer.Id:
-			t.Token = tok
-			t.Id = jn.Id
-			dtv.WriteString(t.Token.Kind)
+		case tokens.Id:
+			t.Id = jntype.Id
+			t.Tok = tok
+			dtv.WriteString(t.Tok.Kind)
+			b.idDataTypePartEnd(&t, &dtv, toks, i)
 			ok = true
 			goto ret
-		case lexer.Operator:
-			if tok.Kind == "*" {
+		case tokens.Operator:
+			if tok.Kind == tokens.STAR {
 				dtv.WriteString(tok.Kind)
 				break
 			}
@@ -450,32 +887,32 @@ func (b *Builder) DataType(tokens []lexer.Token, i *int, err bool) (t DataType, 
 				b.pusherr(tok, "invalid_syntax")
 			}
 			return
-		case lexer.Brace:
+		case tokens.Brace:
 			switch tok.Kind {
-			case "(":
-				t.Token = tok
-				t.Id = jn.Func
-				val, f := b.FuncDataTypeHead(tokens, i)
-				f.RetType, _ = b.FuncRetDataType(tokens, i)
+			case tokens.LPARENTHESES:
+				t.Tok = tok
+				t.Id = jntype.Func
+				val, f := b.FuncDataTypeHead(toks, i)
+				f.RetType, _ = b.FuncRetDataType(toks, i)
 				dtv.WriteString(val)
-				t.Tag = f
+				t.Tag = &f
 				ok = true
 				goto ret
-			case "[":
+			case tokens.LBRACKET:
 				*i++
-				if *i > len(tokens) {
+				if *i > len(toks) {
 					if err {
 						b.pusherr(tok, "invalid_syntax")
 					}
 					return
 				}
-				tok = tokens[*i]
-				if tok.Id == lexer.Brace && tok.Kind == "]" {
+				tok = toks[*i]
+				if tok.Id == tokens.Brace && tok.Kind == tokens.RBRACKET {
 					dtv.WriteString("[]")
 					continue
 				}
 				*i--
-				dt, val := b.MapDataType(tokens, i, err)
+				dt, val := b.MapDataType(toks, i, err)
 				if val == "" {
 					if err {
 						b.pusherr(tok, "invalid_syntax")
@@ -496,25 +933,23 @@ func (b *Builder) DataType(tokens []lexer.Token, i *int, err bool) (t DataType, 
 		}
 	}
 	if err {
-		b.pusherr(tokens[first], "invalid_type")
+		b.pusherr(toks[first], "invalid_type")
 	}
 ret:
 	t.Val = dtv.String()
 	return
 }
 
-func (b *Builder) MapDataType(tokens []lexer.Token, i *int, err bool) (t DataType, _ string) {
-	t.Id = jn.Map
-	t.Token = tokens[0]
+func getMapDataTypeInfo(toks Toks, i *int) (typeToks Toks, colon int) {
+	typeToks = nil
+	colon = -1
 	braceCount := 0
-	colon := -1
 	start := *i
-	var mapToks []lexer.Token
-	for ; *i < len(tokens); *i++ {
-		tok := tokens[*i]
-		if tok.Id == lexer.Brace {
+	for ; *i < len(toks); *i++ {
+		tok := toks[*i]
+		if tok.Id == tokens.Brace {
 			switch tok.Kind {
-			case "(", "[", "{":
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
 				braceCount++
 			default:
 				braceCount--
@@ -524,25 +959,33 @@ func (b *Builder) MapDataType(tokens []lexer.Token, i *int, err bool) (t DataTyp
 			if start+1 > *i {
 				return
 			}
-			mapToks = tokens[start+1 : *i]
+			typeToks = toks[start+1 : *i]
 			break
 		} else if braceCount != 1 {
 			continue
 		}
-		if colon == -1 && tok.Id == lexer.Colon {
+		if colon == -1 && tok.Id == tokens.Colon {
 			colon = *i - start - 1
 		}
 	}
-	if mapToks == nil || colon == -1 {
+	return
+}
+
+func (b *Builder) MapDataType(toks Toks, i *int, err bool) (t DataType, _ string) {
+	defer func() { t.Original = t }()
+	t.Id = jntype.Map
+	t.Tok = toks[0]
+	typeToks, colon := getMapDataTypeInfo(toks, i)
+	if typeToks == nil || colon == -1 {
 		return
 	}
-	colonTok := tokens[colon]
-	if colon == 0 || colon+1 >= len(mapToks) {
+	colonTok := toks[colon]
+	if colon == 0 || colon+1 >= len(typeToks) {
 		b.pusherr(colonTok, "missing_expr")
 		return t, " "
 	}
-	keyTypeToks := mapToks[:colon]
-	valTypeToks := mapToks[colon+1:]
+	keyTypeToks := typeToks[:colon]
+	valTypeToks := typeToks[colon+1:]
 	types := make([]DataType, 2)
 	j := 0
 	types[0], _ = b.DataType(keyTypeToks, &j, err)
@@ -564,123 +1007,134 @@ func (b *Builder) MapDataType(tokens []lexer.Token, i *int, err bool) (t DataTyp
 	return t, val.String()
 }
 
-func (b *Builder) FuncDataTypeHead(tokens []lexer.Token, i *int) (string, Func) {
+func (b *Builder) FuncDataTypeHead(toks Toks, i *int) (string, Func) {
 	var f Func
 	var typeVal strings.Builder
 	typeVal.WriteByte('(')
 	brace := 1
 	firstIndex := *i
-	for *i++; *i < len(tokens); *i++ {
-		tok := tokens[*i]
+	for *i++; *i < len(toks); *i++ {
+		tok := toks[*i]
 		typeVal.WriteString(tok.Kind)
 		switch tok.Id {
-		case lexer.Brace:
+		case tokens.Brace:
 			switch tok.Kind {
-			case "{", "[", "(":
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
 				brace++
 			default:
 				brace--
 			}
 		}
 		if brace == 0 {
-			b.Params(&f, tokens[firstIndex+1:*i])
+			b.Params(&f, toks[firstIndex+1:*i])
 			*i++
 			return typeVal.String(), f
 		}
 	}
-	b.pusherr(tokens[firstIndex], "invalid_type")
+	b.pusherr(toks[firstIndex], "invalid_type")
 	return "", f
 }
 
-func (b *Builder) pushTypeToTypes(types *[]DataType, tokens []lexer.Token, errTok lexer.Token) {
-	if len(tokens) == 0 {
+func (b *Builder) pushTypeToTypes(types *[]DataType, toks Toks, errTok Tok) {
+	if len(toks) == 0 {
 		b.pusherr(errTok, "missing_expr")
 		return
 	}
-	currentDt, _ := b.DataType(tokens, new(int), false)
+	currentDt, _ := b.DataType(toks, new(int), false)
 	*types = append(*types, currentDt)
 }
 
-func (b *Builder) FuncRetDataType(tokens []lexer.Token, i *int) (t DataType, ok bool) {
-	if *i >= len(tokens) {
-		return
-	}
-	tok := tokens[*i]
+func (b *Builder) funcMultiTypeRet(toks Toks, i *int) (t DataType, ok bool) {
+	defer func() { t.Original = t }()
 	start := *i
-	if tok.Id == lexer.Brace && tok.Kind == "[" {
+	tok := toks[*i]
+	t.Val += tok.Kind
+	*i++
+	if *i >= len(toks) {
+		*i--
+		return b.DataType(toks, i, false)
+	}
+	tok = toks[*i]
+	if tok.Id == tokens.Brace && tok.Kind == tokens.RBRACKET {
+		*i--
+		return b.DataType(toks, i, false)
+	}
+	var types []DataType
+	braceCount := 1
+	last := *i
+	for ; *i < len(toks); *i++ {
+		tok := toks[*i]
 		t.Val += tok.Kind
-		*i++
-		if *i >= len(tokens) {
-			*i--
-			goto end
-		}
-		tok = tokens[*i]
-		if tok.Id == lexer.Brace && tok.Kind == "]" {
-			*i--
-			goto end
-		}
-		var types []DataType
-		braceCount := 1
-		last := *i
-		for ; *i < len(tokens); *i++ {
-			tok := tokens[*i]
-			t.Val += tok.Kind
-			if tok.Id == lexer.Brace {
-				switch tok.Kind {
-				case "(", "[", "{":
-					braceCount++
-				default:
-					braceCount--
-				}
+		if tok.Id == tokens.Brace {
+			switch tok.Kind {
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
+				braceCount++
+			default:
+				braceCount--
 			}
-			if braceCount == 0 {
-				if tok.Id == lexer.Colon {
-					*i = start
-					goto end
-				}
-				b.pushTypeToTypes(&types, tokens[last:*i], tokens[last-1])
-				break
-			} else if braceCount > 1 {
-				continue
-			}
-			if tok.Id != lexer.Comma {
-				continue
-			}
-			b.pushTypeToTypes(&types, tokens[last:*i], tokens[*i-1])
-			last = *i + 1
 		}
-		if len(types) > 1 {
-			t.MultiTyped = true
-			t.Tag = types
-		} else {
-			t = types[0]
+		if braceCount == 0 {
+			if tok.Id == tokens.Colon {
+				*i = start
+				return b.DataType(toks, i, false)
+			}
+			b.pushTypeToTypes(&types, toks[last:*i], toks[last-1])
+			break
+		} else if braceCount > 1 {
+			continue
 		}
-		ok = true
+		switch tok.Id {
+		case tokens.Comma:
+		case tokens.Colon:
+			*i = start
+			return b.DataType(toks, i, false)
+		default:
+			continue
+		}
+		b.pushTypeToTypes(&types, toks[last:*i], toks[*i-1])
+		last = *i + 1
+	}
+	if len(types) > 1 {
+		t.MultiTyped = true
+		t.Tag = types
+	} else {
+		t = types[0]
+	}
+	ok = true
+	return
+}
+
+func (b *Builder) FuncRetDataType(toks Toks, i *int) (t DataType, ok bool) {
+	defer func() { t.Original = t }()
+	if *i >= len(toks) {
 		return
 	}
-end:
-	return b.DataType(tokens, i, false)
+	tok := toks[*i]
+	if tok.Id == tokens.Brace && tok.Kind == tokens.LBRACKET {
+		return b.funcMultiTypeRet(toks, i)
+	}
+	return b.DataType(toks, i, false)
 }
 
 func IsSingleOperator(kind string) bool {
-	return kind == "-" ||
-		kind == "+" ||
-		kind == "~" ||
-		kind == "!" ||
-		kind == "*" ||
-		kind == "&"
+	return kind == tokens.MINUS ||
+		kind == tokens.PLUS ||
+		kind == tokens.TILDE ||
+		kind == tokens.EXCLAMATION ||
+		kind == tokens.STAR ||
+		kind == tokens.AMPER
 }
 
 func (b *Builder) pushStatementToBlock(bs *blockStatement) {
-	if len(bs.tokens) == 0 {
+	if len(bs.toks) == 0 {
 		return
 	}
-	lastTok := bs.tokens[len(bs.tokens)-1]
-	if lastTok.Id == lexer.SemiColon {
-		if len(bs.tokens) == 1 {
+	lastTok := bs.toks[len(bs.toks)-1]
+	if lastTok.Id == tokens.SemiColon {
+		if len(bs.toks) == 1 {
 			return
 		}
-		bs.tokens = bs.tokens[:len(bs.tokens)-1]
+		bs.toks = bs.toks[:len(bs.toks)-1]
 	}
 	s := b.Statement(bs)
 	if s.Val == nil {
@@ -690,32 +1144,36 @@ func (b *Builder) pushStatementToBlock(bs *blockStatement) {
 	bs.block.Tree = append(bs.block.Tree, s)
 }
 
-func IsStatement(current, prev lexer.Token) (ok bool, withTerminator bool) {
-	ok = current.Id == lexer.SemiColon || prev.Row < current.Row
-	withTerminator = current.Id == lexer.SemiColon
+func IsStatement(current, prev Tok) (ok bool, withTerminator bool) {
+	ok = current.Id == tokens.SemiColon || prev.Row < current.Row
+	withTerminator = current.Id == tokens.SemiColon
 	return
 }
 
-func nextStatementPos(tokens []lexer.Token, start int) (int, bool) {
+func nextStatementPos(toks Toks, start int) (int, bool) {
 	braceCount := 0
 	i := start
-	for ; i < len(tokens); i++ {
+	for ; i < len(toks); i++ {
 		var isStatement, withTerminator bool
-		tok := tokens[i]
-		if tok.Id == lexer.Brace {
+		tok := toks[i]
+		if tok.Id == tokens.Brace {
 			switch tok.Kind {
-			case "{", "[", "(":
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
+				if braceCount == 0 && i > start {
+					isStatement, withTerminator = IsStatement(tok, toks[i-1])
+					if isStatement {
+						goto ret
+					}
+				}
 				braceCount++
 				continue
 			default:
 				braceCount--
-				if braceCount == 0 {
-					if i+1 < len(tokens) {
-						isStatement, withTerminator = IsStatement(tokens[i+1], tok)
-						if isStatement {
-							i++
-							goto ret
-						}
+				if braceCount == 0 && i+1 < len(toks) {
+					isStatement, withTerminator = IsStatement(toks[i+1], tok)
+					if isStatement {
+						i++
+						goto ret
 					}
 				}
 				continue
@@ -725,7 +1183,7 @@ func nextStatementPos(tokens []lexer.Token, start int) (int, bool) {
 			continue
 		}
 		if i > start {
-			isStatement, withTerminator = IsStatement(tok, tokens[i-1])
+			isStatement, withTerminator = IsStatement(tok, toks[i-1])
 		} else {
 			isStatement, withTerminator = IsStatement(tok, tok)
 		}
@@ -742,116 +1200,153 @@ func nextStatementPos(tokens []lexer.Token, start int) (int, bool) {
 }
 
 type blockStatement struct {
+	pos            int
 	block          *Block
-	blockTokens    *[]lexer.Token
-	tokens         []lexer.Token
-	nextTokens     []lexer.Token
+	srcToks        *Toks
+	blockToks      *Toks
+	toks           Toks
+	nextToks       Toks
 	withTerminator bool
 }
 
-func (b *Builder) Block(tokens []lexer.Token) (block Block) {
+func (b *Builder) Block(toks Toks) (block Block) {
+	bs := new(blockStatement)
+	bs.block = &block
+	bs.srcToks = &toks
 	for {
-		if b.Pos == -1 {
-			return
-		}
-		i, withTerminator := nextStatementPos(tokens, 0)
-		statementToks := tokens[:i]
-		bs := new(blockStatement)
-		bs.block = &block
-		bs.blockTokens = &tokens
-		bs.tokens = statementToks
-		bs.withTerminator = withTerminator
+		bs.pos, bs.withTerminator = nextStatementPos(toks, 0)
+		statementToks := toks[:bs.pos]
+		bs.blockToks = &toks
+		bs.toks = statementToks
 		b.pushStatementToBlock(bs)
 	next:
-		if len(bs.nextTokens) > 0 {
-			bs.tokens = bs.nextTokens
-			bs.nextTokens = nil
+		if len(bs.nextToks) > 0 {
+			bs.toks = bs.nextToks
+			bs.nextToks = nil
 			b.pushStatementToBlock(bs)
 			goto next
 		}
-		if i >= len(tokens) {
+		if bs.pos >= len(toks) {
 			break
 		}
-		tokens = tokens[i:]
+		toks = toks[bs.pos:]
 	}
 	return
 }
 
 func (b *Builder) Statement(bs *blockStatement) (s Statement) {
-	s, ok := b.AssignStatement(bs.tokens, false)
+	s, ok := b.AssignStatement(bs.toks, false)
 	if ok {
 		return s
 	}
-	tok := bs.tokens[0]
+	tok := bs.toks[0]
 	switch tok.Id {
-	case lexer.Id:
-		s, ok := b.IdStatement(bs.tokens)
+	case tokens.Id:
+		s, ok := b.IdStatement(bs.toks)
 		if ok {
 			return s
 		}
-	case lexer.Const, lexer.Volatile:
-		return b.VarStatement(bs.tokens)
-	case lexer.Ret:
-		return b.RetStatement(bs.tokens)
-	case lexer.Free:
-		return b.FreeStatement(bs.tokens)
-	case lexer.Iter:
-		return b.IterExpr(bs.tokens)
-	case lexer.Break:
-		return b.BreakStatement(bs.tokens)
-	case lexer.Continue:
-		return b.ContinueStatement(bs.tokens)
-	case lexer.If:
+	case tokens.Const, tokens.Volatile:
+		return b.VarStatement(bs.toks)
+	case tokens.Ret:
+		return b.RetStatement(bs.toks)
+	case tokens.Free:
+		return b.FreeStatement(bs.toks)
+	case tokens.Iter:
+		return b.IterExpr(bs.toks)
+	case tokens.Break:
+		return b.BreakStatement(bs.toks)
+	case tokens.Continue:
+		return b.ContinueStatement(bs.toks)
+	case tokens.If:
 		return b.IfExpr(bs)
-	case lexer.Else:
+	case tokens.Else:
 		return b.ElseBlock(bs)
-	case lexer.Type:
-		t := b.Type(bs.tokens)
-		s.Token = t.Token
+	case tokens.Comment:
+		return b.CommentStatement(bs.toks[0])
+	case tokens.Defer:
+		return b.DeferStatement(bs.toks)
+	case tokens.Co:
+		return b.ConcurrentCallStatement(bs.toks)
+	case tokens.Goto:
+		return b.GotoStatement(bs.toks)
+	case tokens.Try:
+		return b.TryBlock(bs)
+	case tokens.Catch:
+		return b.CatchBlock(bs)
+	case tokens.Type:
+		t := b.Type(bs.toks)
+		s.Tok = t.Tok
 		s.Val = t
 		return
-	case lexer.Operator:
-		if tok.Kind == "<" {
-			return b.RetStatement(bs.tokens)
-		}
-	case lexer.Comment:
-		return b.CommentStatement(bs.tokens[0])
-	case lexer.Defer:
-		return b.DeferStatement(bs.tokens)
-	case lexer.Brace:
-		if tok.Kind == "{" {
-			return b.blockStatement(bs.tokens)
+	case tokens.Operator:
+	case tokens.Brace:
+		if tok.Kind == tokens.LBRACE {
+			return b.blockStatement(bs.toks)
 		}
 	}
-	return b.ExprStatement(bs.tokens)
+	if IsFuncCall(bs.toks) != nil {
+		return b.ExprStatement(bs.toks)
+	}
+	tok = Tok{
+		File: tok.File,
+		Id:   tokens.Ret,
+		Kind: tokens.RET,
+	}
+	bs.toks = append([]Tok{tok}, bs.toks...)
+	return b.RetStatement(bs.toks)
 }
 
-func (b *Builder) blockStatement(tokens []lexer.Token) Statement {
+func (b *Builder) blockStatement(toks Toks) Statement {
 	i := new(int)
-	token := tokens[0]
-	tokens = getrange(i, "{", "}", tokens)
-	if *i < len(tokens) {
-		b.pusherr(tokens[*i], "invalid_syntax")
+	tok := toks[0]
+	toks = getrange(i, tokens.LBRACE, tokens.RBRACE, toks)
+	if *i < len(toks) {
+		b.pusherr(toks[*i], "invalid_syntax")
 	}
-	block := b.Block(tokens)
-	return Statement{Token: token, Val: block}
+	block := b.Block(toks)
+	return Statement{Tok: tok, Val: block}
 }
 
 type assignInfo struct {
-	selectorTokens []lexer.Token
-	exprTokens     []lexer.Token
-	setter         lexer.Token
-	ok             bool
-	isExpr         bool
+	selectorToks Toks
+	exprToks     Toks
+	setter       Tok
+	ok           bool
+	isExpr       bool
 }
 
-func (b *Builder) assignInfo(tokens []lexer.Token) (info assignInfo) {
+func IsFuncCall(toks Toks) Toks {
+	if tok := toks[0]; tok.Id != tokens.Brace && tok.Id != tokens.Id {
+		return nil
+	} else if t := toks[len(toks)-1]; t.Id != tokens.Brace && t.Kind != tokens.RPARENTHESES {
+		return nil
+	}
+	braceCount := 0
+	for i := len(toks) - 1; i >= 1; i-- {
+		tok := toks[i]
+		if tok.Id == tokens.Brace {
+			switch tok.Kind {
+			case tokens.RPARENTHESES:
+				braceCount++
+			case tokens.LPARENTHESES:
+				braceCount--
+			}
+			if braceCount == 0 {
+				return toks[:i]
+			}
+		}
+	}
+	return nil
+}
+
+func (b *Builder) assignInfo(toks Toks) (info assignInfo) {
 	info.ok = true
 	braceCount := 0
-	for i, tok := range tokens {
-		if tok.Id == lexer.Brace {
+	for i, tok := range toks {
+		if tok.Id == tokens.Brace {
 			switch tok.Kind {
-			case "(", "[", "{":
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
 				braceCount++
 			default:
 				braceCount--
@@ -860,19 +1355,18 @@ func (b *Builder) assignInfo(tokens []lexer.Token) (info assignInfo) {
 		if braceCount > 0 {
 			continue
 		}
-		if tok.Id == lexer.Operator &&
+		if tok.Id == tokens.Operator &&
 			tok.Kind[len(tok.Kind)-1] == '=' {
-			info.selectorTokens = tokens[:i]
-			if info.selectorTokens == nil {
+			info.selectorToks = toks[:i]
+			if info.selectorToks == nil {
 				b.pusherr(tok, "invalid_syntax")
 				info.ok = false
 			}
 			info.setter = tok
-			if i+1 >= len(tokens) {
-				// b.pusherr(tok, "missing_expr")
+			if i+1 >= len(toks) {
 				info.ok = false
 			} else {
-				info.exprTokens = tokens[i+1:]
+				info.exprToks = toks[i+1:]
 			}
 			return
 		}
@@ -886,30 +1380,30 @@ func (b *Builder) pushAssignSelector(
 	info assignInfo,
 ) {
 	var selector AssignSelector
-	selector.Expr.Tokens = info.selectorTokens[last:current]
+	selector.Expr.Toks = info.selectorToks[last:current]
 	if last-current == 0 {
-		b.pusherr(info.selectorTokens[current-1], "missing_expr")
+		b.pusherr(info.selectorToks[current-1], "missing_expr")
 		return
 	}
-	if selector.Expr.Tokens[0].Id == lexer.Id &&
+	if selector.Expr.Toks[0].Id == tokens.Id &&
 		current-last > 1 &&
-		selector.Expr.Tokens[1].Id == lexer.Colon {
+		selector.Expr.Toks[1].Id == tokens.Colon {
 		if info.isExpr {
-			b.pusherr(selector.Expr.Tokens[0], "notallow_declares")
+			b.pusherr(selector.Expr.Toks[0], "notallow_declares")
 		}
 		selector.Var.New = true
-		selector.Var.IdToken = selector.Expr.Tokens[0]
-		selector.Var.Id = selector.Var.IdToken.Kind
-		selector.Var.SetterToken = info.setter
+		selector.Var.IdTok = selector.Expr.Toks[0]
+		selector.Var.Id = selector.Var.IdTok.Kind
+		selector.Var.SetterTok = info.setter
 		if current-last > 2 {
-			selector.Var.Type, _ = b.DataType(selector.Expr.Tokens[2:], new(int), false)
+			selector.Var.Type, _ = b.DataType(selector.Expr.Toks[2:], new(int), false)
 		}
 	} else {
-		if selector.Expr.Tokens[0].Id == lexer.Id {
-			selector.Var.IdToken = selector.Expr.Tokens[0]
-			selector.Var.Id = selector.Var.IdToken.Kind
+		if selector.Expr.Toks[0].Id == tokens.Id {
+			selector.Var.IdTok = selector.Expr.Toks[0]
+			selector.Var.Id = selector.Var.IdTok.Kind
 		}
-		selector.Expr = b.Expr(selector.Expr.Tokens)
+		selector.Expr = b.Expr(selector.Expr.Toks)
 	}
 	*selectors = append(*selectors, selector)
 }
@@ -918,10 +1412,10 @@ func (b *Builder) assignSelectors(info assignInfo) []AssignSelector {
 	var selectors []AssignSelector
 	braceCount := 0
 	lastIndex := 0
-	for i, tok := range info.selectorTokens {
-		if tok.Id == lexer.Brace {
+	for i, tok := range info.selectorToks {
+		if tok.Id == tokens.Brace {
 			switch tok.Kind {
-			case "(", "[", "{":
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
 				braceCount++
 			default:
 				braceCount--
@@ -929,22 +1423,22 @@ func (b *Builder) assignSelectors(info assignInfo) []AssignSelector {
 		}
 		if braceCount > 0 {
 			continue
-		} else if tok.Id != lexer.Comma {
+		} else if tok.Id != tokens.Comma {
 			continue
 		}
 		b.pushAssignSelector(&selectors, lastIndex, i, info)
 		lastIndex = i + 1
 	}
-	if lastIndex < len(info.selectorTokens) {
-		b.pushAssignSelector(&selectors, lastIndex, len(info.selectorTokens), info)
+	if lastIndex < len(info.selectorToks) {
+		b.pushAssignSelector(&selectors, lastIndex, len(info.selectorToks), info)
 	}
 	return selectors
 }
 
 func (b *Builder) pushAssignExpr(exps *[]Expr, last, current int, info assignInfo) {
-	toks := info.exprTokens[last:current]
+	toks := info.exprToks[last:current]
 	if toks == nil {
-		b.pusherr(info.exprTokens[current-1], "missing_expr")
+		b.pusherr(info.exprToks[current-1], "missing_expr")
 		return
 	}
 	*exps = append(*exps, b.Expr(toks))
@@ -954,10 +1448,10 @@ func (b *Builder) assignExprs(info assignInfo) []Expr {
 	var exprs []Expr
 	braceCount := 0
 	lastIndex := 0
-	for i, tok := range info.exprTokens {
-		if tok.Id == lexer.Brace {
+	for i, tok := range info.exprToks {
+		if tok.Id == tokens.Brace {
 			switch tok.Kind {
-			case "(", "[", "{":
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
 				braceCount++
 			default:
 				braceCount--
@@ -965,47 +1459,47 @@ func (b *Builder) assignExprs(info assignInfo) []Expr {
 		}
 		if braceCount > 0 {
 			continue
-		} else if tok.Id != lexer.Comma {
+		} else if tok.Id != tokens.Comma {
 			continue
 		}
 		b.pushAssignExpr(&exprs, lastIndex, i, info)
 		lastIndex = i + 1
 	}
-	if lastIndex < len(info.exprTokens) {
-		b.pushAssignExpr(&exprs, lastIndex, len(info.exprTokens), info)
+	if lastIndex < len(info.exprToks) {
+		b.pushAssignExpr(&exprs, lastIndex, len(info.exprToks), info)
 	}
 	return exprs
 }
 
 func isAssignTok(id uint8) bool {
-	return id == lexer.Id ||
-		id == lexer.Brace ||
-		id == lexer.Operator
+	return id == tokens.Id ||
+		id == tokens.Brace ||
+		id == tokens.Operator
 }
 
 func isAssignOperator(kind string) bool {
-	return kind == "=" ||
-		kind == "+=" ||
-		kind == "-=" ||
-		kind == "/=" ||
-		kind == "*=" ||
-		kind == "%=" ||
-		kind == ">>=" ||
-		kind == "<<=" ||
-		kind == "|=" ||
-		kind == "&=" ||
-		kind == "^="
+	return kind == tokens.EQUAL ||
+		kind == tokens.PLUS_EQUAL ||
+		kind == tokens.MINUS_EQUAL ||
+		kind == tokens.SLASH_EQUAL ||
+		kind == tokens.STAR_EQUAL ||
+		kind == tokens.PERCENT_EQUAL ||
+		kind == tokens.RSHIFT_EQUAL ||
+		kind == tokens.LSHIFT_EQUAL ||
+		kind == tokens.VLINE_EQUAL ||
+		kind == tokens.AMPER_EQUAL ||
+		kind == tokens.CARET_EQUAL
 }
 
-func checkAssignToks(tokens []lexer.Token) bool {
-	if !isAssignTok(tokens[0].Id) {
+func checkAssignToks(toks Toks) bool {
+	if len(toks) == 0 || !isAssignTok(toks[0].Id) {
 		return false
 	}
 	braceCount := 0
-	for _, tok := range tokens {
-		if tok.Id == lexer.Brace {
+	for _, tok := range toks {
+		if tok.Id == tokens.Brace {
 			switch tok.Kind {
-			case "{", "[", "(":
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
 				braceCount++
 			default:
 				braceCount--
@@ -1016,7 +1510,7 @@ func checkAssignToks(tokens []lexer.Token) bool {
 		} else if braceCount > 0 {
 			continue
 		}
-		if tok.Id == lexer.Operator &&
+		if tok.Id == tokens.Operator &&
 			isAssignOperator(tok.Kind) {
 			return true
 		}
@@ -1024,21 +1518,21 @@ func checkAssignToks(tokens []lexer.Token) bool {
 	return false
 }
 
-func (b *Builder) AssignStatement(tokens []lexer.Token, isExpr bool) (s Statement, _ bool) {
-	assign, ok := b.AssignExpr(tokens, isExpr)
+func (b *Builder) AssignStatement(toks Toks, isExpr bool) (s Statement, _ bool) {
+	assign, ok := b.AssignExpr(toks, isExpr)
 	if !ok {
 		return
 	}
-	s.Token = tokens[0]
+	s.Tok = toks[0]
 	s.Val = assign
 	return s, true
 }
 
-func (b *Builder) AssignExpr(tokens []lexer.Token, isExpr bool) (assign Assign, ok bool) {
-	if !checkAssignToks(tokens) {
+func (b *Builder) AssignExpr(toks Toks, isExpr bool) (assign Assign, ok bool) {
+	if !checkAssignToks(toks) {
 		return
 	}
-	info := b.assignInfo(tokens)
+	info := b.assignInfo(toks)
 	if !info.ok {
 		return
 	}
@@ -1054,195 +1548,273 @@ func (b *Builder) AssignExpr(tokens []lexer.Token, isExpr bool) (assign Assign, 
 	return
 }
 
-func (b *Builder) IdStatement(tokens []lexer.Token) (s Statement, _ bool) {
-	tok := tokens[1]
+func (b *Builder) IdStatement(toks Toks) (s Statement, _ bool) {
+	if len(toks) == 1 {
+		return
+	}
+	tok := toks[1]
 	switch tok.Id {
-	case lexer.Colon:
-		return b.VarStatement(tokens), true
+	case tokens.Colon:
+		if len(toks) == 2 {
+			return b.LabelStatement(toks[0]), true
+		}
+		return b.VarStatement(toks), true
 	}
 	return
 }
 
-func (b *Builder) ExprStatement(tokens []lexer.Token) Statement {
-	block := ExprStatement{b.Expr(tokens)}
-	return Statement{tokens[0], block, false}
+func (b *Builder) LabelStatement(tok Tok) Statement {
+	var l Label
+	l.Tok = tok
+	l.Label = tok.Kind
+	return Statement{Tok: tok, Val: l}
 }
 
-func (b *Builder) Args(tokens []lexer.Token) []Arg {
-	var args []Arg
+func (b *Builder) ExprStatement(toks Toks) Statement {
+	block := ExprStatement{b.Expr(toks)}
+	return Statement{toks[0], block, false}
+}
+
+func (b *Builder) Args(toks Toks) *Args {
+	args := new(Args)
 	last := 0
 	braceCount := 0
-	for i, tok := range tokens {
-		if tok.Id == lexer.Brace {
+	for i, tok := range toks {
+		if tok.Id == tokens.Brace {
 			switch tok.Kind {
-			case "{", "[", "(":
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
 				braceCount++
 			default:
 				braceCount--
 			}
 		}
-		if braceCount > 0 || tok.Id != lexer.Comma {
+		if braceCount > 0 || tok.Id != tokens.Comma {
 			continue
 		}
-		b.pushArg(&args, tokens[last:i], tok)
+		b.pushArg(args, toks[last:i], tok)
 		last = i + 1
 	}
-	if last < len(tokens) {
+	if last < len(toks) {
 		if last == 0 {
-			b.pushArg(&args, tokens[last:], tokens[last])
+			b.pushArg(args, toks[last:], toks[last])
 		} else {
-			b.pushArg(&args, tokens[last:], tokens[last-1])
+			b.pushArg(args, toks[last:], toks[last-1])
 		}
 	}
 	return args
 }
 
-func (b *Builder) pushArg(args *[]Arg, tokens []lexer.Token, err lexer.Token) {
-	if len(tokens) == 0 {
+func (b *Builder) pushArg(args *Args, toks Toks, err Tok) {
+	if len(toks) == 0 {
 		b.pusherr(err, "invalid_syntax")
 		return
 	}
 	var arg Arg
-	arg.Token = tokens[0]
-	arg.Expr = b.Expr(tokens)
-	*args = append(*args, arg)
+	arg.Tok = toks[0]
+	if arg.Tok.Id == tokens.Id {
+		if len(toks) > 1 {
+			tok := toks[1]
+			if tok.Id == tokens.Operator && tok.Kind == tokens.EQUAL {
+				args.Targeted = true
+				arg.TargetId = arg.Tok.Kind
+				toks = toks[2:]
+			}
+		}
+	}
+	arg.Expr = b.Expr(toks)
+	args.Src = append(args.Src, arg)
 }
 
-func (b *Builder) VarStatement(tokens []lexer.Token) (s Statement) {
-	var vast Var
-	vast.Pub = b.pub
-	b.pub = false
-	i := 0
-	vast.DefToken = tokens[i]
-	for ; i < len(tokens); i++ {
-		tok := tokens[i]
-		if tok.Id == lexer.Id {
+func (b *Builder) varBegin(v *Var, i *int, toks Toks) {
+	for ; *i < len(toks); *i++ {
+		tok := toks[*i]
+		if tok.Id == tokens.Id {
 			break
 		}
 		switch tok.Id {
-		case lexer.Const:
-			if vast.Const {
-				b.pusherr(tok, "invalid_constant")
+		case tokens.Const:
+			if v.Const {
+				b.pusherr(tok, "already_constant")
 				break
 			}
-			vast.Const = true
-		case lexer.Volatile:
-			if vast.Volatile {
-				b.pusherr(tok, "invalid_volatile")
+			v.Const = true
+		case tokens.Volatile:
+			if v.Volatile {
+				b.pusherr(tok, "already_volatile")
 				break
 			}
-			vast.Volatile = true
+			v.Volatile = true
 		default:
 			b.pusherr(tok, "invalid_syntax")
 		}
 	}
-	if i >= len(tokens) {
+}
+
+func (b *Builder) varTypeNExpr(v *Var, toks Toks, i int) {
+	tok := toks[i]
+	t, ok := b.DataType(toks, &i, false)
+	if ok {
+		v.Type = t
+		i++
+		if i >= len(toks) {
+			return
+		}
+		tok = toks[i]
+	}
+	if tok.Id == tokens.Operator {
+		if tok.Kind != tokens.EQUAL {
+			b.pusherr(tok, "invalid_syntax")
+			return
+		}
+		valueToks := toks[i+1:]
+		if len(valueToks) == 0 {
+			b.pusherr(tok, "missing_expr")
+			return
+		}
+		v.Val = b.Expr(valueToks)
+		v.SetterTok = tok
+	} else {
+		b.pusherr(tok, "invalid_syntax")
+	}
+}
+
+func (b *Builder) Var(toks Toks) (v Var) {
+	v.Pub = b.pub
+	b.pub = false
+	i := 0
+	v.DefTok = toks[i]
+	b.varBegin(&v, &i, toks)
+	if i >= len(toks) {
 		return
 	}
-	vast.IdToken = tokens[i]
-	if vast.IdToken.Id != lexer.Id {
-		b.pusherr(vast.IdToken, "invalid_syntax")
+	v.IdTok = toks[i]
+	if v.IdTok.Id != tokens.Id {
+		b.pusherr(v.IdTok, "invalid_syntax")
 	}
-	vast.Id = vast.IdToken.Kind
-	vast.Type = DataType{Id: jn.Void}
-
+	v.Id = v.IdTok.Kind
+	v.Type.Id = jntype.Void
+	v.Type.Val = jntype.VoidTypeStr
 	i++
-	if vast.DefToken.File != nil {
-		if tokens[i].Id != lexer.Colon {
-			b.pusherr(tokens[i], "invalid_syntax")
+	if i >= len(toks) {
+		b.pusherr(toks[i-1], "invalid_syntax")
+		return
+	}
+	if v.DefTok.File != nil {
+		if toks[i].Id != tokens.Colon {
+			b.pusherr(toks[i], "invalid_syntax")
 			return
 		}
 		i++
-	} else {
-		i++
 	}
-	if i < len(tokens) {
-		tok := tokens[i]
-		t, ok := b.DataType(tokens, &i, false)
-		if ok {
-			vast.Type = t
-			i++
-			if i >= len(tokens) {
-				goto ret
-			}
-			tok = tokens[i]
-		}
-		if tok.Id == lexer.Operator {
-			if tok.Kind != "=" {
-				b.pusherr(tok, "invalid_syntax")
-				return
-			}
-			valueToks := tokens[i+1:]
-			if len(valueToks) == 0 {
-				b.pusherr(tok, "missing_expr")
-				return
-			}
-			vast.Val = b.Expr(valueToks)
-			vast.SetterToken = tok
-		}
-	}
-ret:
-	return Statement{vast.IdToken, vast, false}
-}
-
-func (b *Builder) CommentStatement(token lexer.Token) (s Statement) {
-	s.Token = token
-	token.Kind = strings.TrimSpace(token.Kind[2:])
-	if strings.HasPrefix(token.Kind, "cxx:") {
-		s.Val = CxxEmbed{token.Kind[4:]}
-	} else {
-		s.Val = Comment{token.Kind}
+	if i < len(toks) {
+		b.varTypeNExpr(&v, toks, i)
 	}
 	return
 }
 
-func (b *Builder) DeferStatement(tokens []lexer.Token) (s Statement) {
+func (b *Builder) VarStatement(toks Toks) Statement {
+	vast := b.Var(toks)
+	return Statement{vast.IdTok, vast, false}
+}
+
+func (b *Builder) CommentStatement(tok Tok) (s Statement) {
+	s.Tok = tok
+	tok.Kind = strings.TrimSpace(tok.Kind[2:])
+	if strings.HasPrefix(tok.Kind, "cxx:") {
+		s.Val = CxxEmbed{tok, tok.Kind[4:]}
+	} else {
+		s.Val = Comment{tok.Kind}
+	}
+	return
+}
+
+func (b *Builder) DeferStatement(toks Toks) (s Statement) {
 	var d Defer
-	d.Token = tokens[0]
-	tokens = tokens[1:]
-	if len(tokens) == 0 {
-		b.pusherr(d.Token, "missing_expr")
+	d.Tok = toks[0]
+	toks = toks[1:]
+	if len(toks) == 0 {
+		b.pusherr(d.Tok, "missing_expr")
 		return
 	}
-	d.Expr = b.Expr(tokens)
-	s.Token = d.Token
+	if IsFuncCall(toks) == nil {
+		b.pusherr(d.Tok, "expr_not_func_call")
+	}
+	d.Expr = b.Expr(toks)
+	s.Tok = d.Tok
 	s.Val = d
 	return
 }
 
-func (b *Builder) RetStatement(tokens []lexer.Token) Statement {
-	var returnModel Ret
-	returnModel.Token = tokens[0]
-	if len(tokens) > 1 {
-		returnModel.Expr = b.Expr(tokens[1:])
+func (b *Builder) ConcurrentCallStatement(toks Toks) (s Statement) {
+	var cc ConcurrentCall
+	cc.Tok = toks[0]
+	toks = toks[1:]
+	if len(toks) == 0 {
+		b.pusherr(cc.Tok, "missing_expr")
+		return
 	}
-	return Statement{returnModel.Token, returnModel, false}
+	if IsFuncCall(toks) == nil {
+		b.pusherr(cc.Tok, "expr_not_func_call")
+	}
+	cc.Expr = b.Expr(toks)
+	s.Tok = cc.Tok
+	s.Val = cc
+	return
 }
 
-func (b *Builder) FreeStatement(tokens []lexer.Token) Statement {
+func (b *Builder) GotoStatement(toks Toks) (s Statement) {
+	s.Tok = toks[0]
+	if len(toks) == 1 {
+		b.pusherr(s.Tok, "missing_goto_label")
+		return
+	} else if len(toks) > 2 {
+		b.pusherr(toks[2], "invalid_syntax")
+	}
+	idTok := toks[1]
+	if idTok.Id != tokens.Id {
+		b.pusherr(idTok, "invalid_syntax")
+		return
+	}
+	var gt Goto
+	gt.Tok = s.Tok
+	gt.Label = idTok.Kind
+	s.Val = gt
+	return
+}
+
+func (b *Builder) RetStatement(toks Toks) Statement {
+	var ret Ret
+	ret.Tok = toks[0]
+	if len(toks) > 1 {
+		ret.Expr = b.Expr(toks[1:])
+	}
+	return Statement{ret.Tok, ret, false}
+}
+
+func (b *Builder) FreeStatement(toks Toks) Statement {
 	var free Free
-	free.Token = tokens[0]
-	tokens = tokens[1:]
-	if len(tokens) == 0 {
-		b.pusherr(free.Token, "missing_expr")
+	free.Tok = toks[0]
+	toks = toks[1:]
+	if len(toks) == 0 {
+		b.pusherr(free.Tok, "missing_expr")
 	} else {
-		free.Expr = b.Expr(tokens)
+		free.Expr = b.Expr(toks)
 	}
-	return Statement{free.Token, free, false}
+	return Statement{free.Tok, free, false}
 }
 
-func blockExprToks(tokens []lexer.Token) (expr []lexer.Token) {
+func blockExprToks(toks Toks) (expr Toks) {
 	braceCount := 0
-	for i, tok := range tokens {
-		if tok.Id == lexer.Brace {
+	for i, tok := range toks {
+		if tok.Id == tokens.Brace {
 			switch tok.Kind {
-			case "{":
+			case tokens.LBRACE:
 				if braceCount > 0 {
 					braceCount++
 					break
 				}
-				return tokens[:i]
-			case "(", "[":
+				return toks[:i]
+			case tokens.LBRACKET, tokens.LPARENTHESES:
 				braceCount++
 			default:
 				braceCount--
@@ -1252,103 +1824,68 @@ func blockExprToks(tokens []lexer.Token) (expr []lexer.Token) {
 	return nil
 }
 
-func (b *Builder) getWhileIterProfile(tokens []lexer.Token) WhileProfile {
-	return WhileProfile{b.Expr(tokens)}
+func (b *Builder) getWhileIterProfile(toks Toks) WhileProfile {
+	return WhileProfile{b.Expr(toks)}
 }
 
-func (b *Builder) pushVarsToksPart(
-	vars *[][]lexer.Token,
-	tokens []lexer.Token,
-	errTok lexer.Token,
-) {
-	if len(tokens) == 0 {
-		b.pusherr(errTok, "missing_expr")
-	}
-	*vars = append(*vars, tokens)
-}
-
-func (b *Builder) getForeachVarsToks(tokens []lexer.Token) [][]lexer.Token {
-	var vars [][]lexer.Token
-	braceCount := 0
-	last := 0
-	for i, tok := range tokens {
-		if tok.Id == lexer.Brace {
-			switch tok.Kind {
-			case "(", "[", "{":
-				braceCount++
-			default:
-				braceCount--
-			}
-		}
-		if braceCount > 0 {
-			continue
-		}
-		if tok.Id == lexer.Comma {
-			part := tokens[last:i]
-			b.pushVarsToksPart(&vars, part, tok)
-			last = i + 1
-		}
-	}
-	if last < len(tokens) {
-		part := tokens[last:]
-		b.pushVarsToksPart(&vars, part, tokens[last])
-	}
+func (b *Builder) getForeachVarsToks(toks Toks) []Toks {
+	vars, errs := Parts(toks, tokens.Comma)
+	b.Errs = append(b.Errs, errs...)
 	return vars
 }
 
-func (b *Builder) getForeachIterVars(varsTokens [][]lexer.Token) []Var {
+func (b *Builder) getVarProfile(toks Toks) (vast Var) {
+	if len(toks) == 0 {
+		return
+	}
+	vast.IdTok = toks[0]
+	if vast.IdTok.Id != tokens.Id {
+		b.pusherr(vast.IdTok, "invalid_syntax")
+		return
+	}
+	vast.Id = vast.IdTok.Kind
+	if len(toks) == 1 {
+		return
+	}
+	if colon := toks[1]; colon.Id != tokens.Colon {
+		b.pusherr(colon, "invalid_syntax")
+		return
+	}
+	vast.New = true
+	i := new(int)
+	*i = 2
+	if *i >= len(toks) {
+		return
+	}
+	vast.Type, _ = b.DataType(toks, i, true)
+	if *i < len(toks)-1 {
+		b.pusherr(toks[*i], "invalid_syntax")
+	}
+	return
+}
+
+func (b *Builder) getForeachIterVars(varsToks []Toks) []Var {
 	var vars []Var
-	for _, toks := range varsTokens {
-		var vast Var
-		vast.IdToken = toks[0]
-		if vast.IdToken.Id != lexer.Id {
-			b.pusherr(vast.IdToken, "invalid_syntax")
-			vars = append(vars, vast)
-			continue
-		}
-		vast.Id = vast.IdToken.Kind
-		if len(toks) == 1 {
-			vars = append(vars, vast)
-			continue
-		}
-		if colon := toks[1]; colon.Id != lexer.Colon {
-			b.pusherr(colon, "invalid_syntax")
-			vars = append(vars, vast)
-			continue
-		}
-		vast.New = true
-		i := new(int)
-		*i = 2
-		if *i >= len(toks) {
-			vars = append(vars, vast)
-			continue
-		}
-		vast.Type, _ = b.DataType(toks, i, true)
-		if *i < len(toks)-1 {
-			b.pusherr(toks[*i], "invalid_syntax")
-		}
-		vars = append(vars, vast)
+	for _, toks := range varsToks {
+		vars = append(vars, b.getVarProfile(toks))
 	}
 	return vars
 }
 
-func (b *Builder) getForeachIterProfile(
-	varTokens, exprTokens []lexer.Token,
-	inToken lexer.Token,
-) ForeachProfile {
+func (b *Builder) getForeachIterProfile(varToks, exprToks Toks, inTok Tok) ForeachProfile {
 	var profile ForeachProfile
-	profile.InToken = inToken
-	profile.Expr = b.Expr(exprTokens)
-	if len(varTokens) == 0 {
+	profile.InTok = inTok
+	profile.Expr = b.Expr(exprToks)
+	if len(varToks) == 0 {
 		profile.KeyA.Id = jnapi.Ignore
 		profile.KeyB.Id = jnapi.Ignore
 	} else {
-		varsToks := b.getForeachVarsToks(varTokens)
+		varsToks := b.getForeachVarsToks(varToks)
 		if len(varsToks) == 0 {
 			return profile
 		}
 		if len(varsToks) > 2 {
-			b.pusherr(inToken, "much_foreach_vars")
+			b.pusherr(inTok, "much_foreach_vars")
 		}
 		vars := b.getForeachIterVars(varsToks)
 		profile.KeyA = vars[0]
@@ -1361,12 +1898,12 @@ func (b *Builder) getForeachIterProfile(
 	return profile
 }
 
-func (b *Builder) getIterProfile(tokens []lexer.Token) IterProfile {
+func (b *Builder) getIterProfile(toks Toks) IterProfile {
 	braceCount := 0
-	for i, tok := range tokens {
-		if tok.Id == lexer.Brace {
+	for i, tok := range toks {
+		if tok.Id == tokens.Brace {
 			switch tok.Kind {
-			case "(", "[", "{":
+			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
 				braceCount++
 			default:
 				braceCount--
@@ -1375,284 +1912,383 @@ func (b *Builder) getIterProfile(tokens []lexer.Token) IterProfile {
 		if braceCount != 0 {
 			continue
 		}
-		if tok.Id == lexer.In {
-			varToks := tokens[:i]
-			exprToks := tokens[i+1:]
+		if tok.Id == tokens.In {
+			varToks := toks[:i]
+			exprToks := toks[i+1:]
 			return b.getForeachIterProfile(varToks, exprToks, tok)
 		}
 	}
-	return b.getWhileIterProfile(tokens)
+	return b.getWhileIterProfile(toks)
 }
 
-func (b *Builder) IterExpr(tokens []lexer.Token) (s Statement) {
+func (b *Builder) IterExpr(toks Toks) (s Statement) {
 	var iter Iter
-	iter.Token = tokens[0]
-	tokens = tokens[1:]
-	if len(tokens) == 0 {
-		b.pusherr(iter.Token, "body_not_exist")
+	iter.Tok = toks[0]
+	toks = toks[1:]
+	if len(toks) == 0 {
+		b.pusherr(iter.Tok, "body_not_exist")
 		return
 	}
-	exprToks := blockExprToks(tokens)
+	exprToks := blockExprToks(toks)
 	if len(exprToks) > 0 {
 		iter.Profile = b.getIterProfile(exprToks)
 	}
 	i := new(int)
 	*i = len(exprToks)
-	blockToks := b.getrange(i, "{", "}", &tokens)
+	blockToks := b.getrange(i, tokens.LBRACE, tokens.RBRACE, &toks)
 	if blockToks == nil {
-		b.pusherr(iter.Token, "body_not_exist")
+		b.pusherr(iter.Tok, "body_not_exist")
 		return
 	}
-	if *i < len(tokens) {
-		b.pusherr(tokens[*i], "invalid_syntax")
+	if *i < len(toks) {
+		b.pusherr(toks[*i], "invalid_syntax")
 	}
 	iter.Block = b.Block(blockToks)
-	return Statement{iter.Token, iter, false}
+	return Statement{iter.Tok, iter, false}
+}
+
+func (b *Builder) TryBlock(bs *blockStatement) (s Statement) {
+	var try Try
+	try.Tok = bs.toks[0]
+	bs.toks = bs.toks[1:]
+	i := new(int)
+	blockToks := b.getrange(i, tokens.LBRACE, tokens.RBRACE, &bs.toks)
+	if blockToks == nil {
+		b.pusherr(try.Tok, "body_not_exist")
+		return
+	}
+	if *i < len(bs.toks) {
+		if bs.toks[*i].Id == tokens.Catch {
+			bs.nextToks = bs.toks[*i:]
+		} else {
+			b.pusherr(bs.toks[*i], "invalid_syntax")
+		}
+	}
+	try.Block = b.Block(blockToks)
+	return Statement{try.Tok, try, false}
+}
+
+func (b *Builder) CatchBlock(bs *blockStatement) (s Statement) {
+	var catch Catch
+	catch.Tok = bs.toks[0]
+	bs.toks = bs.toks[1:]
+	varToks := blockExprToks(bs.toks)
+	i := new(int)
+	*i = len(varToks)
+	blockToks := b.getrange(i, tokens.LBRACE, tokens.RBRACE, &bs.toks)
+	if blockToks == nil {
+		b.pusherr(catch.Tok, "body_not_exist")
+		return
+	}
+	if *i < len(bs.toks) {
+		if bs.toks[*i].Id == tokens.Catch {
+			bs.nextToks = bs.toks[*i:]
+		} else {
+			b.pusherr(bs.toks[*i], "invalid_syntax")
+		}
+	}
+	if len(varToks) > 0 {
+		catch.Var = b.getVarProfile(varToks)
+	}
+	catch.Block = b.Block(blockToks)
+	return Statement{catch.Tok, catch, false}
 }
 
 func (b *Builder) IfExpr(bs *blockStatement) (s Statement) {
 	var ifast If
-	ifast.Token = bs.tokens[0]
-	bs.tokens = bs.tokens[1:]
-	exprToks := blockExprToks(bs.tokens)
-	if len(exprToks) == 0 {
-		b.pusherr(ifast.Token, "missing_expr")
-	}
+	ifast.Tok = bs.toks[0]
+	bs.toks = bs.toks[1:]
+	exprToks := blockExprToks(bs.toks)
 	i := new(int)
-	*i = len(exprToks)
-	blockToks := b.getrange(i, "{", "}", &bs.tokens)
+	if len(exprToks) == 0 {
+		if len(bs.toks) == 0 || bs.pos >= len(*bs.srcToks) {
+			b.pusherr(ifast.Tok, "missing_expr")
+			return
+		}
+		exprToks = bs.toks
+		*bs.srcToks = (*bs.srcToks)[bs.pos:]
+		bs.pos, bs.withTerminator = nextStatementPos(*bs.srcToks, 0)
+		bs.toks = (*bs.srcToks)[:bs.pos]
+	} else {
+		*i = len(exprToks)
+	}
+	blockToks := b.getrange(i, tokens.LBRACE, tokens.RBRACE, &bs.toks)
 	if blockToks == nil {
-		b.pusherr(ifast.Token, "body_not_exist")
+		b.pusherr(ifast.Tok, "body_not_exist")
 		return
 	}
-	if *i < len(bs.tokens) {
-		if bs.tokens[*i].Id == lexer.Else {
-			bs.nextTokens = bs.tokens[*i:]
+	if *i < len(bs.toks) {
+		if bs.toks[*i].Id == tokens.Else {
+			bs.nextToks = bs.toks[*i:]
 		} else {
-			b.pusherr(bs.tokens[*i], "invalid_syntax")
+			b.pusherr(bs.toks[*i], "invalid_syntax")
 		}
 	}
 	ifast.Expr = b.Expr(exprToks)
 	ifast.Block = b.Block(blockToks)
-	return Statement{ifast.Token, ifast, false}
+	return Statement{ifast.Tok, ifast, false}
 }
 
 func (b *Builder) ElseIfExpr(bs *blockStatement) (s Statement) {
 	var elif ElseIf
-	elif.Token = bs.tokens[1]
-	bs.tokens = bs.tokens[2:]
-	exprToks := blockExprToks(bs.tokens)
-	if len(exprToks) == 0 {
-		b.pusherr(elif.Token, "missing_expr")
-	}
+	elif.Tok = bs.toks[1]
+	bs.toks = bs.toks[2:]
+	exprToks := blockExprToks(bs.toks)
 	i := new(int)
-	*i = len(exprToks)
-	blockToks := b.getrange(i, "{", "}", &bs.tokens)
+	if len(exprToks) == 0 {
+		if len(bs.toks) == 0 || bs.pos >= len(*bs.srcToks) {
+			b.pusherr(elif.Tok, "missing_expr")
+			return
+		}
+		exprToks = bs.toks
+		*bs.srcToks = (*bs.srcToks)[bs.pos:]
+		bs.pos, bs.withTerminator = nextStatementPos(*bs.srcToks, 0)
+		bs.toks = (*bs.srcToks)[:bs.pos]
+	} else {
+		*i = len(exprToks)
+	}
+	blockToks := b.getrange(i, tokens.LBRACE, tokens.RBRACE, &bs.toks)
 	if blockToks == nil {
-		b.pusherr(elif.Token, "body_not_exist")
+		b.pusherr(elif.Tok, "body_not_exist")
 		return
 	}
-	if *i < len(bs.tokens) {
-		if bs.tokens[*i].Id == lexer.Else {
-			bs.nextTokens = bs.tokens[*i:]
+	if *i < len(bs.toks) {
+		if bs.toks[*i].Id == tokens.Else {
+			bs.nextToks = bs.toks[*i:]
 		} else {
-			b.pusherr(bs.tokens[*i], "invalid_syntax")
+			b.pusherr(bs.toks[*i], "invalid_syntax")
 		}
 	}
 	elif.Expr = b.Expr(exprToks)
 	elif.Block = b.Block(blockToks)
-	return Statement{elif.Token, elif, false}
+	return Statement{elif.Tok, elif, false}
 }
 
 func (b *Builder) ElseBlock(bs *blockStatement) (s Statement) {
-	if len(bs.tokens) > 1 && bs.tokens[1].Id == lexer.If {
+	if len(bs.toks) > 1 && bs.toks[1].Id == tokens.If {
 		return b.ElseIfExpr(bs)
 	}
 	var elseast Else
-	elseast.Token = bs.tokens[0]
-	bs.tokens = bs.tokens[1:]
+	elseast.Tok = bs.toks[0]
+	bs.toks = bs.toks[1:]
 	i := new(int)
-	blockToks := b.getrange(i, "{", "}", &bs.tokens)
+	blockToks := b.getrange(i, tokens.LBRACE, tokens.RBRACE, &bs.toks)
 	if blockToks == nil {
-		if *i < len(bs.tokens) {
-			b.pusherr(elseast.Token, "else_have_expr")
+		if *i < len(bs.toks) {
+			b.pusherr(elseast.Tok, "else_have_expr")
 		} else {
-			b.pusherr(elseast.Token, "body_not_exist")
+			b.pusherr(elseast.Tok, "body_not_exist")
 		}
 		return
 	}
-	if *i < len(bs.tokens) {
-		b.pusherr(bs.tokens[*i], "invalid_syntax")
+	if *i < len(bs.toks) {
+		b.pusherr(bs.toks[*i], "invalid_syntax")
 	}
 	elseast.Block = b.Block(blockToks)
-	return Statement{elseast.Token, elseast, false}
+	return Statement{elseast.Tok, elseast, false}
 }
 
-func (b *Builder) BreakStatement(tokens []lexer.Token) Statement {
+func (b *Builder) BreakStatement(toks Toks) Statement {
 	var breakAST Break
-	breakAST.Token = tokens[0]
-	if len(tokens) > 1 {
-		b.pusherr(tokens[1], "invalid_syntax")
+	breakAST.Tok = toks[0]
+	if len(toks) > 1 {
+		b.pusherr(toks[1], "invalid_syntax")
 	}
-	return Statement{breakAST.Token, breakAST, false}
+	return Statement{breakAST.Tok, breakAST, false}
 }
 
-func (b *Builder) ContinueStatement(tokens []lexer.Token) Statement {
+func (b *Builder) ContinueStatement(toks Toks) Statement {
 	var continueAST Continue
-	continueAST.Token = tokens[0]
-	if len(tokens) > 1 {
-		b.pusherr(tokens[1], "invalid_syntax")
+	continueAST.Tok = toks[0]
+	if len(toks) > 1 {
+		b.pusherr(toks[1], "invalid_syntax")
 	}
-	return Statement{continueAST.Token, continueAST, false}
+	return Statement{continueAST.Tok, continueAST, false}
 }
 
-func (b *Builder) Expr(tokens []lexer.Token) (e Expr) {
-	e.Processes = b.getExprProcesses(tokens)
-	e.Tokens = tokens
+func (b *Builder) Expr(toks Toks) (e Expr) {
+	e.Processes = b.getExprProcesses(toks)
+	e.Toks = toks
 	return
 }
 
 func isOverflowOperator(kind string) bool {
-	return kind == "+" ||
-		kind == "-" ||
-		kind == "*" ||
-		kind == "/" ||
-		kind == "%" ||
-		kind == "&" ||
-		kind == "|" ||
-		kind == "^" ||
-		kind == "<" ||
-		kind == ">" ||
-		kind == "~" ||
-		kind == "!"
+	return kind == tokens.PLUS ||
+		kind == tokens.MINUS ||
+		kind == tokens.STAR ||
+		kind == tokens.SLASH ||
+		kind == tokens.PERCENT ||
+		kind == tokens.AMPER ||
+		kind == tokens.VLINE ||
+		kind == tokens.CARET ||
+		kind == tokens.LESS ||
+		kind == tokens.GREAT ||
+		kind == tokens.TILDE ||
+		kind == tokens.EXCLAMATION
 }
 
 func isExprOperator(kind string) bool {
-	return kind == "..."
+	return kind == tokens.TRIPLE_DOT
 }
 
-func (b *Builder) getExprProcesses(tokens []lexer.Token) [][]lexer.Token {
-	var processes [][]lexer.Token
-	var part []lexer.Token
-	operator := false
-	value := false
-	braceCount := 0
-	pushedError := false
-	singleOperatored := false
-	newKeyword := false
-	for i := 0; i < len(tokens); i++ {
-		tok := tokens[i]
+type exprProcessInfo struct {
+	processes           []Toks
+	part                Toks
+	operator            bool
+	value               bool
+	singleOperatored    bool
+	newKeyword          bool
+	braceZeroedNewFalse bool
+	pushedError         bool
+	braceCount          int
+	toks                Toks
+	i                   int
+}
+
+func (b *Builder) exprOperatorPart(info *exprProcessInfo, tok Tok) {
+	if info.newKeyword ||
+		isExprOperator(tok.Kind) ||
+		isAssignOperator(tok.Kind) {
+		info.part = append(info.part, tok)
+		return
+	}
+	if !info.operator {
+		if IsSingleOperator(tok.Kind) && !info.singleOperatored {
+			info.part = append(info.part, tok)
+			info.singleOperatored = true
+			return
+		}
+		if info.braceCount == 0 && isOverflowOperator(tok.Kind) {
+			b.pusherr(tok, "operator_overflow")
+		}
+	}
+	info.singleOperatored = false
+	info.operator = false
+	info.value = true
+	if info.braceCount > 0 {
+		info.part = append(info.part, tok)
+		return
+	}
+	info.processes = append(info.processes, info.part)
+	info.processes = append(info.processes, Toks{tok})
+	info.part = Toks{}
+}
+
+func (b *Builder) exprValuePart(info *exprProcessInfo, tok Tok) {
+	if info.i > 0 && info.braceCount == 0 {
+		lt := info.toks[info.i-1]
+		if (lt.Id == tokens.Id || lt.Id == tokens.Value) &&
+			(tok.Id == tokens.Id || tok.Id == tokens.Value) {
+			b.pusherr(tok, "invalid_syntax")
+			info.pushedError = true
+		}
+	}
+	b.checkExprTok(tok)
+	info.part = append(info.part, tok)
+	info.operator = requireOperatorForProcess(tok, info.i, len(info.toks))
+	info.value = false
+}
+
+func (b *Builder) exprBracePart(info *exprProcessInfo, tok Tok) bool {
+	switch tok.Kind {
+	case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
+		if tok.Kind == tokens.LBRACKET {
+			oldIndex := info.i
+			_, ok := b.DataType(info.toks, &info.i, false)
+			if ok {
+				info.part = append(info.part, info.toks[oldIndex:info.i+1]...)
+				return true
+			}
+			info.i = oldIndex
+		}
+		info.singleOperatored = false
+		info.braceCount++
+	default:
+		info.braceCount--
+		if info.braceCount == 0 && info.braceZeroedNewFalse {
+			info.braceZeroedNewFalse = false
+			info.newKeyword = false
+		}
+	}
+	return false
+}
+
+func (b *Builder) getExprProcesses(toks Toks) []Toks {
+	var info exprProcessInfo
+	info.toks = toks
+	for ; info.i < len(info.toks); info.i++ {
+		tok := info.toks[info.i]
 		switch tok.Id {
-		case lexer.Operator:
-			if newKeyword ||
-				isExprOperator(tok.Kind) ||
-				isAssignOperator(tok.Kind) {
-				part = append(part, tok)
-				continue
-			}
-			if !operator {
-				if IsSingleOperator(tok.Kind) && !singleOperatored {
-					part = append(part, tok)
-					singleOperatored = true
-					continue
-				}
-				if braceCount == 0 && isOverflowOperator(tok.Kind) {
-					b.pusherr(tok, "operator_overflow")
-				}
-			}
-			singleOperatored = false
-			operator = false
-			value = true
-			if braceCount > 0 {
-				part = append(part, tok)
-				continue
-			}
-			processes = append(processes, part)
-			processes = append(processes, []lexer.Token{tok})
-			part = []lexer.Token{}
+		case tokens.Operator:
+			b.exprOperatorPart(&info, tok)
 			continue
-		case lexer.Brace:
-			switch tok.Kind {
-			case "(", "[", "{":
-				if tok.Kind == "[" {
-					oldIndex := i
-					_, ok := b.DataType(tokens, &i, false)
-					if ok {
-						part = append(part, tokens[oldIndex:i+1]...)
-						continue
-					}
-					i = oldIndex
+		case tokens.Brace:
+			skipStep := b.exprBracePart(&info, tok)
+			if skipStep {
+				continue
+			}
+		case tokens.New:
+			info.newKeyword = true
+		case tokens.Id:
+			if info.braceCount != 0 {
+				break
+			}
+			if info.i+1 < len(info.toks) {
+				tok := info.toks[info.i+1]
+				if tok.Id == tokens.Brace && tok.Kind == tokens.LBRACKET {
+					info.braceZeroedNewFalse = true
+					break
 				}
-				singleOperatored = false
-				braceCount++
-			default:
-				braceCount--
 			}
-		case lexer.New:
-			newKeyword = true
-		case lexer.Id:
-			if braceCount == 0 {
-				newKeyword = false
-			}
+			info.newKeyword = false
 		}
-		if i > 0 && braceCount == 0 {
-			lt := tokens[i-1]
-			if (lt.Id == lexer.Id || lt.Id == lexer.Value) &&
-				(tok.Id == lexer.Id || tok.Id == lexer.Value) {
-				b.pusherr(tok, "invalid_syntax")
-				pushedError = true
-			}
-		}
-		b.checkExprTok(tok)
-		part = append(part, tok)
-		operator = requireOperatorForProcess(tok, i, len(tokens))
-		value = false
+		b.exprValuePart(&info, tok)
 	}
-	if len(part) > 0 {
-		processes = append(processes, part)
+	if len(info.part) > 0 {
+		info.processes = append(info.processes, info.part)
 	}
-	if value {
-		b.pusherr(processes[len(processes)-1][0], "operator_overflow")
-		pushedError = true
+	if info.value {
+		b.pusherr(info.processes[len(info.processes)-1][0], "operator_overflow")
+		info.pushedError = true
 	}
-	if pushedError {
+	if info.pushedError {
 		return nil
 	}
-	return processes
+	return info.processes
 }
 
-func requireOperatorForProcess(token lexer.Token, index, len int) bool {
-	switch token.Id {
-	case lexer.Comma:
+func requireOperatorForProcess(tok Tok, index, len int) bool {
+	switch tok.Id {
+	case tokens.Comma:
 		return false
-	case lexer.Brace:
-		if token.Kind == "(" ||
-			token.Kind == "{" {
+	case tokens.Brace:
+		if tok.Kind == tokens.LPARENTHESES ||
+			tok.Kind == tokens.LBRACE {
 			return false
 		}
 	}
 	return index < len-1
 }
 
-func (b *Builder) checkExprTok(token lexer.Token) {
-	if token.Kind[0] >= '0' && token.Kind[0] <= '9' {
+func (b *Builder) checkExprTok(tok Tok) {
+	if lexer.NumRegexp.MatchString(tok.Kind) {
 		var result bool
-		if strings.Contains(token.Kind, ".") ||
-			strings.ContainsAny(token.Kind, "eE") {
-			result = jnbits.CheckBitFloat(token.Kind, 64)
+		if strings.Contains(tok.Kind, tokens.DOT) ||
+			(!strings.HasPrefix(tok.Kind, "0x") && strings.ContainsAny(tok.Kind, "eE")) {
+			result = jnbits.CheckBitFloat(tok.Kind, 64)
 		} else {
-			result = jnbits.CheckBitInt(token.Kind, 64)
+			result = jnbits.CheckBitInt(tok.Kind, jnbits.MaxInt)
 			if !result {
-				result = jnbits.CheckBitUInt(token.Kind, 64)
+				result = jnbits.CheckBitUInt(tok.Kind, jnbits.MaxInt)
 			}
 		}
 		if !result {
-			b.pusherr(token, "invalid_numeric_range")
+			b.pusherr(tok, "invalid_numeric_range")
 		}
 	}
 }
 
-func (b *Builder) getrange(i *int, open, close string, toks *[]lexer.Token) []lexer.Token {
+func (b *Builder) getrange(i *int, open, close string, toks *Toks) Toks {
 	rang := getrange(i, open, close, *toks)
 	if rang != nil {
 		return rang
@@ -1661,23 +2297,23 @@ func (b *Builder) getrange(i *int, open, close string, toks *[]lexer.Token) []le
 		return nil
 	}
 	*i = 0
-	*toks = b.skipStatement()
+	*toks = b.nextBuilderStatement()
 	rang = getrange(i, open, close, *toks)
 	return rang
 }
 
-func getrange(i *int, open, close string, tokens []lexer.Token) []lexer.Token {
-	if *i >= len(tokens) {
+func getrange(i *int, open, close string, toks Toks) Toks {
+	if *i >= len(toks) {
 		return nil
 	}
-	tok := tokens[*i]
-	if tok.Id == lexer.Brace && tok.Kind == open {
+	tok := toks[*i]
+	if tok.Id == tokens.Brace && tok.Kind == open {
 		*i++
 		braceCount := 1
 		start := *i
-		for ; braceCount > 0 && *i < len(tokens); *i++ {
-			tok := tokens[*i]
-			if tok.Id != lexer.Brace {
+		for ; braceCount > 0 && *i < len(toks); *i++ {
+			tok := toks[*i]
+			if tok.Id != tokens.Brace {
 				continue
 			}
 			if tok.Kind == open {
@@ -1686,20 +2322,24 @@ func getrange(i *int, open, close string, tokens []lexer.Token) []lexer.Token {
 				braceCount--
 			}
 		}
-		return tokens[start : *i-1]
+		return toks[start : *i-1]
 	}
 	return nil
 }
 
-func (b *Builder) skipStatement() []lexer.Token {
-	start := b.Pos
-	b.Pos, _ = nextStatementPos(b.Tokens, start)
-	toks := b.Tokens[start:b.Pos]
-	if toks[len(toks)-1].Id == lexer.SemiColon {
-		if len(toks) == 1 {
-			return b.skipStatement()
+func (b *Builder) skipStatement(i *int, toks *Toks) Toks {
+	start := *i
+	*i, _ = nextStatementPos(*toks, start)
+	stoks := (*toks)[start:*i]
+	if stoks[len(stoks)-1].Id == tokens.SemiColon {
+		if len(stoks) == 1 {
+			return b.skipStatement(i, toks)
 		}
-		toks = toks[:len(toks)-1]
+		stoks = stoks[:len(stoks)-1]
 	}
-	return toks
+	return stoks
+}
+
+func (b *Builder) nextBuilderStatement() Toks {
+	return b.skipStatement(&b.Pos, &b.Toks)
 }

@@ -4,20 +4,27 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
+	"unicode"
 
-	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/lexer/tokens"
 	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jnapi"
+	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
+type Genericable interface {
+	Generics() []DataType
+	SetGenerics([]DataType)
+}
+
 type Obj struct {
-	Token lexer.Token
-	Value interface{}
+	Tok   Tok
+	Value any
 }
 
 type Statement struct {
-	Token          lexer.Token
-	Val            interface{}
+	Tok            Tok
+	Val            any
 	WithTerminator bool
 }
 
@@ -25,21 +32,41 @@ func (s Statement) String() string {
 	return fmt.Sprint(s.Val)
 }
 
+type (
+	Labels []*Label
+	Gotos  []*Goto
+)
+
 type Block struct {
-	Tree []Statement
+	Parent   *Block
+	SubIndex int
+	Tree     []Statement
+	Gotos    *Gotos
+	Labels   *Labels
+	Func     *Func
 }
 
-var Indent int32 = 0
+var Indent uint32 = 0
+
+func IndentString() string {
+	return strings.Repeat(jn.Set.Indent, int(Indent)*jn.Set.IndentCount)
+}
+
+func AddIndent() {
+	atomic.AddUint32(&Indent, 1)
+}
+
+func DoneIndent() {
+	atomic.SwapUint32(&Indent, Indent-1)
+}
 
 func (b Block) String() string {
-	atomic.SwapInt32(&Indent, Indent+1)
-	defer func() { atomic.SwapInt32(&Indent, Indent-1) }()
-	return ParseBlock(b, int(Indent))
+	AddIndent()
+	defer func() { DoneIndent() }()
+	return ParseBlock(b)
 }
 
-const IndentSpace = 2
-
-func ParseBlock(b Block, indent int) string {
+func ParseBlock(b Block) string {
 	var cxx strings.Builder
 	cxx.WriteByte('{')
 	for _, s := range b.Tree {
@@ -47,24 +74,81 @@ func ParseBlock(b Block, indent int) string {
 			continue
 		}
 		cxx.WriteByte('\n')
-		cxx.WriteString(strings.Repeat(" ", indent*IndentSpace))
+		cxx.WriteString(IndentString())
 		cxx.WriteString(s.String())
 	}
 	cxx.WriteByte('\n')
-	cxx.WriteString(strings.Repeat(" ", (indent-1)*IndentSpace) + "}")
+	cxx.WriteString(strings.Repeat(jn.Set.Indent, int(Indent-1)*jn.Set.IndentCount))
+	cxx.WriteByte('}')
 	return cxx.String()
 }
 
+type genericableTypes struct {
+	types []DataType
+}
+
+func (gt genericableTypes) Generics() []DataType {
+	return gt.types
+}
+
+func (gt genericableTypes) SetGenerics([]DataType) {}
+
 type DataType struct {
-	Token      lexer.Token
+	Tok        Tok
 	Id         uint8
+	Original   any
 	Val        string
 	MultiTyped bool
-	Tag        interface{}
+	Tag        any
+}
+
+func (dt *DataType) ValWithOriginalId() string {
+	if dt.Original == nil {
+		return dt.Val
+	}
+	_, prefix := dt.GetValId()
+	original := dt.Original.(DataType)
+	return prefix + original.Tok.Kind
+}
+
+func (dt *DataType) OriginalValId() string {
+	if dt.Original == nil {
+		return ""
+	}
+	t := dt.Original.(DataType)
+	id, _ := t.GetValId()
+	return id
+}
+
+func (dt *DataType) GetValId() (id, prefix string) {
+	id = dt.Val
+	runes := []rune(dt.Val)
+	for i, r := range dt.Val {
+		if r == '_' || unicode.IsLetter(r) {
+			id = string(runes[i:])
+			prefix = string(runes[:i])
+			break
+		}
+	}
+	runes = []rune(id)
+	for i, r := range runes {
+		if r != '_' && !unicode.IsLetter(r) {
+			id = string(runes[:i])
+			break
+		}
+	}
+	return
 }
 
 func (dt DataType) String() string {
 	var cxx strings.Builder
+	if dt.Original != nil {
+		val := dt.ValWithOriginalId()
+		tok := dt.Tok
+		dt = dt.Original.(DataType)
+		dt.Val = val
+		dt.Tok = tok
+	}
 	for i, run := range dt.Val {
 		if run == '*' {
 			cxx.WriteRune(run)
@@ -87,7 +171,7 @@ func (dt DataType) String() string {
 			cxx.WriteByte('>')
 			cxx.WriteString(pointers)
 			return cxx.String()
-		case dt.Id == jn.Map && dt.Val[0] == '[':
+		case dt.Id == jntype.Map && dt.Val[0] == '[':
 			pointers := cxx.String()
 			types := dt.Tag.([]DataType)
 			cxx.Reset()
@@ -100,25 +184,52 @@ func (dt DataType) String() string {
 			return cxx.String()
 		}
 	}
+	if dt.Tag != nil {
+		switch t := dt.Tag.(type) {
+		case Genericable:
+			return dt.StructString() + cxx.String()
+		case []DataType:
+			dt.Tag = genericableTypes{t}
+			return dt.StructString() + cxx.String()
+		}
+	}
 	switch dt.Id {
-	case jn.Id:
-		return jnapi.AsId(dt.Token.Kind) + cxx.String()
-	case jn.Func:
-		return dt.FunctionString() + cxx.String()
+	case jntype.Id, jntype.Enum:
+		return jnapi.OutId(dt.Val, dt.Tok.File) + cxx.String()
+	case jntype.Struct:
+		return dt.StructString() + cxx.String()
+	case jntype.Func:
+		return dt.FuncString() + cxx.String()
 	default:
-		return jn.CxxTypeIdFromType(dt.Id) + cxx.String()
+		return jntype.CxxTypeIdFromType(dt.Id) + cxx.String()
 	}
 }
 
-func (dt DataType) FunctionString() string {
+func (dt *DataType) StructString() string {
+	var cxx strings.Builder
+	cxx.WriteString(jnapi.OutId(dt.Val, dt.Tok.File))
+	s := dt.Tag.(Genericable)
+	types := s.Generics()
+	if len(types) == 0 {
+		return cxx.String()
+	}
+	cxx.WriteByte('<')
+	for _, t := range types {
+		cxx.WriteString(t.String())
+		cxx.WriteByte(',')
+	}
+	return cxx.String()[:cxx.Len()-1] + ">"
+}
+
+func (dt *DataType) FuncString() string {
 	var cxx strings.Builder
 	cxx.WriteString("func<")
-	fun := dt.Tag.(Func)
+	fun := dt.Tag.(*Func)
 	cxx.WriteString(fun.RetType.String())
 	cxx.WriteByte('(')
 	if len(fun.Params) > 0 {
 		for _, param := range fun.Params {
-			cxx.WriteString(param.Type.String())
+			cxx.WriteString(param.Prototype())
 			cxx.WriteByte(',')
 		}
 		cxxStr := cxx.String()[:cxx.Len()-1]
@@ -131,7 +242,7 @@ func (dt DataType) FunctionString() string {
 	return cxx.String()
 }
 
-func (dt DataType) MultiTypeString() string {
+func (dt *DataType) MultiTypeString() string {
 	types := dt.Tag.([]DataType)
 	var cxx strings.Builder
 	cxx.WriteString("std::tuple<")
@@ -142,13 +253,26 @@ func (dt DataType) MultiTypeString() string {
 	return cxx.String()[:cxx.Len()-1] + ">"
 }
 
+type GenericType struct {
+	Tok Tok
+	Id  string
+}
+
+func (gt GenericType) String() string {
+	var cxx strings.Builder
+	cxx.WriteString("template<typename ")
+	cxx.WriteString(jnapi.OutId(gt.Id, gt.Tok.File))
+	cxx.WriteByte('>')
+	return cxx.String()
+}
+
 type Type struct {
-	Pub   bool
-	Token lexer.Token
-	Id    string
-	Type  DataType
-	Desc  string
-	Used  bool
+	Pub  bool
+	Tok  Tok
+	Id   string
+	Type DataType
+	Desc string
+	Used bool
 }
 
 func (t Type) String() string {
@@ -156,26 +280,40 @@ func (t Type) String() string {
 	cxx.WriteString("typedef ")
 	cxx.WriteString(t.Type.String())
 	cxx.WriteByte(' ')
-	cxx.WriteString(jnapi.AsId(t.Id))
+	cxx.WriteString(jnapi.OutId(t.Id, t.Tok.File))
 	cxx.WriteByte(';')
 	return cxx.String()
 }
 
 type Func struct {
-	Pub     bool
-	Token   lexer.Token
-	Id      string
-	Params  []Parameter
-	RetType DataType
-	Block   Block
+	Pub      bool
+	Tok      Tok
+	Id       string
+	Generics []*GenericType
+	Combines [][]DataType
+	Params   []Param
+	RetType  DataType
+	Block    Block
 }
 
-func (fc Func) DataTypeString() string {
+func FindGeneric(generics []*GenericType, id string) int {
+	for i, generic := range generics {
+		if generic.Id == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (f *Func) DataTypeString() string {
 	var cxx strings.Builder
 	cxx.WriteByte('(')
-	if len(fc.Params) > 0 {
-		for _, param := range fc.Params {
-			cxx.WriteString(param.Type.String())
+	if len(f.Params) > 0 {
+		for _, p := range f.Params {
+			if p.Variadic {
+				cxx.WriteString("...")
+			}
+			cxx.WriteString(p.Type.Val)
 			cxx.WriteString(", ")
 		}
 		cxxStr := cxx.String()[:cxx.Len()-2]
@@ -183,37 +321,34 @@ func (fc Func) DataTypeString() string {
 		cxx.WriteString(cxxStr)
 	}
 	cxx.WriteByte(')')
-	if fc.RetType.Id != jn.Void {
-		cxx.WriteString(fc.RetType.String())
+	if f.RetType.Id != jntype.Void {
+		cxx.WriteString(f.RetType.Val)
 	}
 	return cxx.String()
 }
 
-type Parameter struct {
-	Token    lexer.Token
-	Id       string
-	Const    bool
-	Volatile bool
-	Variadic bool
-	Type     DataType
+type Param struct {
+	Tok       Tok
+	Id        string
+	Const     bool
+	Volatile  bool
+	Variadic  bool
+	Reference bool
+	Type      DataType
+	Default   Expr
 }
 
-func (p Parameter) String() string {
+func (p Param) String() string {
 	var cxx strings.Builder
 	cxx.WriteString(p.Prototype())
 	if p.Id != "" {
 		cxx.WriteByte(' ')
-		cxx.WriteString(jnapi.AsId(p.Id))
-	}
-	if p.Variadic {
-		cxx.WriteString(" =array<")
-		cxx.WriteString(p.Type.String())
-		cxx.WriteString(">()")
+		cxx.WriteString(jnapi.OutId(p.Id, p.Tok.File))
 	}
 	return cxx.String()
 }
 
-func (p Parameter) Prototype() string {
+func (p *Param) Prototype() string {
 	var cxx strings.Builder
 	if p.Volatile {
 		cxx.WriteString("volatile ")
@@ -228,12 +363,21 @@ func (p Parameter) Prototype() string {
 	} else {
 		cxx.WriteString(p.Type.String())
 	}
+	if p.Reference {
+		cxx.WriteByte('&')
+	}
 	return cxx.String()
 }
 
 type Arg struct {
-	Token lexer.Token
-	Expr  Expr
+	Tok      Tok
+	TargetId string
+	Expr     Expr
+}
+
+type Args struct {
+	Src      []Arg
+	Targeted bool
 }
 
 func (a Arg) String() string {
@@ -241,8 +385,8 @@ func (a Arg) String() string {
 }
 
 type Expr struct {
-	Tokens    []lexer.Token
-	Processes [][]lexer.Token
+	Toks      []Tok
+	Processes [][]Tok
 	Model     IExprModel
 }
 
@@ -258,8 +402,8 @@ func (e Expr) String() string {
 	for _, process := range e.Processes {
 		for _, tok := range process {
 			switch tok.Id {
-			case lexer.Id:
-				expr.WriteString(jnapi.AsId(tok.Kind))
+			case tokens.Id:
+				expr.WriteString(jnapi.OutId(tok.Kind, tok.File))
 			default:
 				expr.WriteString(tok.Kind)
 			}
@@ -280,9 +424,9 @@ func (be ExprStatement) String() string {
 }
 
 type Value struct {
-	Token lexer.Token
-	Data  string
-	Type  DataType
+	Tok  Tok
+	Data string
+	Type DataType
 }
 
 func (v Value) String() string {
@@ -290,8 +434,8 @@ func (v Value) String() string {
 }
 
 type Ret struct {
-	Token lexer.Token
-	Expr  Expr
+	Tok  Tok
+	Expr Expr
 }
 
 func (r Ret) String() string {
@@ -303,8 +447,8 @@ func (r Ret) String() string {
 }
 
 type Attribute struct {
-	Token lexer.Token
-	Tag   lexer.Token
+	Tok Tok
+	Tag Tok
 }
 
 func (a Attribute) String() string {
@@ -312,19 +456,19 @@ func (a Attribute) String() string {
 }
 
 type Var struct {
-	Pub         bool
-	DefToken    lexer.Token
-	IdToken     lexer.Token
-	SetterToken lexer.Token
-	Id          string
-	Type        DataType
-	Val         Expr
-	Const       bool
-	Volatile    bool
-	New         bool
-	Tag         interface{}
-	Desc        string
-	Used        bool
+	Pub       bool
+	DefTok    Tok
+	IdTok     Tok
+	SetterTok Tok
+	Id        string
+	Type      DataType
+	Val       Expr
+	Const     bool
+	Volatile  bool
+	New       bool
+	Tag       any
+	Desc      string
+	Used      bool
 }
 
 func (v Var) String() string {
@@ -337,12 +481,27 @@ func (v Var) String() string {
 	}
 	cxx.WriteString(v.Type.String())
 	cxx.WriteByte(' ')
-	cxx.WriteString(jnapi.AsId(v.Id))
+	cxx.WriteString(jnapi.OutId(v.Id, v.IdTok.File))
 	cxx.WriteByte('{')
 	if v.Val.Processes != nil {
 		cxx.WriteString(v.Val.String())
 	}
 	cxx.WriteByte('}')
+	cxx.WriteByte(';')
+	return cxx.String()
+}
+
+func (v *Var) FieldString() string {
+	var cxx strings.Builder
+	if v.Volatile {
+		cxx.WriteString("volatile ")
+	}
+	if v.Const {
+		cxx.WriteString("const ")
+	}
+	cxx.WriteString(v.Type.String())
+	cxx.WriteByte(' ')
+	cxx.WriteString(jnapi.OutId(v.Id, v.IdTok.File))
 	cxx.WriteByte(';')
 	return cxx.String()
 }
@@ -356,7 +515,8 @@ type AssignSelector struct {
 func (as AssignSelector) String() string {
 	switch {
 	case as.Var.New:
-		return jnapi.AsId(as.Expr.Tokens[0].Kind)
+		tok := as.Expr.Toks[0]
+		return jnapi.OutId(tok.Kind, tok.File)
 	case as.Ignore:
 		return jnapi.CxxIgnore
 	}
@@ -364,7 +524,7 @@ func (as AssignSelector) String() string {
 }
 
 type Assign struct {
-	Setter      lexer.Token
+	Setter      Tok
 	SelectExprs []AssignSelector
 	ValueExprs  []Expr
 	IsExpr      bool
@@ -379,8 +539,8 @@ func (a *Assign) cxxSingleAssign() string {
 		return s[:len(s)-1]
 	}
 	var cxx strings.Builder
-	if len(expr.Expr.Tokens) != 1 ||
-		!jnapi.IsIgnoreId(expr.Expr.Tokens[0].Kind) {
+	if len(expr.Expr.Toks) != 1 ||
+		!jnapi.IsIgnoreId(expr.Expr.Toks[0].Kind) {
 		cxx.WriteString(expr.String())
 		cxx.WriteString(a.Setter.Kind)
 	}
@@ -474,8 +634,8 @@ func (a Assign) String() string {
 }
 
 type Free struct {
-	Token lexer.Token
-	Expr  Expr
+	Tok  Tok
+	Expr Expr
 }
 
 func (f Free) String() string {
@@ -506,7 +666,7 @@ func (wp WhileProfile) String(iter Iter) string {
 type ForeachProfile struct {
 	KeyA     Var
 	KeyB     Var
-	InToken  lexer.Token
+	InTok    Tok
 	Expr     Expr
 	ExprType DataType
 }
@@ -515,10 +675,10 @@ func (fp ForeachProfile) String(iter Iter) string {
 	if !jnapi.IsIgnoreId(fp.KeyA.Id) {
 		return fp.ForeachString(iter)
 	}
-	return fp.IterationSring(iter)
+	return fp.IterationString(iter)
 }
 
-func (fp ForeachProfile) ClassicString(iter Iter) string {
+func (fp *ForeachProfile) ClassicString(iter Iter) string {
 	var cxx strings.Builder
 	cxx.WriteString("foreach<")
 	cxx.WriteString(fp.ExprType.String())
@@ -533,12 +693,12 @@ func (fp ForeachProfile) ClassicString(iter Iter) string {
 	cxx.WriteString(", [&](")
 	cxx.WriteString(fp.KeyA.Type.String())
 	cxx.WriteByte(' ')
-	cxx.WriteString(jnapi.AsId(fp.KeyA.Id))
+	cxx.WriteString(jnapi.OutId(fp.KeyA.Id, fp.KeyA.IdTok.File))
 	if !jnapi.IsIgnoreId(fp.KeyB.Id) {
 		cxx.WriteByte(',')
 		cxx.WriteString(fp.KeyB.Type.String())
 		cxx.WriteByte(' ')
-		cxx.WriteString(jnapi.AsId(fp.KeyB.Id))
+		cxx.WriteString(jnapi.OutId(fp.KeyB.Id, fp.KeyB.IdTok.File))
 	}
 	cxx.WriteString(") -> void ")
 	cxx.WriteString(iter.Block.String())
@@ -546,20 +706,34 @@ func (fp ForeachProfile) ClassicString(iter Iter) string {
 	return cxx.String()
 }
 
-func (fp ForeachProfile) MapString(iter Iter) string {
+func (fp *ForeachProfile) MapString(iter Iter) string {
 	var cxx strings.Builder
-	cxx.WriteString("for (auto ")
-	cxx.WriteString(jnapi.AsId(fp.KeyB.Id))
-	cxx.WriteString(" : ")
+	cxx.WriteString("foreach<")
+	types := fp.ExprType.Tag.([]DataType)
+	cxx.WriteString(types[0].String())
+	cxx.WriteByte(',')
+	cxx.WriteString(types[1].String())
+	cxx.WriteString(">(")
 	cxx.WriteString(fp.Expr.String())
-	cxx.WriteString(") ")
+	cxx.WriteString(", [&](")
+	cxx.WriteString(fp.KeyA.Type.String())
+	cxx.WriteByte(' ')
+	cxx.WriteString(jnapi.OutId(fp.KeyA.Id, fp.KeyA.IdTok.File))
+	if !jnapi.IsIgnoreId(fp.KeyB.Id) {
+		cxx.WriteByte(',')
+		cxx.WriteString(fp.KeyB.Type.String())
+		cxx.WriteByte(' ')
+		cxx.WriteString(jnapi.OutId(fp.KeyB.Id, fp.KeyB.IdTok.File))
+	}
+	cxx.WriteString(") -> void ")
 	cxx.WriteString(iter.Block.String())
+	cxx.WriteString(");")
 	return cxx.String()
 }
 
-func (fp *ForeachProfile) ForeachString(iter Iter) string {
+func (fp *ForeachProfile) ForeachProfile(iter Iter) string {
 	switch {
-	case fp.ExprType.Val == "str",
+	case fp.ExprType.Val == tokens.STR,
 		strings.HasPrefix(fp.ExprType.Val, "[]"):
 		return fp.ClassicString(iter)
 	case fp.ExprType.Val[0] == '[':
@@ -568,10 +742,21 @@ func (fp *ForeachProfile) ForeachString(iter Iter) string {
 	return ""
 }
 
-func (fp ForeachProfile) IterationSring(iter Iter) string {
+func (fp *ForeachProfile) ForeachString(iter Iter) string {
+	switch {
+	case fp.ExprType.Val == tokens.STR,
+		strings.HasPrefix(fp.ExprType.Val, "[]"):
+		return fp.ClassicString(iter)
+	case fp.ExprType.Val[0] == '[':
+		return fp.MapString(iter)
+	}
+	return ""
+}
+
+func (fp ForeachProfile) IterationString(iter Iter) string {
 	var cxx strings.Builder
 	cxx.WriteString("for (auto ")
-	cxx.WriteString(jnapi.AsId(fp.KeyB.Id))
+	cxx.WriteString(jnapi.OutId(fp.KeyB.Id, fp.KeyB.IdTok.File))
 	cxx.WriteString(" : ")
 	cxx.WriteString(fp.Expr.String())
 	cxx.WriteString(") ")
@@ -580,7 +765,7 @@ func (fp ForeachProfile) IterationSring(iter Iter) string {
 }
 
 type Iter struct {
-	Token   lexer.Token
+	Tok     Tok
 	Block   Block
 	Profile IterProfile
 }
@@ -596,7 +781,7 @@ func (iter Iter) String() string {
 }
 
 type Break struct {
-	Token lexer.Token
+	Tok Tok
 }
 
 func (b Break) String() string {
@@ -604,7 +789,7 @@ func (b Break) String() string {
 }
 
 type Continue struct {
-	Token lexer.Token
+	Tok Tok
 }
 
 func (c Continue) String() string {
@@ -612,7 +797,7 @@ func (c Continue) String() string {
 }
 
 type If struct {
-	Token lexer.Token
+	Tok   Tok
 	Expr  Expr
 	Block Block
 }
@@ -627,7 +812,7 @@ func (ifast If) String() string {
 }
 
 type ElseIf struct {
-	Token lexer.Token
+	Tok   Tok
 	Expr  Expr
 	Block Block
 }
@@ -642,7 +827,7 @@ func (elif ElseIf) String() string {
 }
 
 type Else struct {
-	Token lexer.Token
+	Tok   Tok
 	Block Block
 }
 
@@ -665,11 +850,12 @@ func (c Comment) String() string {
 }
 
 type Use struct {
-	Token lexer.Token
-	Path  string
+	Tok  Tok
+	Path string
 }
 
 type CxxEmbed struct {
+	Tok     Tok
 	Content string
 }
 
@@ -678,8 +864,8 @@ func (ce CxxEmbed) String() string {
 }
 
 type Preprocessor struct {
-	Token   lexer.Token
-	Command interface{}
+	Tok     Tok
+	Command any
 }
 
 func (pp Preprocessor) String() string {
@@ -687,7 +873,7 @@ func (pp Preprocessor) String() string {
 }
 
 type Directive struct {
-	Command interface{}
+	Command any
 }
 
 func (d Directive) String() string {
@@ -701,10 +887,151 @@ func (EnofiDirective) String() string {
 }
 
 type Defer struct {
-	Token lexer.Token
-	Expr  Expr
+	Tok  Tok
+	Expr Expr
 }
 
 func (d Defer) String() string {
-	return jnapi.ToDefer(d.Expr.String())
+	return jnapi.ToDeferredCall(d.Expr.String())
+}
+
+type Label struct {
+	Tok   Tok
+	Label string
+	Index int
+	Used  bool
+	Block *Block
+}
+
+func (l Label) String() string {
+	return l.Label + ":;"
+}
+
+type Goto struct {
+	Tok   Tok
+	Label string
+	Index int
+	Block *Block
+}
+
+func (gt Goto) String() string {
+	var cxx strings.Builder
+	cxx.WriteString("goto ")
+	cxx.WriteString(gt.Label)
+	cxx.WriteByte(';')
+	return cxx.String()
+}
+
+type Namespace struct {
+	Tok  Tok
+	Ids  []string
+	Tree []Obj
+}
+
+type EnumItem struct {
+	Tok  Tok
+	Id   string
+	Expr Expr
+}
+
+func (ei EnumItem) String() string {
+	var cxx strings.Builder
+	cxx.WriteString(jnapi.OutId(ei.Id, ei.Tok.File))
+	cxx.WriteString(" = ")
+	cxx.WriteString(ei.Expr.String())
+	return cxx.String()
+}
+
+type Enum struct {
+	Pub   bool
+	Tok   Tok
+	Id    string
+	Type  DataType
+	Items []*EnumItem
+	Used  bool
+	Desc  string
+}
+
+func (e *Enum) ItemById(id string) *EnumItem {
+	for _, item := range e.Items {
+		if item.Id == id {
+			return item
+		}
+	}
+	return nil
+}
+
+func (e Enum) String() string {
+	var cxx strings.Builder
+	cxx.WriteString("enum ")
+	cxx.WriteString(jnapi.OutId(e.Id, e.Tok.File))
+	cxx.WriteByte(':')
+	cxx.WriteString(e.Type.String())
+	cxx.WriteString(" {\n")
+	AddIndent()
+	for _, item := range e.Items {
+		cxx.WriteString(IndentString())
+		cxx.WriteString(item.String())
+		cxx.WriteString(",\n")
+	}
+	DoneIndent()
+	cxx.WriteString("};")
+	return cxx.String()
+}
+
+type Struct struct {
+	Tok      Tok
+	Id       string
+	Pub      bool
+	Fields   []*Var
+	Generics []*GenericType
+}
+
+type ConcurrentCall struct {
+	Tok  Tok
+	Expr Expr
+}
+
+func (cc ConcurrentCall) String() string {
+	return jnapi.ToConcurrentCall(cc.Expr.String())
+}
+
+type Try struct {
+	Tok   Tok
+	Block Block
+	Catch Catch
+}
+
+func (t Try) String() string {
+	var cxx strings.Builder
+	cxx.WriteString("try ")
+	cxx.WriteString(t.Block.String())
+	if t.Catch.Tok.Id == tokens.NA {
+		cxx.WriteString(" catch(...) {}")
+	} else {
+		cxx.WriteByte(' ')
+		cxx.WriteString(t.Catch.String())
+	}
+	return cxx.String()
+}
+
+type Catch struct {
+	Tok   Tok
+	Var   Var
+	Block Block
+}
+
+func (c Catch) String() string {
+	var cxx strings.Builder
+	cxx.WriteString("catch (")
+	if c.Var.Id == "" {
+		cxx.WriteString("...")
+	} else {
+		cxx.WriteString(c.Var.Type.String())
+		cxx.WriteByte(' ')
+		cxx.WriteString(jnapi.OutId(c.Var.Id, c.Tok.File))
+	}
+	cxx.WriteString(") ")
+	cxx.WriteString(c.Block.String())
+	return cxx.String()
 }
