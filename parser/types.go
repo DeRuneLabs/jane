@@ -39,7 +39,7 @@ func typeIsSinglePtr(t DataType) bool {
 	return t.Id == jntype.Voidptr
 }
 
-func typeOfArrayItems(t DataType) DataType {
+func typeOfArrayComponents(t DataType) DataType {
 	t.Val = t.Val[2:]
 	return t
 }

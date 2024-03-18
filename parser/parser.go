@@ -2746,6 +2746,7 @@ func (p *Parser) evalBraceRangeExpr(toks Toks, m *exprModel) (v value) {
 			} else if *i+1 < len(exprToks) {
 				p.pusherrtok(toks[*i+1], "invalid_syntax")
 			}
+			t, _ = p.typeSource(t, true)
 			exprToks = toks[len(exprToks):]
 			var model iExpr
 			switch {
@@ -2831,7 +2832,7 @@ func (p *Parser) evalEnumerableSelect(enumv, selectv value, errtok Tok) (v value
 
 func (p *Parser) evalArraySelect(arrv, selectv value, errtok Tok) value {
 	arrv.lvalue = true
-	arrv.ast.Type = typeOfArrayItems(arrv.ast.Type)
+	arrv.ast.Type = typeOfArrayComponents(arrv.ast.Type)
 	p.wg.Add(1)
 	go assignChecker{
 		p:      p,
@@ -2890,7 +2891,7 @@ func (p *Parser) buildArray(parts []Toks, t DataType, errtok Tok) (value, iExpr)
 	var v value
 	v.ast.Type = t
 	model := arrayExpr{dataType: t}
-	elemType := typeOfArrayItems(t)
+	elemType := typeOfArrayComponents(t)
 	for _, part := range parts {
 		partVal, expModel := p.evalToks(part)
 		model.expr = append(model.expr, expModel)
