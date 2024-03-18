@@ -97,7 +97,7 @@ func (p *Parser) pusherrmsgtok(tok Tok, msg string) {
 		Type:   jnlog.Err,
 		Row:    tok.Row,
 		Column: tok.Column,
-		Path:   tok.File.Path,
+		Path:   tok.File.Path(),
 		Msg:    msg,
 	})
 }
@@ -107,7 +107,7 @@ func (p *Parser) pushwarntok(tok Tok, key string, args ...any) {
 		Type:   jnlog.Warn,
 		Row:    tok.Row,
 		Column: tok.Column,
-		Path:   tok.File.Path,
+		Path:   tok.File.Path(),
 		Msg:    jn.GetWarn(key, args...),
 	})
 }
@@ -480,22 +480,20 @@ func (p *Parser) useLocalPackage(tree *[]ast.Obj) {
 	if p.File == nil {
 		return
 	}
-	dir := filepath.Dir(p.File.Path)
-	infos, err := ioutil.ReadDir(dir)
+	infos, err := ioutil.ReadDir(p.File.Dir)
 	if err != nil {
 		p.pusherrmsg(err.Error())
 		return
 	}
-	_, mainName := filepath.Split(p.File.Path)
 	for _, info := range infos {
 		name := info.Name()
 		if info.IsDir() ||
 			!strings.HasSuffix(name, jn.SrcExt) ||
 			!jnio.IsUseable(name) ||
-			name == mainName {
+			name == p.File.Name {
 			continue
 		}
-		f, err := jnio.OpenJn(filepath.Join(dir, name))
+		f, err := jnio.OpenJn(filepath.Join(p.File.Dir, name))
 		if err != nil {
 			p.pusherrmsg(err.Error())
 			continue

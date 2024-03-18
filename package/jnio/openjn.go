@@ -9,6 +9,7 @@ import (
 )
 
 func OpenJn(path string) (*File, error) {
+	path, _ = filepath.Abs(path)
 	if filepath.Ext(path) != jn.SrcExt {
 		return nil, errors.New(jn.GetErr("file_not_jn", path))
 	}
@@ -17,7 +18,7 @@ func OpenJn(path string) (*File, error) {
 		return nil, err
 	}
 	f := new(File)
-	f.Path = path
+	f.Dir, f.Name = filepath.Split(path)
 	f.Data = []rune(string(bytes))
 	return f, nil
 }

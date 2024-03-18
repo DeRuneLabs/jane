@@ -41,7 +41,7 @@ func (l *Lexer) pusherr(key string, args ...any) {
 		Type:   jnlog.Err,
 		Row:    l.Row,
 		Column: l.Column,
-		Path:   l.File.Path,
+		Path:   l.File.Path(),
 		Msg:    jn.GetErr(key, args...),
 	})
 }
@@ -51,7 +51,7 @@ func (l *Lexer) pusherrtok(tok Tok, err string) {
 		Type:   jnlog.Err,
 		Row:    tok.Row,
 		Column: tok.Column,
-		Path:   l.File.Path,
+		Path:   l.File.Path(),
 		Msg:    jn.GetErr(err),
 	})
 }

@@ -41,7 +41,7 @@ func compilerErr(tok Tok, key string, args ...any) jnlog.CompilerLog {
 		Type:   jnlog.Err,
 		Row:    tok.Row,
 		Column: tok.Column,
-		Path:   tok.File.Path,
+		Path:   tok.File.Path(),
 		Msg:    jn.GetErr(key, args...),
 	}
 }
