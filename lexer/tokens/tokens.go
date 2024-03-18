@@ -67,6 +67,7 @@ const (
 	CHAR                = "char"
 	STR                 = "str"
 	VOIDPTR             = "voidptr"
+	ANY                 = "any"
 	TRUE                = "true"
 	FALSE               = "false"
 	NIL                 = "nil"

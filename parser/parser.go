@@ -1630,7 +1630,7 @@ func (s *solver) any() (v ast.Value) {
 		v.Type.Id = jntype.Bool
 		v.Type.Val = tokens.BOOL
 	default:
-		s.p.pusherrtok(s.operator, "operator_notfor_jntype", s.operator.Kind, "any")
+		s.p.pusherrtok(s.operator, "operator_notfor_xtype", s.operator.Kind, tokens.ANY)
 	}
 	return
 }
@@ -2465,6 +2465,7 @@ func (p *Parser) evalTryAssignExpr(toks Toks, m *exprModel) (v value, ok bool) {
 
 func (p *Parser) evalCast(v value, t DataType, errtok Tok) value {
 	switch {
+	case typeIsSingle(v.ast.Type) && v.ast.Type.Id == jntype.Any:
 	case typeIsPtr(t):
 		p.checkCastPtr(v.ast.Type, errtok)
 	case typeIsArray(t):

@@ -212,7 +212,7 @@ var strStatics = &Defmap{
 var strDefaultFunc = Func{
 	Pub:     true,
 	Id:      "str",
-	Params:  []Param{{Id: "obj", Type: DataType{Id: jntype.Any, Val: "any"}}},
+	Params:  []Param{{Id: "obj", Type: DataType{Id: jntype.Any, Val: tokens.ANY}}},
 	RetType: DataType{Id: jntype.Str, Val: tokens.STR},
 }
 
@@ -253,7 +253,7 @@ var Builtin = &Defmap{
 				Params: []Param{{
 					Id:      "v",
 					Const:   true,
-					Type:    DataType{Id: jntype.Any, Val: "any"},
+					Type:    DataType{Id: jntype.Any, Val: tokens.ANY},
 					Default: Expr{Model: exprNode{`""`}},
 				}},
 			},
@@ -266,7 +266,7 @@ var Builtin = &Defmap{
 				Params: []Param{{
 					Id:      "v",
 					Const:   true,
-					Type:    DataType{Id: jntype.Any, Val: "any"},
+					Type:    DataType{Id: jntype.Any, Val: tokens.ANY},
 					Default: Expr{Model: exprNode{`""`}},
 				}},
 			},

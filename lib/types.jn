@@ -1,0 +1,8 @@
+#pragma enofi
+
+//doc:
+// it can hold any value and can be nil
+// INFO:
+// if you can compare two any data type value,
+// you can get true if compare same any instance, false if not.
+pub type any any

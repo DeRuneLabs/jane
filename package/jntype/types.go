@@ -3,64 +3,14 @@ package jntype
 import (
 	"strconv"
 
-	"github.com/DeRuneLabs/jane/lexer/tokens"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
-const (
-	Void    uint8 = 0
-	I8      uint8 = 1
-	I16     uint8 = 2
-	I32     uint8 = 3
-	I64     uint8 = 4
-	U8      uint8 = 5
-	U16     uint8 = 6
-	U32     uint8 = 7
-	U64     uint8 = 8
-	Bool    uint8 = 9
-	Str     uint8 = 10
-	F32     uint8 = 11
-	F64     uint8 = 12
-	Any     uint8 = 13
-	Char    uint8 = 14
-	Id      uint8 = 15
-	Func    uint8 = 16
-	Nil     uint8 = 17
-	UInt    uint8 = 18
-	Int     uint8 = 19
-	Map     uint8 = 20
-	Voidptr uint8 = 21
-	Intptr  uint8 = 22
-	UIntptr uint8 = 23
-	Enum    uint8 = 24
-	Struct  uint8 = 25
+var (
+	IntCode  uint8
+	UIntCode uint8
+	BitSize  int
 )
-
-var CodeMap = map[uint8]string{
-	I8:      tokens.I8,
-	I16:     tokens.I16,
-	I32:     tokens.I32,
-	I64:     tokens.I64,
-	U8:      tokens.U8,
-	U16:     tokens.U16,
-	U32:     tokens.U32,
-	U64:     tokens.U64,
-	Str:     tokens.STR,
-	Bool:    tokens.BOOL,
-	F32:     tokens.F32,
-	F64:     tokens.F64,
-	Any:     "any",
-	Char:    tokens.CHAR,
-	UInt:    tokens.UINT,
-	Int:     tokens.INT,
-	Voidptr: tokens.VOIDPTR,
-	Intptr:  tokens.INTPTR,
-	UIntptr: tokens.UINTPTR,
-}
-
-var IntCode uint8
-var UIntCode uint8
-var BitSize int
 
 const (
 	NumericTypeStr = "<numeric>"
@@ -137,7 +87,7 @@ func TypeGreaterThan(t1, t2 uint8) bool {
 		return F32GreaterThan(t2)
 	case F64:
 		return F64GreaterThan(t2)
-	case Enum:
+	case Enum, Any:
 		return true
 	}
 	return false
@@ -280,7 +230,7 @@ func IsUnsignedNumericType(t uint8) bool {
 }
 
 func TypeFromId(id string) uint8 {
-	for t, tid := range CodeMap {
+	for t, tid := range TypeMap {
 		if id == tid {
 			return t
 		}
@@ -292,7 +242,7 @@ func CxxTypeIdFromType(t uint8) string {
 	if t == Void {
 		return "void"
 	}
-	id := CodeMap[t]
+	id := TypeMap[t]
 	if id == "" {
 		return id
 	}

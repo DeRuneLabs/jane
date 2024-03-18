@@ -18,13 +18,14 @@ var CxxDefault = `#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) ||
 
 // region JN_STANDARD_IMPORTS
 #include <iostream>
-#include <string>
+#include <cstring>
 #include <sstream>
 #include <functional>
 #include <vector>
 #include <map>
 #include <thread>
 #include <cstdint>
+#include <typeinfo>
 #ifdef _WINDOWS
 #include <codecvt>
 #include <windows.h>
@@ -143,9 +144,9 @@ public:
         return true;
     }
 
+    bool operator!=(const array<_Item_t> &_Src) const noexcept { return !this->operator==(_Src); }
     bool operator==(const std::nullptr_t) const noexcept       { return this->_buffer.empty(); }
-    bool operator!=(const array<_Item_t> &_Src) const noexcept { return !(*this == _Src); }
-    bool operator!=(const std::nullptr_t) const noexcept       { return !this->_buffer.empty(); }
+    bool operator!=(const std::nullptr_t) const noexcept       { return !this->operator==(nil); }
 
     _Item_t& operator[](const uint_jnt _Index) {
         if (this->len() <= _Index) { JNID(panic)("index out of range"); }
@@ -191,7 +192,7 @@ public:
     inline void del(const _Key_t _Key) noexcept { this->erase(_Key); }
 
     bool operator==(const std::nullptr_t) const noexcept { return this->empty(); }
-    bool operator!=(const std::nullptr_t) const noexcept { return !this->empty(); }
+    bool operator!=(const std::nullptr_t) const noexcept { return !this->operator==(nil); }
 
     friend std::ostream& operator<<(std::ostream &_Stream,
                                     const map<_Key_t, _Value_t> &_Src) {
@@ -356,10 +357,74 @@ public:
     void operator+=(const str_jnt _Str) noexcept        { this->_buffer += _Str._buffer; }
     str_jnt operator+(const str_jnt _Str) const noexcept { return str_jnt{this->_buffer + _Str._buffer}; }
     bool operator==(const str_jnt &_Str) const noexcept { return this->_buffer == _Str._buffer; }
-    bool operator!=(const str_jnt &_Str) const noexcept { return this->_buffer != _Str._buffer; }
+    bool operator!=(const str_jnt &_Str) const noexcept { return !this->operator==(_Str); }
+
 
     friend std::ostream& operator<<(std::ostream &_Stream, const str_jnt &_Src)
     { return _Stream << _Src._buffer; }
+};
+
+struct any_jnt {
+private:
+    void *_expr{nullptr};
+    const char *_inf{nullptr};
+
+    void _delete(void) noexcept {
+        this->_inf = nullptr;
+        std::free(this->_expr);
+        this->_expr = nullptr;
+    }
+public:
+    any_jnt(const std::nullptr_t) noexcept {}
+
+    template<typename T>
+    any_jnt(const T &_Expr) noexcept {
+        this->_expr = (void*)(new(std::nothrow) T{_Expr});
+        this->_inf  = typeid(T).name();
+    }
+
+    ~any_jnt(void) noexcept
+    { this->_delete(); }
+
+    template<typename T>
+    void operator=(const T &_Expr) noexcept {
+        this->_delete();
+        this->_expr = (void*)(new(std::nothrow) T{_Expr});
+        this->_inf  = typeid(T).name();
+    }
+
+    void operator=(const std::nullptr_t) noexcept
+    { this->_delete(); }
+
+    template<typename T>
+    operator T(void) const noexcept {
+        if (!this->_expr)
+        { JNID(panic)("casting failed because data is nil"); }
+        if (std::strcmp(this->_inf, typeid(T).name()) != 0)
+        { JNID(panic)("incompatible type"); }
+        return *(T*)(this->_expr);
+   }
+
+    template<typename T>
+    bool operator==(const T &_Expr) const noexcept {
+        if (!this->_expr)
+        { return std::is_same<std::nullptr_t, T>::value; }
+        if (std::strcmp(this->_inf, typeid(T).name()) != 0) { return false; }
+        return *(T*)(this->_expr) == _Expr;
+    }
+
+    template<typename T>
+    inline bool operator!=(const T &_Expr) const noexcept
+    { return !this->operator==(_Expr); }
+
+    bool operator==(const any_jnt &_Any) const noexcept
+    { return this->_expr == _Any._expr; }
+
+    inline bool operator!=(const any_jnt &_Any) const noexcept
+    { return !this->operator==(_Any); }
+
+    friend std::ostream& operator<<(std::ostream &_Stream, const any_jnt &_Src)
+    { return _Stream << _Src._expr; }
 };
 // endregion JN_BUILTIN_TYPES
 
