@@ -1,0 +1,11 @@
+//doc:
+// make array with have n element default value of related data type
+type[Item_T]
+pub make(const n size) []Item_T {
+  buffer:[]Item_T
+  if n == 0 {
+    buffer
+  }
+  //cxx: @buffer._buffer = std::vector<@Item_T>(@n, @Item_T{});
+  buffer
+}

@@ -1,0 +1,15 @@
+//doc:
+// apply function to each element of destination array
+type[Item_T]
+pub map(&destination []Item_T, func (Item_T)Item_T) {
+  if destination.empty() {
+    ret
+  }
+  length: = destination.len
+  index:size = 0
+  iter index < length {
+    element: = &destination[index]
+    *element = func(*element)
+    index += 1
+  }
+}

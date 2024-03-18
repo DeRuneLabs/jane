@@ -3,6 +3,8 @@ package jn
 import "fmt"
 
 var Errs = map[string]string{
+	`no_stdlib`:                         `standard library directory not found`,
+	`file_not_useable`:                  `file is not useable for this operating system architecture`,
 	`file_not_jn`:                       `this is not jane source file: %s`,
 	`invalid_token`:                     `undefined code content: %c`,
 	`invalid_syntax`:                    `invalid syntax`,

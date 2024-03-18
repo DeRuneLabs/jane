@@ -1,0 +1,30 @@
+use debug
+use os
+
+//doc:
+// assert function
+// writing fail output to std::cerr and exit fail if assert fail
+@inline
+_assert(const expr bool, const msg str) {
+  if !debugging || expr {
+    ret
+  }
+  //cxx: std::cerr << @msg << std::endl;
+  exit(EXIT_FAILURE)
+}
+
+//doc:
+// writing faild message to std::cerr and exit if assert fail
+@inline
+pub assert(const expr bool, const msg{"assertion failed"} str) {
+  _assert{expr, msg}
+}
+
+//doc:
+// panic message with error if assert was fail
+@inline
+pub assert_panic(const expr bool, const err{error("assertion failed")} error) {
+  if !expr && debugging {
+    panic(err)
+  }
+}

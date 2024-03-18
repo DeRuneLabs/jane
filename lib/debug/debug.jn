@@ -1,0 +1,6 @@
+//doc:
+// if this are enable, debug and all subpackage assume
+// that the program has been compile for debug.
+// in this case the debug tools are worked
+// if not enabled, debug tools will not work
+pub debugging: = false

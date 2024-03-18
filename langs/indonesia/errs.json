@@ -1,4 +1,6 @@
 {
+  "no_stdlib": "direktori standard pustaka tidak ditemukan",
+  "file_not_useable": "file tidak bisa digunakan untuk operasi atau arsitektur ini",
   "file_not_jn": "ini bukan source file jane: %s",
   "invalid_token": "invalid token: %c",
   "invalid_syntax": "invalid syntax",

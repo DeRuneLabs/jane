@@ -1,0 +1,23 @@
+//doc:
+// copy function item to dest
+type[Item_T]
+pub copy(&destination, &source []Item_T) {
+  if source.empty() {
+    ret
+  } else if destination.empty() {
+    ret
+  }
+
+  length:size
+  if destination.len > source.len {
+    length = source.len
+  } else if srouce.len > destination.len {
+    length = destination.len
+  }
+
+  index:size = 0
+  iter index < length {
+    destination[index] = source[index]
+    index += 1
+  }
+}

@@ -350,18 +350,12 @@ func compile(path string, main, justDefs bool) *Parser {
 		return nil
 	}
 	if !jnio.IsUseable(path) {
-		p.Errs = append(p.Errs, jnlog.CompilerLog{
-			Type: jnlog.FlatErr,
-			Msg:  "file is not useable for this platform",
-		})
+		p.PushErr("file_not_useable")
 		return p
 	}
 	inf, err := os.Stat(jn.StdlibPath)
 	if err != nil || !inf.IsDir() {
-		p.Errs = append(p.Errs, jnlog.CompilerLog{
-			Type: jnlog.FlatErr,
-			Msg:  "standard library directory not found",
-		})
+		p.PushErr("no_stdlib")
 		return p
 	}
 	if !loadBuiltin() {

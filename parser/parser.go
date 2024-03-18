@@ -116,7 +116,7 @@ func (p *Parser) pusherrs(errs ...jnlog.CompilerLog) {
 	p.Errs = append(p.Errs, errs...)
 }
 
-func (p *Parser) pusherr(key string, args ...any) {
+func (p *Parser) PushErr(key string, args ...any) {
 	p.pusherrmsg(jn.GetErr(key, args...))
 }
 
@@ -1061,7 +1061,7 @@ func (p *Parser) checkAsync() {
 	defer func() { p.wg.Done() }()
 	if p.main && !p.justDefs {
 		if f, _, _ := p.FuncById(jn.EntryPoint); f == nil {
-			p.pusherr("no_entry_point")
+			p.PushErr("no_entry_point")
 		} else {
 			f.used = true
 		}
