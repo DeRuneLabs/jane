@@ -286,23 +286,25 @@ func (t Type) String() string {
 }
 
 type Func struct {
-	Pub      bool
-	Tok      Tok
-	Id       string
-	Generics []*GenericType
-	Combines [][]DataType
-	Params   []Param
-	RetType  DataType
-	Block    Block
+	Pub        bool
+	Tok        Tok
+	Id         string
+	Generics   []*GenericType
+	Combines   [][]DataType
+	Attributes []Attribute
+	Params     []Param
+	RetType    DataType
+	Block      Block
 }
 
-func FindGeneric(generics []*GenericType, id string) int {
-	for i, generic := range generics {
-		if generic.Id == id {
-			return i
+func (f *Func) FindAttribute(kind string) *Attribute {
+	for i := range f.Attributes {
+		attribute := &f.Attributes[i]
+		if attribute.Tag.Kind == kind {
+			return attribute
 		}
 	}
-	return -1
+	return nil
 }
 
 func (f *Func) DataTypeString() string {

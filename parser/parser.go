@@ -22,20 +22,22 @@ import (
 	"github.com/DeRuneLabs/jane/preprocessor"
 )
 
-type File = jnio.File
-type Type = ast.Type
-type Var = ast.Var
-type Func = ast.Func
-type Arg = ast.Arg
-type Param = ast.Param
-type DataType = ast.DataType
-type Expr = ast.Expr
-type Tok = ast.Tok
-type Toks = ast.Toks
-type Attribute = ast.Attribute
-type Enum = ast.Enum
-type Struct = ast.Struct
-type GenericType = ast.GenericType
+type (
+	File        = jnio.File
+	Type        = ast.Type
+	Var         = ast.Var
+	Func        = ast.Func
+	Arg         = ast.Arg
+	Param       = ast.Param
+	DataType    = ast.DataType
+	Expr        = ast.Expr
+	Tok         = ast.Tok
+	Toks        = ast.Toks
+	Attribute   = ast.Attribute
+	Enum        = ast.Enum
+	Struct      = ast.Struct
+	GenericType = ast.GenericType
+)
 
 type use struct {
 	Path string
@@ -502,7 +504,6 @@ func (p *Parser) useLocalPackage(tree *[]ast.Obj) {
 		p.parseUses(&subtree)
 		*tree = append(*tree, subtree...)
 	}
-
 }
 
 func (p *Parser) Parset(tree []ast.Obj, main, justDefs bool) {
@@ -771,9 +772,14 @@ write:
 }
 
 func (p *Parser) PushAttribute(attribute Attribute) {
-	switch attribute.Tag.Kind {
-	case "inline":
-	default:
+	ok := false
+	for _, kind := range jn.Attributes {
+		if attribute.Tag.Kind == kind {
+			ok = true
+			break
+		}
+	}
+	if !ok {
 		p.pusherrtok(attribute.Tag, "undefined_attribute")
 	}
 	for _, attr := range p.attributes {
@@ -805,13 +811,13 @@ func (p *Parser) Func(fast Func) {
 	f := new(function)
 	f.Ast = new(Func)
 	*f.Ast = fast
-	f.Attributes = p.attributes
+	f.Ast.Attributes = p.attributes
 	p.attributes = nil
-	p.checkFuncAttributes(f.Attributes)
 	f.Desc = p.docText.String()
 	p.docText.Reset()
 	f.Ast.Generics = p.generics
 	p.generics = nil
+	p.checkFuncAttributes(f)
 	p.Defs.Funcs = append(p.Defs.Funcs, f)
 }
 
@@ -874,10 +880,21 @@ func (p *Parser) Var(v Var) *Var {
 	return &v
 }
 
-func (p *Parser) checkFuncAttributes(attributes []Attribute) {
-	for _, attribute := range attributes {
+func (p *Parser) checkTypeParam(f *function) {
+	if len(f.Ast.Generics) == 0 {
+		p.pusherrtok(f.Ast.Tok, "func_must_have_generics_if_has_attribute", jn.Attribute_TypeParam)
+	}
+	if len(f.Ast.Params) != 0 {
+		p.pusherrtok(f.Ast.Tok, "func_cant_have_params_if_has_attribute", jn.Attribute_TypeParam)
+	}
+}
+
+func (p *Parser) checkFuncAttributes(f *function) {
+	for _, attribute := range f.Ast.Attributes {
 		switch attribute.Tag.Kind {
-		case "inline":
+		case jn.Attribute_Inline:
+		case jn.Attribute_TypeParam:
+			p.checkTypeParam(f)
 		default:
 			p.pusherrtok(attribute.Tok, "invalid_attribute")
 		}
@@ -1625,7 +1642,7 @@ func (s *solver) any() (v ast.Value) {
 		v.Type.Id = jntype.Bool
 		v.Type.Val = tokens.BOOL
 	default:
-		s.p.pusherrtok(s.operator, "operator_notfor_xtype", s.operator.Kind, tokens.ANY)
+		s.p.pusherrtok(s.operator, "operator_notfor_jntype", s.operator.Kind, tokens.ANY)
 	}
 	return
 }
@@ -3152,9 +3169,19 @@ func (p *Parser) parseFuncCall(
 	return
 }
 
-func (p *Parser) parseFuncCallToks(f *Func, genericsToks, argsToks Toks, m *exprModel) value {
-	generics := p.getGenerics(genericsToks)
-	args := p.getArgs(argsToks)
+func (p *Parser) parseFuncCallToks(f *Func, genericsToks, argsToks Toks, m *exprModel) (v value) {
+	var generics []DataType = nil
+	var args *ast.Args = nil
+	if f.FindAttribute(jn.Attribute_TypeParam) != nil {
+		if len(genericsToks) > 0 {
+			p.pusherrtok(genericsToks[0], "invalid_syntax")
+			return
+		}
+		generics = p.getGenerics(argsToks)
+	} else {
+		generics = p.getGenerics(genericsToks)
+		args = p.getArgs(argsToks)
+	}
 	return p.parseFuncCall(f, generics, args, m, argsToks[0])
 }
 
@@ -3502,7 +3529,7 @@ func (p *Parser) checkEntryPointSpecialCases(fun *function) {
 	if fun.Ast.RetType.Id != jntype.Void {
 		p.pusherrtok(fun.Ast.RetType.Tok, "entrypoint_have_return")
 	}
-	if fun.Attributes != nil {
+	if fun.Ast.Attributes != nil {
 		p.pusherrtok(fun.Ast.Tok, "entrypoint_have_attributes")
 	}
 }

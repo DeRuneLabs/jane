@@ -24,6 +24,9 @@ const (
 	ArchArm64 = "arm64"
 	ArchAmd64 = "amd64"
 	ArchI386  = "i386"
+
+	Attribute_Inline    = "inline"
+	Attribute_TypeParam = "type_param"
 )
 
 var (
