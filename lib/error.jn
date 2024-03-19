@@ -12,10 +12,10 @@
 // returns result and nil pointer for if the "x" and "y" is not equals to 0.
 // if not, returns 0 and returns heap-allocated error instance.
 //
-// result:, err: = compute(x, y)
-// if err {
+// result:,error: = compute(x, y)
+// if error {
 //   // If has error...
 // }
-pub struct error {
+pub struct Error {
 	pub message:str
 }

@@ -22,22 +22,20 @@ import (
 	"github.com/DeRuneLabs/jane/preprocessor"
 )
 
-type (
-	File        = jnio.File
-	Type        = ast.Type
-	Var         = ast.Var
-	Func        = ast.Func
-	Arg         = ast.Arg
-	Param       = ast.Param
-	DataType    = ast.DataType
-	Expr        = ast.Expr
-	Tok         = ast.Tok
-	Toks        = ast.Toks
-	Attribute   = ast.Attribute
-	Enum        = ast.Enum
-	Struct      = ast.Struct
-	GenericType = ast.GenericType
-)
+type File = jnio.File
+type Type = ast.Type
+type Var = ast.Var
+type Func = ast.Func
+type Arg = ast.Arg
+type Param = ast.Param
+type DataType = ast.DataType
+type Expr = ast.Expr
+type Tok = ast.Tok
+type Toks = ast.Toks
+type Attribute = ast.Attribute
+type Enum = ast.Enum
+type Struct = ast.Struct
+type GenericType = ast.GenericType
 
 type use struct {
 	Path string
@@ -312,16 +310,10 @@ func (p *Parser) Cxx() string {
 	return cxx.String()
 }
 
-func getTree(toks Toks, errs *[]jnlog.CompilerLog) []ast.Obj {
+func getTree(toks Toks) ([]ast.Obj, []jnlog.CompilerLog) {
 	b := ast.NewBuilder(toks)
 	b.Build()
-	if len(b.Errs) > 0 {
-		if errs != nil {
-			*errs = append(*errs, b.Errs...)
-		}
-		return nil
-	}
-	return b.Tree
+	return b.Tree, b.Errs
 }
 
 func (p *Parser) checkUsePath(use *ast.Use) bool {
@@ -504,14 +496,13 @@ func (p *Parser) useLocalPackage(tree *[]ast.Obj) {
 			p.pusherrs(lexer.Logs...)
 			continue
 		}
-		subtree := getTree(toks, &p.Errs)
-		if subtree == nil {
-			continue
-		}
+		subtree, errors := getTree(toks)
+		p.pusherrs(errors...)
 		preprocessor.TrimEnofi(&subtree)
 		p.parseUses(&subtree)
 		*tree = append(*tree, subtree...)
 	}
+
 }
 
 func (p *Parser) Parset(tree []ast.Obj, main, justDefs bool) {
@@ -529,8 +520,9 @@ func (p *Parser) Parset(tree []ast.Obj, main, justDefs bool) {
 }
 
 func (p *Parser) Parse(toks Toks, main, justDefs bool) {
-	tree := getTree(toks, &p.Errs)
-	if tree == nil {
+	tree, errors := getTree(toks)
+	if len(errors) > 0 {
+		p.pusherrs(errors...)
 		return
 	}
 	p.Parset(tree, main, justDefs)
@@ -1135,8 +1127,8 @@ func (p *Parser) params(f *Func) {
 }
 
 func (p *Parser) parseFunc(f *Func) {
-	p.blockVars = p.varsFromParams(f.Params)
 	p.params(f)
+	p.blockVars = p.varsFromParams(f.Params)
 	p.checkFunc(f)
 	p.blockTypes = nil
 	p.blockVars = nil
@@ -2596,31 +2588,27 @@ func valIsEnum(v value) bool {
 	return v.isType && v.ast.Type.Id == jntype.Enum
 }
 
-func (p *Parser) getDataTypeFunc(tok Tok, m *exprModel) (v value) {
+func (p *Parser) getDataTypeFunc(expr, callRange Toks, m *exprModel) (v value, isret bool) {
+	tok := expr[0]
 	switch tok.Kind {
 	case tokens.STR:
 		m.appendSubNode(exprNode{"tostr"})
 		v.ast.Type = DataType{Id: jntype.Func, Val: "()", Tag: strDefaultFunc}
+	default:
+		isret = true
+		toks := append([]lexer.Tok{{
+			Id:   tokens.Brace,
+			Kind: tokens.LPARENTHESES,
+			File: tok.File,
+		}}, expr...)
+		toks = append(toks, Tok{
+			Id:   tokens.Brace,
+			Kind: tokens.RPARENTHESES,
+			File: tok.File,
+		})
+		toks = append(toks, callRange...)
+		v, _ = p.evalTryCastExpr(toks, m)
 	}
-	return
-}
-
-func (p *Parser) callSizeof(toks Toks, m *exprModel) (v value) {
-	m.appendSubNode(exprNode{"sizeof"})
-	m.appendSubNode(exprNode{tokens.LPARENTHESES})
-	defer m.appendSubNode(exprNode{tokens.RPARENTHESES})
-	v.ast.Type = DataType{Id: jntype.UInt, Val: tokens.UINT}
-	b := ast.NewBuilder(nil)
-	i := new(int)
-	t, ok := b.DataType(toks, i, true)
-	if !ok {
-		p.pusherrs(b.Errs...)
-		return
-	} else if *i+1 < len(toks) {
-		p.pusherrtok(toks[*i+1], "invalid_syntax")
-	}
-	t, _ = p.realType(t, true)
-	m.appendSubNode(t)
 	return
 }
 
@@ -2649,10 +2637,10 @@ func (p *Parser) evalParenthesesRangeExpr(toks Toks, m *exprModel) (v value) {
 	}
 	switch tok := exprToks[0]; tok.Id {
 	case tokens.DataType:
-		v = p.getDataTypeFunc(tok, m)
-	case tokens.Sizeof:
-		rangeExpr = rangeExpr[1 : len(rangeExpr)-1]
-		return p.callSizeof(rangeExpr, m)
+		v, isret := p.getDataTypeFunc(exprToks, rangeExpr, m)
+		if isret {
+			return v
+		}
 	default:
 		v = p.evalExprPart(exprToks, m)
 	}

@@ -260,7 +260,7 @@ type GenericType struct {
 
 func (gt GenericType) String() string {
 	var cxx strings.Builder
-	cxx.WriteString("template<typename ")
+	cxx.WriteString("typename ")
 	cxx.WriteString(jnapi.OutId(gt.Id, gt.Tok.File))
 	cxx.WriteByte('>')
 	return cxx.String()

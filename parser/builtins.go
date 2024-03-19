@@ -218,7 +218,7 @@ var strDefaultFunc = Func{
 
 var errorStruct = &jnstruct{
 	Ast: Struct{
-		Id: "error",
+		Id: "Error",
 	},
 	Defs: &Defmap{
 		Globals: []*Var{
@@ -241,7 +241,11 @@ var errorStruct = &jnstruct{
 	},
 }
 
-var errorType = DataType{Id: jntype.Struct, Val: "error", Tag: errorStruct}
+var errorType = DataType{
+	Id:  jntype.Struct,
+	Val: errorStruct.Ast.Id,
+	Tag: errorStruct,
+}
 
 var Builtin = &Defmap{
 	Funcs: []*function{
@@ -511,9 +515,5 @@ func init() {
 	}
 
 	errorStruct.constructor.Id = errorStruct.Ast.Id
-	errorStruct.constructor.RetType = DataType{
-		Id:  jntype.Struct,
-		Val: errorStruct.Ast.Id,
-		Tag: errorStruct,
-	}
+	errorStruct.constructor.RetType = errorType
 }

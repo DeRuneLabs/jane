@@ -1,4 +1,4 @@
-test_defer_call_function() {
+call_function() {
   defer () { println("DEFER 1") }()
   defer () { println("DEFER 2") }()
   defer () { println("DEFER 3") }()
@@ -7,5 +7,5 @@ test_defer_call_function() {
 
 main() {
   println("jn testing defer call function")
-  test_defer_call_function()
+  call_function()
 }

@@ -5,4 +5,38 @@
 // INFO:
 // if you can compare two any data type value,
 // you can get true if compare same any instance, false if not.
-pub type any any
+
+// BUILT-IN
+
+// pub type i8
+// pub type i16
+// pub type i32
+// pub type i64
+// pub type u8
+// pub type u16
+// pub type u32
+// pub type u64
+// pub type f32
+// pub type f64
+// pub type int
+// pub type uint
+// pub type intptr
+// pub type uintptr
+// pub type voidptr
+// pub type any
+// pub type char
+// pub type str
+// pub type bool
+
+// END BUILT-IN
+
+//doc: type alias for u8
+pub type byte u8
+
+//doc: type alias for i8
+pub type sbyte i8
+
+//doc:
+// uint
+// can store the maximum size
+pub type size uint

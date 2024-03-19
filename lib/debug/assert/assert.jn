@@ -23,8 +23,8 @@ pub assert(const expr bool, const msg{"assertion failed"} str) {
 //doc:
 // panic message with error if assert was fail
 @inline
-pub assert_panic(const expr bool, const err{error("assertion failed")} error) {
-  if !expr && debugging {
-    panic(err)
+pub assert_panic(const expr bool, const error{Error("assertion failed")} Error) {
+  if !debugging && !expr {
+    panic(error)
   }
 }

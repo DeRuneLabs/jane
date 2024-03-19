@@ -3,11 +3,11 @@
 pub readln() str {
 //cxx: #ifdef _WINDOWS
   //cxx: std::wstring buffer{};
-  //cxx: std::wstring(std::wcin, buffer);
+  //cxx: std::wcin >> buffer;
   //cxx: return jn_stdlib_io_encode_utf8(buffer).c_str();
 //cxx: #else
   //cxx: std::string buffer{};
-  //cxx: std::getline(std::wcin, buffer);
+  //cxx: std::cin >> buffer;
   //cxx: return buffer.c_str();
 // cxx: #endif
 }
@@ -34,13 +34,13 @@ readln_test() {
   println("welcome " + input)
 }
 
-readin_test() {
+read_test() {
   print("input fullname: ")
-  input: = readin()
+  input: = read()
   println("hello " + input)
 }
 
 main() {
   readln_test()
-  readin_test()
+  read_test()
 }
