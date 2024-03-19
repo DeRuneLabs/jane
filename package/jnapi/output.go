@@ -516,6 +516,10 @@ std::ostream &operator<<(std::ostream &_Stream, const i8_jnt &_Src)
 std::ostream &operator<<(std::ostream &_Stream, const u8_jnt &_Src)
 { return _Stream << (i32_jnt)(_Src); }
 
+std::ostream &operator<<(std::ostream &_Stream, const std::nullptr_t) {
+  return _Stream << "<nil>";
+}
+
 template<typename _Obj_t>
 str_jnt tostr(const _Obj_t &_Obj) noexcept {
     std::stringstream _stream;

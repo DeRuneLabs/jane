@@ -1465,11 +1465,11 @@ func (ve *valueEvaluator) nil() value {
 func (ve *valueEvaluator) num() value {
 	var v value
 	v.ast.Data = ve.tok.Kind
-	ve.model.appendSubNode(exprNode{ve.tok.Kind})
 	if strings.Contains(ve.tok.Kind, tokens.DOT) ||
 		strings.ContainsAny(ve.tok.Kind, "eE") {
 		v.ast.Type.Id = jntype.F64
 		v.ast.Type.Val = tokens.F64
+		ve.model.appendSubNode(exprNode{ve.tok.Kind})
 	} else {
 		v.ast.Type.Id = jntype.Int
 		v.ast.Type.Val = tokens.INT
@@ -1478,6 +1478,9 @@ func (ve *valueEvaluator) num() value {
 		if !ok && bit < jnbits.MaxInt {
 			v.ast.Type.Id = jntype.I64
 			v.ast.Type.Val = tokens.I64
+			ve.model.appendSubNode(exprNode{ve.tok.Kind})
+		} else {
+			ve.model.appendSubNode(exprNode{"int_jnt{" + ve.tok.Kind + "}"})
 		}
 	}
 	return v
@@ -2438,7 +2441,9 @@ func (p *Parser) evalTryCastExpr(toks Toks, m *exprModel) (v value, _ bool) {
 			return
 		}
 		m.appendSubNode(exprNode{tokens.LPARENTHESES + dt.String() + tokens.RPARENTHESES})
+		m.appendSubNode(exprNode{tokens.LPARENTHESES})
 		val := p.evalExprPart(exprToks, m)
+		m.appendSubNode(exprNode{tokens.RPARENTHESES})
 		val = p.evalCast(val, dt, errTok)
 		return val, true
 	}
