@@ -1084,7 +1084,7 @@ func (p *Parser) blockVarById(id string) *Var {
 	return nil
 }
 
-func (p *Parser) defById(id string) (def interface{}, tok Tok, m *Defmap, canshadow bool) {
+func (p *Parser) defById(id string) (def any, tok Tok, m *Defmap, canshadow bool) {
 	var t *Type
 	t, m, canshadow = p.typeById(id)
 	if t != nil {
@@ -1115,7 +1115,7 @@ func (p *Parser) defById(id string) (def interface{}, tok Tok, m *Defmap, cansha
 	return
 }
 
-func (p *Parser) blockDefById(id string) (def interface{}, tok Tok) {
+func (p *Parser) blockDefById(id string) (def any, tok Tok) {
 	if bv := p.blockVarById(id); bv != nil {
 		return bv, bv.IdTok
 	}
@@ -1263,13 +1263,6 @@ type value struct {
 	isType   bool
 }
 
-func eliminateProcesses(processes *[]Toks, i, to int) {
-	for i < to {
-		(*processes)[i] = nil
-		i++
-	}
-}
-
 func (p *Parser) evalLogicProcesses(processes []Toks) (v value, e iExpr) {
 	m := new(exprModel)
 	e = m
@@ -1308,71 +1301,31 @@ func (p *Parser) evalLogicProcesses(processes []Toks) (v value, e iExpr) {
 }
 
 func (p *Parser) evalNonLogicProcesses(processes []Toks) (v value, e iExpr) {
-	defer func() {
-		if v.isType {
-			p.pusherrtok(v.ast.Tok, "invalid_syntax")
-		}
-	}()
 	m := newExprModel(processes)
 	e = m
 	if len(processes) == 1 {
 		v = p.evalExprPart(processes[0], m)
 		return
 	}
-	process := solver{p: p, model: m}
-	boolean := false
-	for i := p.nextOperator(processes); i != -1 && !noData(processes); i = p.nextOperator(processes) {
-		if !boolean {
-			boolean = v.ast.Type.Id == jntype.Bool
-		}
-		if boolean {
-			v.ast.Type.Id = jntype.Bool
-		}
-		m.index = i
-		process.operator = processes[m.index][0]
-		m.appendSubNode(exprNode{process.operator.Kind})
-		if processes[i-1] == nil {
-			process.leftVal = v.ast
-			m.index = i + 1
-			process.right = processes[m.index]
-			process.rightVal = p.evalExprPart(process.right, m).ast
-			v.ast = process.solve()
-			eliminateProcesses(&processes, i, i+2)
-			continue
-		} else if processes[i+1] == nil {
-			m.index = i - 1
-			process.left = processes[m.index]
-			process.leftVal = p.evalExprPart(process.left, m).ast
-			process.rightVal = v.ast
-			v.ast = process.solve()
-			eliminateProcesses(&processes, i-1, i+1)
-			continue
-		} else if isOperator(processes[i-1]) {
-			process.leftVal = v.ast
-			m.index = i + 1
-			process.right = processes[m.index]
-			process.rightVal = p.evalExprPart(process.right, m).ast
-			v.ast = process.solve()
-			eliminateProcesses(&processes, i, i+1)
-			continue
-		}
-		m.index = i - 1
-		process.left = processes[m.index]
-		process.leftVal = p.evalExprPart(process.left, m).ast
-		m.index = i + 1
-		process.right = processes[m.index]
-		process.rightVal = p.evalExprPart(process.right, m).ast
-		solvedv := process.solve()
-		if v.ast.Type.Id != jntype.Void {
-			process.operator.Kind = tokens.PLUS
-			process.leftVal = v.ast
-			process.right = processes[i+1]
-			process.rightVal = solvedv
-			solvedv = process.solve()
-		}
-		v.ast = solvedv
-		eliminateProcesses(&processes, i-1, i+2)
+	m.index = p.nextOperator(processes)
+	if m.index == -1 {
+		return
 	}
+	process := solver{p: p, model: m}
+	process.operator = processes[m.index][0]
+	m.appendSubNode(exprNode{process.operator.Kind})
+	left := processes[:m.index]
+	leftV, leftExpr := p.evalProcesses(left)
+	m.index--
+	m.appendSubNode(leftExpr)
+	m.index += 2
+	right := processes[m.index:]
+	rightV, rightExpr := p.evalProcesses(right)
+	m.appendSubNode(rightExpr)
+	process.leftVal = leftV.ast
+	process.rightVal = rightV.ast
+	v.ast = process.solve()
+	v.lvalue = typeIsLvalue(v.ast.Type)
 	return
 }
 
@@ -1387,25 +1340,19 @@ func (p *Parser) evalProcesses(processes []Toks) (v value, e iExpr) {
 	}
 }
 
-func noData(processes []Toks) bool {
-	for _, p := range processes {
-		if !isOperator(p) && p != nil {
-			return false
-		}
-	}
-	return true
-}
-
 func isOperator(process Toks) bool {
 	return len(process) == 1 && process[0].Id == tokens.Operator
 }
 
 func (p *Parser) nextOperator(processes []Toks) int {
-	precedence5 := -1
-	precedence4 := -1
-	precedence3 := -1
-	precedence2 := -1
 	precedence1 := -1
+	precedence2 := -1
+	precedence3 := -1
+	precedence4 := -1
+	precedence5 := -1
+	precedence6 := -1
+	precedence7 := -1
+	precedence8 := -1
 	for i, process := range processes {
 		if !isOperator(process) {
 			continue
@@ -1414,29 +1361,60 @@ func (p *Parser) nextOperator(processes []Toks) int {
 			continue
 		}
 		switch process[0].Kind {
-		case tokens.STAR, tokens.SLASH, tokens.PERCENT,
-			tokens.LSHIFT, tokens.RSHIFT, tokens.AMPER:
-			precedence5 = i
-		case tokens.PLUS, tokens.MINUS, tokens.VLINE, tokens.CARET:
-			precedence4 = i
-		case tokens.EQUALS, tokens.NOT_EQUALS, tokens.LESS, tokens.LESS_EQUAL,
+		case tokens.STAR, tokens.SLASH, tokens.PERCENT:
+			if precedence1 == -1 {
+				precedence1 = i
+			}
+		case tokens.PLUS, tokens.MINUS:
+			if precedence2 == -1 {
+				precedence2 = i
+			}
+		case tokens.LSHIFT, tokens.RSHIFT:
+			if precedence3 == -1 {
+				precedence3 = i
+			}
+		case tokens.LESS, tokens.LESS_EQUAL,
 			tokens.GREAT, tokens.GREAT_EQUAL:
-			precedence3 = i
+			if precedence4 == -1 {
+				precedence4 = i
+			}
+		case tokens.EQUALS, tokens.NOT_EQUALS:
+			if precedence5 == -1 {
+				precedence5 = i
+			}
+		case tokens.AMPER:
+			if precedence6 == -1 {
+				precedence6 = i
+			}
+		case tokens.CARET:
+			if precedence7 == -1 {
+				precedence7 = i
+			}
+		case tokens.VLINE:
+			if precedence8 == -1 {
+				precedence8 = i
+			}
 		default:
 			p.pusherrtok(process[0], "invalid_operator")
 		}
 	}
 	switch {
-	case precedence5 != -1:
-		return precedence5
-	case precedence4 != -1:
-		return precedence4
-	case precedence3 != -1:
-		return precedence3
+	case precedence1 != -1:
+		return precedence1
 	case precedence2 != -1:
 		return precedence2
+	case precedence3 != -1:
+		return precedence3
+	case precedence4 != -1:
+		return precedence4
+	case precedence5 != -1:
+		return precedence5
+	case precedence6 != -1:
+		return precedence6
+	case precedence7 != -1:
+		return precedence7
 	default:
-		return precedence1
+		return precedence8
 	}
 }
 
@@ -1539,20 +1517,22 @@ func (ve *valueEvaluator) num() value {
 		strings.ContainsAny(ve.tok.Kind, "eE") {
 		v.ast.Type.Id = jntype.F64
 		v.ast.Type.Val = tokens.F64
-		ve.model.appendSubNode(exprNode{ve.tok.Kind})
 	} else {
-		v.ast.Type.Id = jntype.Int
-		v.ast.Type.Val = tokens.INT
-		bit := jnbits.BitsizeType(jntype.Int)
-		ok := jnbits.CheckBitInt(ve.tok.Kind, bit)
-		if !ok && bit < jnbits.MaxInt {
+		intbit := jnbits.BitsizeType(jntype.Int)
+		switch {
+		case jnbits.CheckBitInt(ve.tok.Kind, intbit):
+			v.ast.Type.Id = jntype.Int
+			v.ast.Type.Val = tokens.INT
+		case intbit < jnbits.MaxInt && jnbits.CheckBitInt(ve.tok.Kind, jnbits.MaxInt):
 			v.ast.Type.Id = jntype.I64
 			v.ast.Type.Val = tokens.I64
-			ve.model.appendSubNode(exprNode{ve.tok.Kind})
-		} else {
-			ve.model.appendSubNode(exprNode{"int_jnt{" + ve.tok.Kind + "}"})
+		default:
+			v.ast.Type.Id = jntype.U64
+			v.ast.Type.Val = tokens.U64
 		}
 	}
+	node := exprNode{jntype.CxxTypeIdFromType(v.ast.Type.Id) + "{" + ve.tok.Kind + "}"}
+	ve.model.appendSubNode(node)
 	return v
 }
 
@@ -2089,53 +2069,65 @@ func (p *Parser) evalHeapAllocExpr(toks Toks, m *exprModel) (v value) {
 	toks = toks[1:]
 	b := new(ast.Builder)
 	i := new(int)
-	exprToks := ast.IsFuncCall(toks)
 	var dt DataType
 	var ok bool
 	var alloc newHeapAllocExpr
-	if exprToks == nil {
+	funcExprToks := ast.IsFuncCall(toks)
+	if funcExprToks == nil {
 		dt, ok = b.DataType(toks, i, true)
-		dt, _ = p.realType(dt, true)
+		if !ok {
+			goto check
+		}
+		dt, ok = p.realType(dt, true)
+		if !ok {
+			goto check
+		}
 		alloc.typeAST = dt
-		m.appendSubNode(alloc)
 		if *i < len(toks)-1 {
 			p.pusherrtok(toks[*i+1], "invalid_syntax")
 		}
-	} else {
-		dt, ok = b.DataType(exprToks, i, true)
-		dt, _ = p.realType(dt, true)
-		alloc.typeAST = dt
-		if *i < len(exprToks)-1 {
-			p.pusherrtok(exprToks[*i+1], "invalid_syntax")
-		}
-		if dt.Id == jntype.Struct {
-			allocExpr := new(exprModel)
-			allocExpr.nodes = make([]exprBuildNode, 1)
-			alloc.expr.Model = allocExpr
-			m.appendSubNode(alloc)
-			dt = p.evalExprPart(toks, allocExpr).ast.Type
-		} else {
-			m.appendSubNode(alloc)
-			exprToks = toks[len(exprToks)+1 : len(toks)-1]
-			if len(exprToks) > 0 {
-				val, model := p.evalToks(exprToks)
-				alloc.expr.Model = model
-				p.wg.Add(1)
-				go assignChecker{
-					p:      p,
-					t:      dt,
-					v:      val,
-					errtok: exprToks[0],
-				}.checkAssignTypeAsync()
-			}
-		}
+		goto end
 	}
+	dt, ok = b.DataType(funcExprToks, i, true)
+	if !ok {
+		goto check
+	}
+	dt, ok = p.realType(dt, true)
+	if !ok {
+		goto check
+	}
+	alloc.typeAST = dt
+	if *i < len(funcExprToks)-1 {
+		p.pusherrtok(funcExprToks[*i+1], "invalid_syntax")
+	}
+	toks = toks[len(funcExprToks):]
+	if dt.Id == jntype.Struct {
+		allocExpr := new(exprModel)
+		allocExpr.nodes = make([]exprBuildNode, 1)
+		alloc.expr.Model = allocExpr
+		dt = p.evalExprPart(toks, allocExpr).ast.Type
+		goto end
+	}
+
+	if len(toks) > 0 {
+		val, model := p.evalToks(toks)
+		alloc.expr.Model = model
+		p.wg.Add(1)
+		go assignChecker{
+			p:      p,
+			t:      dt,
+			v:      val,
+			errtok: funcExprToks[0],
+		}.checkAssignTypeAsync()
+	}
+check:
+	if !ok {
+		p.pusherrtok(v.ast.Tok, "fail_build_heap_allocation_type", dt.Val)
+	}
+end:
 	dt.Val = tokens.STAR + dt.Val
 	v.ast.Type = dt
-	if !ok {
-		p.pusherrtok(toks[0], "fail_build_heap_allocation_type", dt.Val)
-		return
-	}
+	m.appendSubNode(alloc)
 	return
 }
 
@@ -3242,8 +3234,8 @@ func (p *Parser) parseFuncCall(
 }
 
 func (p *Parser) parseFuncCallToks(f *Func, genericsToks, argsToks Toks, m *exprModel) (v value) {
-	var generics []DataType = nil
-	var args *ast.Args = nil
+	var generics []DataType
+	var args *ast.Args
 	if f.FindAttribute(jn.Attribute_TypeParam) != nil {
 		if len(genericsToks) > 0 {
 			p.pusherrtok(genericsToks[0], "invalid_syntax")

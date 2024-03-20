@@ -1,0 +1,8 @@
+//doc:
+// report data type of given any type value
+// is the same as the generic type or not
+@inline
+type[T]
+pub any_is(const src any) bool {
+  //cxx: return @src.type_is<@T>();
+}

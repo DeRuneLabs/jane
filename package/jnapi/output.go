@@ -3,6 +3,7 @@ package jnapi
 var CxxMain = `// region JN_ENTRY_POINT
 int main(void) {
   std::set_terminate(&jn_terminate_handler);
+  std::cout << std::boolalpha;
 #ifdef _WINDOWS
   SetConsoleOutputCP(CP_UTF8);
   _setmode(_fileno(stdin), 0x00020000);
@@ -435,7 +436,7 @@ static inline _Alloc_t *jnalloc()
 
 template<typename _Alloc_t>
 static inline _Alloc_t *jnalloc(_Alloc_t _Init)
-{ return new(std::nothrow) _Alloc_t(_Init); }
+{ return new(std::nothrow) _Alloc_t{_Init}; }
 
 template <typename _Enum_t, typename _Index_t, typename _Item_t>
 static inline void foreach(const _Enum_t _Enum,

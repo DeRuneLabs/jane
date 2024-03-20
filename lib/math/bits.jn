@@ -1,0 +1,37 @@
+const nannumber:u64 = 0x7FF8000000000001
+const uvinf:u64 = 0x7FF0000000000000
+const uvneginf:u64 = 0xFFF0000000000000
+
+//doc: return IEEE 754 `not-a-number` value
+@inline
+pub nan() f64 { ret f64_from-bits(nannumber) }
+
+//doc: report whether f is an IEEE 754 `not-a-number` value
+@inline
+pub isnan(const f f64) bool {
+  // IEEE 754 taht only NaNs satisfy f != f
+  // to avoid the floating-point hardware, could use
+  ret f != f
+}
+
+//doc: retur position infinity if sign, negative infinity if !sign
+pub inf(const sign bool) f64 {
+  if sign {
+    ret f64_from_bits(uvinf)
+  }
+  ret f64_from_bits(uvneginf)
+}
+
+//doc:
+// report whether f is an infinity, according to sign
+// If sign > 0, IsInf reports whether f is positive infinity.
+// If sign < 0, IsInf reports whether f is negative infinity.
+// If sign == 0, IsInf reports whether f is either infinity.
+@inline
+pub isinf(const f f64, const sign{0} int) bool {
+  // test for infinity by comparing against maximum float.
+	// to avoid the floating-point hardware, could use:
+	//    x: = f64_bits(f);
+	//	  ret sign >= 0 && x == uvinf || sign <= 0 && x == uvneginf;
+  ret sign >= 0 && f > f64.max || sign <= 0 && f < -f64.max
+}
