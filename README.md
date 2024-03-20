@@ -17,6 +17,20 @@ main() {
 }
 ```
 
+```py
+testing_integer_representation() {
+	println(13e+1)
+	println(3642)
+	println(0x0FDDA24)
+	println(05353)
+}
+
+main() {
+	println("integer representation")
+	testing_integer_representation()
+}
+```
+
 | name      | description                   |
 | --------- | ----------------------------- |
 | `ast`     | abstact syntax tree builder   |

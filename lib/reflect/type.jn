@@ -1,0 +1,8 @@
+//doc:
+// return the size of the data type in bytes
+@inline
+@type_param
+type[T]
+pub sizeof() size {
+  //cxx: return sizeof(@T);
+}

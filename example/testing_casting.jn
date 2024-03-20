@@ -1,12 +1,11 @@
 testing_casting_variable() {
-	(*i32)(200)
-	(*i32)(new i32)
-	(f32)(2000)
-	const ptr0: = new i32
+  _ = (*i32)(100)
+	_ = (i64)(new i32)
+	_ = (f32)(5000)
+  ptr0: = new i32
 	ptr1: = (*i32)(ptr0)
-	bytes: = ([]byte)("derunelabs")
-	println(bytes)
-	println((str)(bytes))
+	ptr1 = nil
+  println(ptr1)
 }
 
 main() {

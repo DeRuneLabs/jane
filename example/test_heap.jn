@@ -1,5 +1,3 @@
-type int32 i32
-
 heap_allocation() {
   number: = new *i32;
   *number = new i32;

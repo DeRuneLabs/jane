@@ -677,6 +677,7 @@ func (p *Parser) Enum(e Enum) {
 }
 
 func (p *Parser) pushField(s *jnstruct, f *Var, i int) {
+	p.parseNonGenericType(s.Ast.Generics, &f.Type)
 	for _, cf := range s.Ast.Fields {
 		if f == cf {
 			break
@@ -791,6 +792,19 @@ func (p *Parser) PushAttribute(attribute Attribute) {
 	p.attributes = append(p.attributes, attribute)
 }
 
+func genericsToCxx(generics []*GenericType) string {
+	if len(generics) == 0 {
+		return ""
+	}
+	var cxx strings.Builder
+	cxx.WriteString("template<")
+	for _, generic := range generics {
+		cxx.WriteString(generic.String())
+		cxx.WriteByte(',')
+	}
+	return cxx.String()[:cxx.Len()-1] + ">"
+}
+
 func (p *Parser) Statement(s ast.Statement) {
 	switch t := s.Val.(type) {
 	case Func:
@@ -800,6 +814,53 @@ func (p *Parser) Statement(s ast.Statement) {
 	default:
 		p.pusherrtok(s.Tok, "invalid_syntax")
 	}
+}
+
+func (p *Parser) parseFuncNonGenericType(generics []*GenericType, t *DataType) {
+	f := t.Tag.(*Func)
+	for i := range f.Params {
+		p.parseNonGenericType(generics, &f.Params[i].Type)
+	}
+	p.parseNonGenericType(generics, &f.RetType)
+}
+
+func (p *Parser) parseMultiNonGenericType(generics []*GenericType, t *DataType) {
+	types := t.Tag.([]DataType)
+	for i := range types {
+		mt := &types[i]
+		p.parseNonGenericType(generics, mt)
+	}
+}
+
+func (p *Parser) parseMapNonGenericType(generics []*GenericType, t *DataType) {
+	p.parseMultiNonGenericType(generics, t)
+}
+
+func (p *Parser) parseCommonNonGenericType(generics []*GenericType, t *DataType) {
+	if !typeIsGeneric(generics, *t) {
+		*t, _ = p.realType(*t, true)
+	}
+}
+
+func (p *Parser) parseNonGenericType(generics []*GenericType, t *DataType) {
+	switch {
+	case t.MultiTyped:
+		p.parseMultiNonGenericType(generics, t)
+	case typeIsFunc(*t):
+		p.parseFuncNonGenericType(generics, t)
+	case typeIsMap(*t):
+		p.parseMapNonGenericType(generics, t)
+	default:
+		p.parseCommonNonGenericType(generics, t)
+
+	}
+}
+
+func (p *Parser) parseTypesNonGenerics(f *function) {
+	for i := range f.Ast.Params {
+		p.parseNonGenericType(f.Ast.Generics, &f.Ast.Params[i].Type)
+	}
+	p.parseNonGenericType(f.Ast.Generics, &f.Ast.RetType)
 }
 
 func (p *Parser) Func(fast Func) {
@@ -2697,7 +2758,7 @@ func (p *Parser) parseField(s *jnstruct, f **Var, i int) {
 	if v.Type.Id == jntype.Struct && v.Type.Tag == s && typeIsSingle(v.Type) {
 		p.pusherrtok(v.Type.Tok, "invalid_type_source")
 	}
-	if v.Val.Toks != nil {
+	if len(v.Val.Toks) > 0 {
 		param.Default = v.Val
 	} else {
 		param.Default.Model = exprNode{defaultValueOfType(param.Type)}
@@ -2710,7 +2771,7 @@ func (p *Parser) structConstructorInstance(as jnstruct) *jnstruct {
 	s.Ast = as.Ast
 	s.constructor = new(Func)
 	*s.constructor = *as.constructor
-	s.constructor.RetType.Tag = &s
+	s.constructor.RetType.Tag = s
 	s.Defs = new(Defmap)
 	*s.Defs = *as.Defs
 	for i := range s.Ast.Fields {
@@ -2839,6 +2900,19 @@ func (p *Parser) evalEnumerableSelect(enumv, selectv value, errtok Tok) (v value
 	}
 	p.pusherrtok(errtok, "not_enumerable")
 	return
+}
+
+func typeIsGeneric(generics []*GenericType, t DataType) bool {
+	if t.Id != jntype.Id {
+		return false
+	}
+	id, _ := t.GetValId()
+	for _, generic := range generics {
+		if id == generic.Id {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Parser) evalArraySelect(arrv, selectv value, errtok Tok) value {
@@ -3096,7 +3170,6 @@ func (p *Parser) parseGenerics(f *Func, generics []DataType, m *exprModel, errTo
 	defer func() { p.blockTypes, p.blockVars = blockTypes, blockVars }()
 	p.pushGenerics(f.Generics, generics)
 	if isConstructor(f) {
-		p.readyConstructor(&f)
 		return true
 	}
 	p.reloadFuncTypes(f)
@@ -3142,14 +3215,11 @@ func (p *Parser) parseFuncCall(
 		if !p.parseGenerics(f, generics, m, errTok) {
 			return
 		}
-		v.ast.Type = f.RetType
-		v.ast.Type.Original = v.ast.Type
 	} else {
 		p.reloadFuncTypes(f)
-		v.ast.Type = f.RetType
-		v.ast.Type.Original = v.ast.Type
 	}
 	if isConstructor(f) {
+		p.readyConstructor(&f)
 		s := f.RetType.Tag.(*jnstruct)
 		s.SetGenerics(generics)
 		v.ast.Type.Val = s.dataTypeString()
@@ -3159,6 +3229,8 @@ func (p *Parser) parseFuncCall(
 		m.appendSubNode(exprNode{tokens.LPARENTHESES})
 		defer m.appendSubNode(exprNode{tokens.RPARENTHESES})
 	}
+	v.ast.Type = f.RetType
+	v.ast.Type.Original = v.ast.Type
 	if args == nil {
 		return
 	}
@@ -3206,8 +3278,12 @@ func (p *Parser) parseArgs(f *Func, args *ast.Args, m *exprModel, errTok Tok) {
 	pap.parse()
 }
 
+func hasExpr(expr Expr) bool {
+	return len(expr.Processes) > 0 || expr.Model != nil
+}
+
 func paramHasDefaultArg(param *Param) bool {
-	return len(param.Default.Processes) > 0 || param.Default.Model != nil
+	return hasExpr(param.Default)
 }
 
 type (

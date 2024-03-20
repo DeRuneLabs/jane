@@ -7,18 +7,6 @@ import (
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
-func genericsToCxx(generics []*GenericType) string {
-	if len(generics) == 0 {
-		return ""
-	}
-	var cxx strings.Builder
-	for _, generic := range generics {
-		cxx.WriteString(generic.String())
-		cxx.WriteByte(',')
-	}
-	return cxx.String()[:cxx.Len()-1] + ">"
-}
-
 func typeIsVoid(t DataType) bool {
 	return t.Id == jntype.Void && !t.MultiTyped
 }

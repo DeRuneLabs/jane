@@ -365,66 +365,66 @@ public:
 };
 
 struct any_jnt {
-private:
-    void *_expr{nullptr};
-    const char *_inf{nullptr};
-
-    void _delete(void) noexcept {
-        this->_inf = nullptr;
-        std::free(this->_expr);
-        this->_expr = nullptr;
-    }
 public:
-    any_jnt(const std::nullptr_t) noexcept {}
+  void *_expr{nil};
+  char *_inf{nil};
 
-    template<typename T>
-    any_jnt(const T &_Expr) noexcept {
-        this->_expr = (void*)(new(std::nothrow) T{_Expr});
-        this->_inf  = typeid(T).name();
+
+  template<typename T>
+  any_jnt(const T &_Expr) noexcept
+  { this->operator=(_Expr); }
+
+  ~any_jnt(void) noexcept
+  { this->_delete(); }
+
+  inline void _delete(void) noexcept {
+    this->_expr = nil;
+    this->_inf = nil;
+  }
+
+  template<typename T>
+  inline bool type_is(void) const noexcept {
+    if (!this->_expr) {
+      return std::is_same<std::nullptr_t, T>::value;
     }
+    return std::strcmp(this->_inf, typeid(T).name()) == 0;
+  }
 
-    ~any_jnt(void) noexcept
-    { this->_delete(); }
+  template<typename T>
+  void operator=(const T &_Expr) noexcept {
+      this->_delete();
+      this->_expr = (void*)&_Expr;
+      this->_inf  = (char*)(typeid(T).name());
+  }
 
-    template<typename T>
-    void operator=(const T &_Expr) noexcept {
-        this->_delete();
-        this->_expr = (void*)(new(std::nothrow) T{_Expr});
-        this->_inf  = typeid(T).name();
-    }
+  void operator=(const std::nullptr_t) noexcept
+  { this->_delete(); }
 
-    void operator=(const std::nullptr_t) noexcept
-    { this->_delete(); }
+  template<typename T>
+  operator T(void) const noexcept {
+    if (!this->_expr)
+    { JNID(panic)("casting failed because data is nil"); }
+    if (std::strcmp(this->_inf, typeid(T).name()) != 0)
+    { JNID(panic)("incompatible type"); }
+    return *(T*)(this->_expr);
+  }
 
-    template<typename T>
-    operator T(void) const noexcept {
-        if (!this->_expr)
-        { JNID(panic)("casting failed because data is nil"); }
-        if (std::strcmp(this->_inf, typeid(T).name()) != 0)
-        { JNID(panic)("incompatible type"); }
-        return *(T*)(this->_expr);
-   }
+  template<typename T>
+  inline bool operator==(const T &_Expr) const noexcept
+  { return this->type_is<T>() && *(T*)(this->_expr) == _Expr; }
 
-    template<typename T>
-    bool operator==(const T &_Expr) const noexcept {
-        if (!this->_expr)
-        { return std::is_same<std::nullptr_t, T>::value; }
-        if (std::strcmp(this->_inf, typeid(T).name()) != 0) { return false; }
-        return *(T*)(this->_expr) == _Expr;
-    }
+  template<typename T>
+  inline bool operator!=(const T &_Expr) const noexcept
+  { return !this->operator==(_Expr); }
 
-    template<typename T>
-    inline bool operator!=(const T &_Expr) const noexcept
-    { return !this->operator==(_Expr); }
+  inline bool operator==(const any_jnt &_Any) const noexcept
+  { return this->_expr == _Any._expr; }
 
-    bool operator==(const any_jnt &_Any) const noexcept
-    { return this->_expr == _Any._expr; }
+  inline bool operator!=(const any_jnt &_Any) const noexcept
+  { return !this->operator==(_Any); }
 
-    inline bool operator!=(const any_jnt &_Any) const noexcept
-    { return !this->operator==(_Any); }
-
-    friend std::ostream& operator<<(std::ostream &_Stream, const any_jnt &_Src)
-    { return _Stream << _Src._expr; }
+  friend std::ostream& operator<<(std::ostream &_Stream, const any_jnt &_Src)
+  { return _Stream << _Src._expr; }
 };
 // endregion JN_BUILTIN_TYPES
 
