@@ -1,0 +1,6 @@
+//doc:
+// report whether n is netgative or negative zero
+@inline
+pub signbit(const n f64) bool {
+  ret f64_bits(x)&(1<<63) != 0
+}

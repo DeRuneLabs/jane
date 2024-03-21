@@ -1,26 +1,24 @@
 //doc:
-// IEEE 754 binary representation of f
-// with the sign bit of f and resulting in the same bit pos.
-// f32_bit(f32_from_bits(x)) == x
+// return IEEE 754 binary representation of f
+// with the sign of f and result in the same bit position
 @inline
-pub f32_bit(const f f32) { ret *(*u32)((voidptr)(&f)) }
+pub f32_bits(const f f32) u32 { ret *(*u32)((voidptr)(&f)) }
 
 //doc:
-// return the float number corresponding
-// to the IEEE 754 binary representation b, with the sign bit of b
-// and the result in the same bit position
+// return the floating number corresponding
+// to IEEE 754 binary representation b, with the sign bit of b
 @inline
-f32_from_bit(const b u32) f32 { ret *(*f32)((voidptr)(&b)) }
+pub f32_from_bits(const b u32) f32 { ret *(*f32)((voidptr)(&b)) }
 
 //doc:
-// return the IEEE 754 binary representation of f
-// with the sign bit of f and the result in the same bit position
+// return IEEE 754 binary representation of f, with the sign
+// bit of f and result in the same bit position
 @inline
-pub f64_bit(const f f64) u64 { ret *(*u64)((voidptr)(&f)) }
+pub f64_bits(const f f64) u64 { ret *(*u64)((voidptr)(&f)) }
 
 //doc:
-// return the float number corresponding
-// the IEEE 754 binary representation b, with the sign bit of b
-// and result in the same bit position
+// return the float number corresponding to the IEEE 754
+// binary representation b, with the sign bit of b
+// and resilt in the same bit position
 @inline
-pub f64_from_bit(const b u64) f64 { ret *(*f64)((voidptr)(&b)) }
+pub f64_from_bits(const b u64) f64 { ret *(*f64)((voidptr)(&b)) }

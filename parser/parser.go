@@ -1317,11 +1317,15 @@ func (p *Parser) evalNonLogicProcesses(processes []Toks) (v value, e iExpr) {
 	left := processes[:m.index]
 	leftV, leftExpr := p.evalProcesses(left)
 	m.index--
+	m.appendSubNode(exprNode{tokens.LPARENTHESES})
 	m.appendSubNode(leftExpr)
+	m.appendSubNode(exprNode{tokens.RPARENTHESES})
 	m.index += 2
 	right := processes[m.index:]
 	rightV, rightExpr := p.evalProcesses(right)
+	m.appendSubNode(exprNode{tokens.LPARENTHESES})
 	m.appendSubNode(rightExpr)
+	m.appendSubNode(exprNode{tokens.RPARENTHESES})
 	process.leftVal = leftV.ast
 	process.rightVal = rightV.ast
 	v.ast = process.solve()
@@ -2504,7 +2508,8 @@ func (p *Parser) evalTryCastExpr(toks Toks, m *exprModel) (v value, _ bool) {
 		}
 		m.appendSubNode(exprNode{tokens.LPARENTHESES + dt.String() + tokens.RPARENTHESES})
 		m.appendSubNode(exprNode{tokens.LPARENTHESES})
-		val := p.evalExprPart(exprToks, m)
+		val, model := p.evalToks(exprToks)
+		m.appendSubNode(model)
 		m.appendSubNode(exprNode{tokens.RPARENTHESES})
 		val = p.evalCast(val, dt, errTok)
 		return val, true
@@ -4074,15 +4079,13 @@ func (p *Parser) checkVarStatement(v *Var, noParse bool) {
 func (p *Parser) checkDeferStatement(d *ast.Defer) {
 	m := new(exprModel)
 	m.nodes = make([]exprBuildNode, 1)
-	_ = p.evalExprPart(d.Expr.Toks, m)
-	d.Expr.Model = m
+	_, d.Expr.Model = p.evalExpr(d.Expr)
 }
 
 func (p *Parser) checkConcurrentCallStatement(cc *ast.ConcurrentCall) {
 	m := new(exprModel)
 	m.nodes = make([]exprBuildNode, 1)
-	_ = p.evalExprPart(cc.Expr.Toks, m)
-	cc.Expr.Model = m
+	_, cc.Expr.Model = p.evalExpr(cc.Expr)
 }
 
 func (p *Parser) checkAssignment(selected value, errtok Tok) bool {
