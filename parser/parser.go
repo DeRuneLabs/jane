@@ -1161,7 +1161,10 @@ func (p *Parser) WaitingGlobals() {
 }
 
 func (p *Parser) checkParamDefaultExpr(f *Func, param *Param) {
-	if !paramHasDefaultArg(param) || param.Tok.Id == tokens.NA {
+	if (!paramHasDefaultArg(param)) || param.Tok.Id == tokens.NA {
+		return
+	}
+	if param.Default.Model != nil && param.Default.Model.String() == "{}" {
 		return
 	}
 	dt := param.Type
@@ -2670,7 +2673,6 @@ func (p *Parser) getDataTypeFunc(expr, callRange Toks, m *exprModel) (v value, i
 		m.appendSubNode(exprNode{"tostr"})
 		v.ast.Type = DataType{Id: jntype.Func, Val: "()", Tag: strDefaultFunc}
 	default:
-		isret = true
 		toks := append([]lexer.Tok{{
 			Id:   tokens.Brace,
 			Kind: tokens.LPARENTHESES,
@@ -2682,7 +2684,7 @@ func (p *Parser) getDataTypeFunc(expr, callRange Toks, m *exprModel) (v value, i
 			File: tok.File,
 		})
 		toks = append(toks, callRange...)
-		v, _ = p.evalTryCastExpr(toks, m)
+		v, isret = p.evalTryCastExpr(toks, m)
 	}
 	return
 }
@@ -2711,11 +2713,12 @@ func (p *Parser) evalParenthesesRangeExpr(toks Toks, m *exprModel) (v value) {
 		exprToks, genericsToks = ast.GetRangeLast(exprToks)
 	}
 	switch tok := exprToks[0]; tok.Id {
-	case tokens.DataType:
+	case tokens.DataType, tokens.Id:
 		v, isret := p.getDataTypeFunc(exprToks, rangeExpr, m)
 		if isret {
 			return v
 		}
+		fallthrough
 	default:
 		v = p.evalExprPart(exprToks, m)
 	}
@@ -4209,7 +4212,9 @@ func (p *Parser) checkAssign(assign *ast.Assign) {
 		return
 	}
 	if valueLength == 1 {
-		firstVal, _ := p.evalExpr(assign.ValueExprs[0])
+		expr := &assign.ValueExprs[0]
+		firstVal, model := p.evalExpr(*expr)
+		expr.Model = model
 		if firstVal.ast.Type.MultiTyped {
 			assign.MultipleRet = true
 			p.processFuncMultiAssign(assign, firstVal)

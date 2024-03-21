@@ -745,6 +745,8 @@ func (b *Builder) paramBodyDefaultExpr(p *Param, toks *Toks) {
 		*toks = (*toks)[i+1:]
 		if len(exprToks) > 0 {
 			p.Default = b.Expr(exprToks)
+		} else {
+			p.Default.Model = exprNode{"{}"}
 		}
 		break
 	}

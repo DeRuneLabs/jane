@@ -12,6 +12,12 @@ import (
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
+type exprNode struct{ expr string }
+
+func (en exprNode) String() string {
+	return en.expr
+}
+
 type Genericable interface {
 	Generics() []DataType
 	SetGenerics([]DataType)
