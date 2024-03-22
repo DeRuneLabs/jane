@@ -291,6 +291,43 @@ func (t Type) String() string {
 	return cxx.String()
 }
 
+type RetType struct {
+	Type        DataType
+	Identifiers Toks
+}
+
+func (rt RetType) String() string {
+	return rt.Type.String()
+}
+
+func (rt *RetType) AnyVar() bool {
+	for _, tok := range rt.Identifiers {
+		if !jnapi.IsIgnoreId(tok.Kind) {
+			return true
+		}
+	}
+	return false
+}
+
+func (rt *RetType) Vars() []*Var {
+	if !rt.Type.MultiTyped {
+		return nil
+	}
+	types := rt.Type.Tag.([]DataType)
+	var vars []*Var
+	for i, tok := range rt.Identifiers {
+		if jnapi.IsIgnoreId(tok.Kind) {
+			continue
+		}
+		variable := new(Var)
+		variable.IdTok = tok
+		variable.Id = tok.Kind
+		variable.Type = types[i]
+		vars = append(vars, variable)
+	}
+	return vars
+}
+
 type Func struct {
 	Pub        bool
 	Tok        Tok
@@ -299,7 +336,7 @@ type Func struct {
 	Combines   [][]DataType
 	Attributes []Attribute
 	Params     []Param
-	RetType    DataType
+	RetType    RetType
 	Block      Block
 }
 
@@ -329,8 +366,8 @@ func (f *Func) DataTypeString() string {
 		cxx.WriteString(cxxStr)
 	}
 	cxx.WriteByte(')')
-	if f.RetType.Id != jntype.Void {
-		cxx.WriteString(f.RetType.Val)
+	if f.RetType.Type.Id != jntype.Void {
+		cxx.WriteString(f.RetType.Type.Val)
 	}
 	return cxx.String()
 }
@@ -638,19 +675,6 @@ func (a Assign) String() string {
 	if !a.IsExpr {
 		cxx.WriteByte(';')
 	}
-	return cxx.String()
-}
-
-type Free struct {
-	Tok  Tok
-	Expr Expr
-}
-
-func (f Free) String() string {
-	var cxx strings.Builder
-	cxx.WriteString("delete ")
-	cxx.WriteString(f.Expr.String())
-	cxx.WriteByte(';')
 	return cxx.String()
 }
 

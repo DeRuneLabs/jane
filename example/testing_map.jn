@@ -1,5 +1,5 @@
 test_mapping() {
-	map: = [i32:str]{
+	map: = [int:str]{
 	    0: "khaira nabilla",
 	    1: "are",
 	    2: "awesome",

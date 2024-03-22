@@ -37,6 +37,7 @@ type (
 	Enum        = ast.Enum
 	Struct      = ast.Struct
 	GenericType = ast.GenericType
+	RetType     = ast.RetType
 )
 
 type use struct {
@@ -688,7 +689,7 @@ func (p *Parser) pushField(s *jnstruct, f *Var, i int) {
 		}
 	}
 	param := ast.Param{Id: f.Id, Type: f.Type}
-	param.Default.Model = exprNode{"{}"}
+	param.Default.Model = exprNode{jnapi.DefaultExpr}
 	s.constructor.Params[i] = param
 }
 
@@ -696,7 +697,7 @@ func (p *Parser) processFields(s *jnstruct) {
 	s.constructor = new(Func)
 	s.constructor.Id = s.Ast.Id
 	s.constructor.Params = make([]ast.Param, len(s.Ast.Fields))
-	s.constructor.RetType = DataType{Id: jntype.Struct, Val: s.Ast.Id, Tok: s.Ast.Tok, Tag: s}
+	s.constructor.RetType.Type = DataType{Id: jntype.Struct, Val: s.Ast.Id, Tok: s.Ast.Tok, Tag: s}
 	s.constructor.Generics = make([]*ast.GenericType, len(s.Ast.Generics))
 	for i, generic := range s.Ast.Generics {
 		ng := new(ast.GenericType)
@@ -821,7 +822,7 @@ func (p *Parser) parseFuncNonGenericType(generics []*GenericType, t *DataType) {
 	for i := range f.Params {
 		p.parseNonGenericType(generics, &f.Params[i].Type)
 	}
-	p.parseNonGenericType(generics, &f.RetType)
+	p.parseNonGenericType(generics, &f.RetType.Type)
 }
 
 func (p *Parser) parseMultiNonGenericType(generics []*GenericType, t *DataType) {
@@ -860,7 +861,37 @@ func (p *Parser) parseTypesNonGenerics(f *function) {
 	for i := range f.Ast.Params {
 		p.parseNonGenericType(f.Ast.Generics, &f.Ast.Params[i].Type)
 	}
-	p.parseNonGenericType(f.Ast.Generics, &f.Ast.RetType)
+	p.parseNonGenericType(f.Ast.Generics, &f.Ast.RetType.Type)
+}
+
+func (p *Parser) checkRetVars(f *function) {
+	for i, v := range f.Ast.RetType.Identifiers {
+		if jnapi.IsIgnoreId(v.Kind) {
+			continue
+		}
+		for _, generic := range f.Ast.Generics {
+			if v.Kind == generic.Id {
+				goto exist
+			}
+		}
+		for _, param := range f.Ast.Params {
+			if v.Kind == param.Id {
+				goto exist
+			}
+		}
+		for j, jv := range f.Ast.RetType.Identifiers {
+			if j >= i {
+				break
+			}
+			if jv.Kind == v.Kind {
+				goto exist
+			}
+		}
+		continue
+	exist:
+		p.pusherrtok(v, "exist_id", v.Kind)
+
+	}
 }
 
 func (p *Parser) Func(fast Func) {
@@ -878,6 +909,7 @@ func (p *Parser) Func(fast Func) {
 	p.docText.Reset()
 	f.Ast.Generics = p.generics
 	p.generics = nil
+	p.checkRetVars(f)
 	p.checkFuncAttributes(f)
 	p.Defs.Funcs = append(p.Defs.Funcs, f)
 }
@@ -1164,7 +1196,7 @@ func (p *Parser) checkParamDefaultExpr(f *Func, param *Param) {
 	if (!paramHasDefaultArg(param)) || param.Tok.Id == tokens.NA {
 		return
 	}
-	if param.Default.Model != nil && param.Default.Model.String() == "{}" {
+	if param.Default.Model != nil && param.Default.Model.String() == jnapi.DefaultExpr {
 		return
 	}
 	dt := param.Type
@@ -1207,9 +1239,15 @@ func (p *Parser) params(f *Func) {
 	}
 }
 
+func (p *Parser) blockVarsOfFunc(f *Func) []*Var {
+	vars := p.varsFromParams(f.Params)
+	vars = append(vars, f.RetType.Vars()...)
+	return vars
+}
+
 func (p *Parser) parseFunc(f *Func) {
 	p.params(f)
-	p.blockVars = p.varsFromParams(f.Params)
+	p.blockVars = p.blockVarsOfFunc(f)
 	p.checkFunc(f)
 	p.blockTypes = nil
 	p.blockVars = nil
@@ -2066,78 +2104,6 @@ func canGetPtr(v value) bool {
 	}
 }
 
-func (p *Parser) evalHeapAllocExpr(toks Toks, m *exprModel) (v value) {
-	if len(toks) == 1 {
-		p.pusherrtok(toks[0], "invalid_syntax_keyword_new")
-		return
-	}
-	v.lvalue = true
-	v.ast.Tok = toks[0]
-	toks = toks[1:]
-	b := new(ast.Builder)
-	i := new(int)
-	var dt DataType
-	var ok bool
-	var alloc newHeapAllocExpr
-	funcExprToks := ast.IsFuncCall(toks)
-	if funcExprToks == nil {
-		dt, ok = b.DataType(toks, i, true)
-		if !ok {
-			goto check
-		}
-		dt, ok = p.realType(dt, true)
-		if !ok {
-			goto check
-		}
-		alloc.typeAST = dt
-		if *i < len(toks)-1 {
-			p.pusherrtok(toks[*i+1], "invalid_syntax")
-		}
-		goto end
-	}
-	dt, ok = b.DataType(funcExprToks, i, true)
-	if !ok {
-		goto check
-	}
-	dt, ok = p.realType(dt, true)
-	if !ok {
-		goto check
-	}
-	alloc.typeAST = dt
-	if *i < len(funcExprToks)-1 {
-		p.pusherrtok(funcExprToks[*i+1], "invalid_syntax")
-	}
-	toks = toks[len(funcExprToks):]
-	if dt.Id == jntype.Struct {
-		allocExpr := new(exprModel)
-		allocExpr.nodes = make([]exprBuildNode, 1)
-		alloc.expr.Model = allocExpr
-		dt = p.evalExprPart(toks, allocExpr).ast.Type
-		goto end
-	}
-
-	if len(toks) > 0 {
-		val, model := p.evalToks(toks)
-		alloc.expr.Model = model
-		p.wg.Add(1)
-		go assignChecker{
-			p:      p,
-			t:      dt,
-			v:      val,
-			errtok: funcExprToks[0],
-		}.checkAssignTypeAsync()
-	}
-check:
-	if !ok {
-		p.pusherrtok(v.ast.Tok, "fail_build_heap_allocation_type", dt.Val)
-	}
-end:
-	dt.Val = tokens.STAR + dt.Val
-	v.ast.Type = dt
-	m.appendSubNode(alloc)
-	return
-}
-
 func (p *Parser) evalExprPart(toks Toks, m *exprModel) (v value) {
 	defer func() {
 		if v.ast.Type.Id == jntype.Void {
@@ -2152,8 +2118,6 @@ func (p *Parser) evalExprPart(toks Toks, m *exprModel) (v value) {
 	switch tok.Id {
 	case tokens.Operator:
 		return p.evalUnaryExprPart(toks, m)
-	case tokens.New:
-		return p.evalHeapAllocExpr(toks, m)
 	case tokens.Brace:
 		switch tok.Kind {
 		case tokens.LPARENTHESES:
@@ -2771,7 +2735,7 @@ func (p *Parser) structConstructorInstance(as jnstruct) *jnstruct {
 	s.Ast = as.Ast
 	s.constructor = new(Func)
 	*s.constructor = *as.constructor
-	s.constructor.RetType.Tag = s
+	s.constructor.RetType.Type.Tag = s
 	s.Defs = new(Defmap)
 	*s.Defs = *as.Defs
 	for i := range s.Ast.Fields {
@@ -3138,7 +3102,7 @@ func (p *Parser) reloadFuncTypes(f *Func) {
 	for i, param := range f.Params {
 		f.Params[i].Type, _ = p.realType(param.Type, true)
 	}
-	f.RetType, _ = p.realType(f.RetType, true)
+	f.RetType.Type, _ = p.realType(f.RetType.Type, true)
 }
 
 func itsCombined(f *Func, generics []DataType) bool {
@@ -3187,15 +3151,15 @@ func (p *Parser) parseGenerics(f *Func, generics []DataType, m *exprModel, errTo
 }
 
 func isConstructor(f *Func) bool {
-	if f.RetType.Id != jntype.Struct {
+	if f.RetType.Type.Id != jntype.Struct {
 		return false
 	}
-	s := f.RetType.Tag.(*jnstruct)
+	s := f.RetType.Type.Tag.(*jnstruct)
 	return f.Id == s.Ast.Id
 }
 
 func (p *Parser) readyConstructor(f **Func) {
-	s := (*f).RetType.Tag.(*jnstruct)
+	s := (*f).RetType.Type.Tag.(*jnstruct)
 	s = p.structConstructorInstance(*s)
 	*f = s.constructor
 }
@@ -3220,7 +3184,7 @@ func (p *Parser) parseFuncCall(
 	}
 	if isConstructor(f) {
 		p.readyConstructor(&f)
-		s := f.RetType.Tag.(*jnstruct)
+		s := f.RetType.Type.Tag.(*jnstruct)
 		s.SetGenerics(generics)
 		v.ast.Type.Val = s.dataTypeString()
 		m.appendSubNode(exprNode{tokens.LBRACE})
@@ -3229,7 +3193,7 @@ func (p *Parser) parseFuncCall(
 		m.appendSubNode(exprNode{tokens.LPARENTHESES})
 		defer m.appendSubNode(exprNode{tokens.RPARENTHESES})
 	}
-	v.ast.Type = f.RetType
+	v.ast.Type = f.RetType.Type
 	v.ast.Type.Original = v.ast.Type
 	if args == nil {
 		return
@@ -3602,8 +3566,8 @@ func (p *Parser) checkEntryPointSpecialCases(fun *function) {
 	if len(fun.Ast.Params) > 0 {
 		p.pusherrtok(fun.Ast.Tok, "entrypoint_have_parameters")
 	}
-	if fun.Ast.RetType.Id != jntype.Void {
-		p.pusherrtok(fun.Ast.RetType.Tok, "entrypoint_have_return")
+	if fun.Ast.RetType.Type.Id != jntype.Void {
+		p.pusherrtok(fun.Ast.RetType.Type.Tok, "entrypoint_have_return")
 	}
 	if fun.Ast.Attributes != nil {
 		p.pusherrtok(fun.Ast.Tok, "entrypoint_have_attributes")
@@ -3665,9 +3629,6 @@ func (p *Parser) checkBlock(b *ast.Block) {
 			model.Val = t
 		case ast.Assign:
 			p.checkAssign(&t)
-			model.Val = t
-		case ast.Free:
-			p.checkFreeStatement(&t)
 			model.Val = t
 		case ast.Iter:
 			p.checkIterExpr(&t)
@@ -3760,9 +3721,9 @@ func (p *Parser) checkEmbedReturn(cxx string, errTok Tok) {
 		cxx = cxx[:len(cxx)-1]
 	}
 	f := p.rootBlock.Func
-	if len(cxx) == 0 && !typeIsVoid(f.RetType) {
+	if len(cxx) == 0 && !typeIsVoid(f.RetType.Type) {
 		p.pusherrtok(errTok, "require_return_value")
-	} else if len(cxx) > 0 && typeIsVoid(f.RetType) {
+	} else if len(cxx) > 0 && typeIsVoid(f.RetType.Type) {
 		p.pusherrtok(errTok, "void_function_return_value")
 	}
 }
@@ -3953,14 +3914,14 @@ func (rc *retChecker) checkepxrs() {
 			rc.pushval(last, length, rc.retAST.Expr.Toks[last-1])
 		}
 	}
-	if !typeIsVoid(rc.f.RetType) {
+	if !typeIsVoid(rc.f.RetType.Type) {
 		rc.checkExprTypes()
 	}
 }
 
 func (rc *retChecker) checkExprTypes() {
 	valLength := len(rc.values)
-	if !rc.f.RetType.MultiTyped {
+	if !rc.f.RetType.Type.MultiTyped {
 		rc.retAST.Expr.Model = rc.expModel.models[0]
 		if valLength > 1 {
 			rc.p.pusherrtok(rc.retAST.Tok, "overflow_return")
@@ -3969,7 +3930,7 @@ func (rc *retChecker) checkExprTypes() {
 		go assignChecker{
 			p:         rc.p,
 			constant:  false,
-			t:         rc.f.RetType,
+			t:         rc.f.RetType.Type,
 			v:         rc.values[0],
 			ignoreAny: false,
 			errtok:    rc.retAST.Tok,
@@ -3977,7 +3938,7 @@ func (rc *retChecker) checkExprTypes() {
 		return
 	}
 	rc.retAST.Expr.Model = rc.expModel
-	types := rc.f.RetType.Tag.([]DataType)
+	types := rc.f.RetType.Type.Tag.([]DataType)
 	if valLength == 1 {
 		rc.checkMultiRetAsMutliRet()
 		return
@@ -4007,7 +3968,7 @@ func (rc *retChecker) checkMultiRetAsMutliRet() {
 		return
 	}
 	valTypes := val.ast.Type.Tag.([]DataType)
-	retTypes := rc.f.RetType.Tag.([]DataType)
+	retTypes := rc.f.RetType.Type.Tag.([]DataType)
 	if len(valTypes) < len(retTypes) {
 		rc.p.pusherrtok(rc.retAST.Tok, "missing_multi_return")
 		return
@@ -4031,13 +3992,44 @@ func (rc *retChecker) checkMultiRetAsMutliRet() {
 	}
 }
 
-func (rc *retChecker) check() {
-	exprToksLen := len(rc.retAST.Expr.Toks)
-	if exprToksLen == 0 && !typeIsVoid(rc.f.RetType) {
-		rc.p.pusherrtok(rc.retAST.Tok, "require_return_value")
+func (rc *retChecker) retsVars() {
+	if !rc.f.RetType.Type.MultiTyped {
+		for _, v := range rc.f.RetType.Identifiers {
+			if !jnapi.IsIgnoreId(v.Kind) {
+				rc.retAST.Expr.Model = exprNode{v.Kind}
+				break
+			}
+		}
 		return
 	}
-	if exprToksLen > 0 && typeIsVoid(rc.f.RetType) {
+	types := rc.f.RetType.Type.Tag.([]DataType)
+	for i, v := range rc.f.RetType.Identifiers {
+		if jnapi.IsIgnoreId(v.Kind) {
+			node := exprNode{}
+			node.value = types[i].String()
+			node.value += jnapi.DefaultExpr
+			rc.expModel.models = append(rc.expModel.models, node)
+			continue
+		}
+		model := new(exprModel)
+		model.index = 0
+		model.nodes = make([]exprBuildNode, 1)
+		_, _ = rc.p.evalSingleExpr(v, model)
+		rc.expModel.models = append(rc.expModel.models, model)
+	}
+	rc.retAST.Expr.Model = rc.expModel
+}
+
+func (rc *retChecker) check() {
+	exprToksLen := len(rc.retAST.Expr.Toks)
+	if exprToksLen == 0 && !typeIsVoid(rc.f.RetType.Type) {
+		if !rc.f.RetType.AnyVar() {
+			rc.p.pusherrtok(rc.retAST.Tok, "require_return_value")
+		}
+		rc.retsVars()
+		return
+	}
+	if exprToksLen > 0 && typeIsVoid(rc.f.RetType.Type) {
 		rc.p.pusherrtok(rc.retAST.Tok, "void_function_return_value")
 	}
 	rc.checkepxrs()
@@ -4055,7 +4047,7 @@ func (p *Parser) checkRets(f *Func) {
 			}
 		}
 	}
-	if !typeIsVoid(f.RetType) {
+	if !typeIsVoid(f.RetType.Type) {
 		p.pusherrtok(f.Tok, "missing_ret")
 	}
 }
@@ -4230,14 +4222,6 @@ func (p *Parser) checkAssign(assign *ast.Assign) {
 		return
 	}
 	p.processMultiAssign(assign, p.assignExprs(assign))
-}
-
-func (p *Parser) checkFreeStatement(freeAST *ast.Free) {
-	val, model := p.evalExpr(freeAST.Expr)
-	freeAST.Expr.Model = model
-	if !typeIsPtr(val.ast.Type) {
-		p.pusherrtok(freeAST.Tok, "free_nonpointer")
-	}
 }
 
 func (p *Parser) checkWhileProfile(iter *ast.Iter) {

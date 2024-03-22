@@ -1,0 +1,3 @@
+package jnapi
+
+const DefaultExpr = "{}"

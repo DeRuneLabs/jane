@@ -1,11 +1,8 @@
 testing_casting_variable() {
   _ = (*i32)(100)
-	_ = (i64)(new i32)
 	_ = (f32)(5000)
-  ptr0: = new i32
-	ptr1: = (*i32)(ptr0)
-	ptr1 = nil
-  println(ptr1)
+	println("welcome")
+	println((str)("wassup folks"))
 }
 
 main() {

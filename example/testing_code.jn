@@ -1,0 +1,5 @@
+test_ret_vars() [x int] { ret }
+
+main() {
+  println("testing return vars")
+}

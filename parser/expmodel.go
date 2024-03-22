@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/DeRuneLabs/jane/ast"
-	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
 type iExpr interface {
@@ -142,15 +141,6 @@ func (mre multiRetExpr) String() string {
 		cxx.WriteByte(',')
 	}
 	return cxx.String()[:cxx.Len()-1] + ")"
-}
-
-type newHeapAllocExpr struct {
-	typeAST DataType
-	expr    Expr
-}
-
-func (nha newHeapAllocExpr) String() string {
-	return jnapi.ToJnAlloc(nha.typeAST.String(), nha.expr.String())
 }
 
 type assignExpr struct {
