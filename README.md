@@ -31,6 +31,20 @@ main() {
 }
 ```
 
+## feature of jn
+
+- simple
+- efficient performance as C/C++
+- deffered call
+- language intergrated concurrency
+- generic programming
+- C/C++ embed
+- return type identifier
+- multiple assignment
+- multiple function return
+- type constant
+- argument targettting
+
 | name      | description                   |
 | --------- | ----------------------------- |
 | `ast`     | abstact syntax tree builder   |

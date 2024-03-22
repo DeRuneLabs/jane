@@ -5,7 +5,7 @@ testing_multipe_return_as_argument() {
         println(c)
     }
     multiret: = () [i32, str, rune] {
-        < 120, "STR", 'A'
+        120, "STR", 'A'
     }
     test(multiret())
 }

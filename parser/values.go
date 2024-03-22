@@ -7,24 +7,24 @@ import (
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
-func isstr(value string) bool {
-	return value[0] == '"' || israwstr(value)
+func isstr(s string) bool {
+	return s[0] == '"' || israwstr(s)
 }
 
-func israwstr(value string) bool {
-	return value[0] == '`'
+func israwstr(s string) bool {
+	return s != "" && s[0] == '`'
 }
 
-func ischar(value string) bool {
-	return value[0] == '\''
+func ischar(s string) bool {
+	return s != "" && s[0] == '\''
 }
 
-func isnil(value string) bool {
-	return value == tokens.NIL
+func isnil(s string) bool {
+	return s == tokens.NIL
 }
 
-func isbool(value string) bool {
-	return value == tokens.TRUE || value == tokens.FALSE
+func isbool(s string) bool {
+	return s == tokens.TRUE || s == tokens.FALSE
 }
 
 func isBoolExpr(val value) bool {

@@ -314,8 +314,8 @@ func (b *Builder) Preprocessor(toks Toks) {
 	}
 	ok := false
 	switch tok.Kind {
-	case "pragma":
-		ok = b.Pragma(&pp, toks)
+	case jn.PreprocessorDirective:
+		ok = b.PreprocessorDirective(&pp, toks)
 	default:
 		b.pusherr(tok, "invalid_preprocessor")
 		return
@@ -325,7 +325,7 @@ func (b *Builder) Preprocessor(toks Toks) {
 	}
 }
 
-func (b *Builder) Pragma(pp *Preprocessor, toks Toks) bool {
+func (b *Builder) PreprocessorDirective(pp *Preprocessor, toks Toks) bool {
 	if len(toks) == 1 {
 		b.pusherr(toks[0], "missing_pragma_directive")
 		return false
@@ -339,8 +339,8 @@ func (b *Builder) Pragma(pp *Preprocessor, toks Toks) bool {
 	var d Directive
 	ok := false
 	switch tok.Kind {
-	case "enofi":
-		ok = b.pragmaEnofi(&d, toks)
+	case jn.PreprocessorDirectiveEnofi:
+		ok = b.directiveEnofi(&d, toks)
 	default:
 		b.pusherr(tok, "invalid_pragma_directive")
 	}
@@ -348,7 +348,7 @@ func (b *Builder) Pragma(pp *Preprocessor, toks Toks) bool {
 	return ok
 }
 
-func (b *Builder) pragmaEnofi(d *Directive, toks Toks) bool {
+func (b *Builder) directiveEnofi(d *Directive, toks Toks) bool {
 	if len(toks) > 1 {
 		b.pusherr(toks[1], "invalid_syntax")
 		return false
@@ -2115,7 +2115,7 @@ func (b *Builder) ContinueStatement(toks Toks) Statement {
 }
 
 func (b *Builder) Expr(toks Toks) (e Expr) {
-	e.Processes = b.getExprProcesses(toks)
+	e.Processes = b.exprProcess(toks)
 	e.Toks = toks
 	return
 }
@@ -2214,7 +2214,7 @@ func (b *Builder) exprBracePart(info *exprProcessInfo, tok Tok) bool {
 	return false
 }
 
-func (b *Builder) getExprProcesses(toks Toks) []Toks {
+func (b *Builder) exprProcess(toks Toks) []Toks {
 	var info exprProcessInfo
 	info.toks = toks
 	for ; info.i < len(info.toks); info.i++ {

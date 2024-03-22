@@ -1,0 +1,16 @@
+//doc:
+// return pointer to new allocation of data type
+// if allocation are success, nil of not allocate
+@inline
+@type_param
+type[T]
+pub mew() *T {
+  //cxx: return new(std::nothrow) @T;
+}
+
+//doc:
+// deallocate given heap allocation pointer
+@inline
+pub free(ptr voidptr) {
+  //cxx: std::free(@ptr);
+}

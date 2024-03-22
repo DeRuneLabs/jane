@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/DeRuneLabs/jane/ast"
@@ -153,4 +154,16 @@ func (a assignExpr) String() string {
 	cxx.WriteString(a.assign.String())
 	cxx.WriteByte(')')
 	return cxx.String()
+}
+
+type serieExpr struct {
+	exprs []any
+}
+
+func (se serieExpr) String() string {
+	var exprs strings.Builder
+	for _, expr := range se.exprs {
+		exprs.WriteString(fmt.Sprint(expr))
+	}
+	return exprs.String()
 }

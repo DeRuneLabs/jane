@@ -914,10 +914,6 @@ func (d Directive) String() string {
 
 type EnofiDirective struct{}
 
-func (EnofiDirective) String() string {
-	return ""
-}
-
 type Defer struct {
 	Tok  Tok
 	Expr Expr

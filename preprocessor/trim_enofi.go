@@ -2,7 +2,7 @@ package preprocessor
 
 import "github.com/DeRuneLabs/jane/ast"
 
-func TrimEnofi(tree *[]ast.Obj) {
+func TrimEnofi(tree *Tree) {
 	for i, obj := range *tree {
 		switch t := obj.Value.(type) {
 		case ast.Preprocessor:
