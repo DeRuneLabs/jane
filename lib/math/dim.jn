@@ -9,33 +9,51 @@
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
 
-use debug
-use os
-
 //doc:
-// assert function
-// writing fail output to std::cerr and exit fail if assert fail
-@inline
-_assert(const expr bool, const msg str) {
-  if !debugging || expr {
-    ret
+// return max of x-y or 0
+pub dim(const x, const y f64) f64 {
+  v: = x - y
+  if v <= 0 {
+    ret 0
   }
-  //cxx: std::cerr << @msg << std::endl;
-  exit(EXIT_FAILURE)
+  // v is position or nan
+  ret v
 }
 
 //doc:
-// writing faild message to std::cerr and exit if assert fail
-@inline
-pub assert(const expr bool, const msg{"assertion failed"} str) {
-  _assert{expr, msg}
+// return larger of x or y
+pub max(const x, const y f64) f64 {
+  if isinf(x, 1) || isinf(y, 1) {
+		ret inf(1)
+	} else if isnan(x) || isnan(y) {
+		ret nan()
+	} else if x == 0 && x == y {
+		if signbit(x) {
+			ret y
+		}
+		ret x
+	}
+	if x > y {
+		ret x
+	}
+	ret y
 }
 
 //doc:
-// panic message with error if assert was fail
-@inline
-pub assert_panic(const expr bool, const error{Error("assertion failed")} Error) {
-  if !debugging && !expr {
-    panic(error)
-  }
+// return small of x or y
+pub min(cosnt x, const y f64) f64 {
+  if isinf(x, -1) || isinf(y, -1) {
+		ret inf(-1)
+	} else if isnan(x) || isnan(y) {
+		ret nan()
+	} else if x == 0 && x == y {
+		if signbit(x) {
+			ret x
+		}
+		ret y
+	}
+	if x < y {
+		ret x
+	}
+	ret y
 }

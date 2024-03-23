@@ -9,7 +9,11 @@
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
 
-// compiler builtin codes
+//doc:
+// exit code for fail
+pub const EXIT_FAILURE: = 1
 
-// CAUTION: USED FOR COMPILER FOR BUILTIN COMPILATION
-// DO NOT REMOVE FILE FROM PACKAGE
+@inline
+pub exit(const code{EXIT_SUCCESS} int) {
+  //cxx: std::exit(@code);
+}

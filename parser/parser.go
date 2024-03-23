@@ -1387,6 +1387,8 @@ func (p *Parser) evalToks(toks Toks) (value, iExpr) {
 }
 
 func (p *Parser) evalExpr(expr Expr) (value, iExpr) {
+  processes := make([]Toks, len(expr.Processes))
+  copy(processes, expr.Processes)
 	return p.evalProcesses(expr.Processes)
 }
 

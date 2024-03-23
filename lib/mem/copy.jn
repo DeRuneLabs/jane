@@ -9,7 +9,37 @@
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
 
-// compiler builtin codes
+//doc:
+// set n value of pointer segment to specified expression
+type[Alloc_T]
+pub memset(ptr *Alloc_T, expr Alloc_T, const n size) {
+  if n == 0 {
+    ret
+  } else if !ptr {
+    ret
+  }
+  i:size = 0
+  iter i < n {
+    ptr[i] = expr
+    i += 1
+  }
+}
 
-// CAUTION: USED FOR COMPILER FOR BUILTIN COMPILATION
-// DO NOT REMOVE FILE FROM PACKAGE
+//doc:
+// copy n value from souce allocation to destination allocation
+type[Alloc_T]
+pub memcopy(dest, src *Alloc_T, const n size) {
+  if n == 0 {
+    ret
+  } else if !dest {
+    ret
+  } else if !src {
+    ret
+  }
+
+  i:size = 0
+  iter i < n {
+    *(dest+i) = *(src+i)
+    i += 1
+  }
+}
