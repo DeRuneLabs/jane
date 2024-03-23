@@ -16,8 +16,14 @@ func IsAssign(id uint8) bool {
 		id == tokens.Operator
 }
 
+func IsPostfixOperator(kind string) bool {
+	return kind == tokens.DOUBLE_PLUS ||
+		kind == tokens.DOUBLE_MINUS
+}
+
 func IsAssignOperator(kind string) bool {
-	return kind == tokens.EQUAL ||
+	return IsPostfixOperator(kind) ||
+		kind == tokens.EQUAL ||
 		kind == tokens.PLUS_EQUAL ||
 		kind == tokens.MINUS_EQUAL ||
 		kind == tokens.SLASH_EQUAL ||
