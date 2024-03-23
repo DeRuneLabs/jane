@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-func descriptize(s string) string {
+func Descriptize(s string) string {
 	var doc strings.Builder
 	s = strings.TrimLeftFunc(s, unicode.IsSpace)
 	s = strings.ReplaceAll(s, "\n", " ")

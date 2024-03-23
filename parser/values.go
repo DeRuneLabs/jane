@@ -1,14 +1,14 @@
 package parser
 
 import (
-	"github.com/DeRuneLabs/jane/ast"
+	"github.com/DeRuneLabs/jane/ast/models"
 	"github.com/DeRuneLabs/jane/lexer/tokens"
 	"github.com/DeRuneLabs/jane/package/jnbits"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
 func isstr(s string) bool {
-	return s[0] == '"' || israwstr(s)
+	return s != "" && (s[0] == '"' || israwstr(s))
 }
 
 func israwstr(s string) bool {
@@ -60,7 +60,7 @@ func isConstExpr(v string) bool {
 	return isConstNum(v) || isstr(v) || ischar(v) || isnil(v) || isbool(v)
 }
 
-func checkIntBit(v ast.Value, bit int) bool {
+func checkIntBit(v models.Value, bit int) bool {
 	if bit == 0 {
 		return false
 	}
@@ -70,7 +70,7 @@ func checkIntBit(v ast.Value, bit int) bool {
 	return jnbits.CheckBitUInt(v.Data, bit)
 }
 
-func checkFloatBit(v ast.Value, bit int) bool {
+func checkFloatBit(v models.Value, bit int) bool {
 	if bit == 0 {
 		return false
 	}

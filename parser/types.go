@@ -27,6 +27,19 @@ func typeIsSinglePtr(t DataType) bool {
 	return t.Id == jntype.Voidptr
 }
 
+func typeIsGeneric(generics []*GenericType, t DataType) bool {
+	if t.Id != jntype.Id {
+		return false
+	}
+	id, _ := t.GetValId()
+	for _, generic := range generics {
+		if id == generic.Id {
+			return true
+		}
+	}
+	return false
+}
+
 func typeOfArrayComponents(t DataType) DataType {
 	t.Val = t.Val[2:]
 	return t

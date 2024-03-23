@@ -1,6 +1,8 @@
 package jn
 
-import "github.com/DeRuneLabs/jane/package/jnset"
+import (
+	"github.com/DeRuneLabs/jane/package/jnset"
+)
 
 const (
 	Version       = `@dev_beta 0.0.1`
@@ -25,8 +27,9 @@ const (
 	ArchAmd64 = "amd64"
 	ArchI386  = "i386"
 
-	Attribute_Inline           = "inline"
-	Attribute_TypeParam        = "type_param"
+	Attribute_Inline    = "inline"
+	Attribute_TypeParam = "type_param"
+
 	PreprocessorDirective      = "pragma"
 	PreprocessorDirectiveEnofi = "enofi"
 )

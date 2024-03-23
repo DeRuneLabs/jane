@@ -1,10 +1,8 @@
 package preprocessor
 
-import (
-	"github.com/DeRuneLabs/jane/ast"
-)
+import "github.com/DeRuneLabs/jane/ast/models"
 
-type Tree = []ast.Obj
+type Tree = []models.Object
 
 func Process(tree *Tree) {
 	TrimEnofi(tree)

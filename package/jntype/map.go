@@ -44,7 +44,7 @@ var TypeMap = map[uint8]string{
 	Bool:    tokens.BOOL,
 	F32:     tokens.F32,
 	F64:     tokens.F64,
-	Any:     "any",
+	Any:     tokens.ANY,
 	Char:    tokens.CHAR,
 	UInt:    tokens.UINT,
 	Int:     tokens.INT,

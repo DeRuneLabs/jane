@@ -15,20 +15,19 @@ import (
 
 type File = jnio.File
 
-type Lexer struct {
+type Lex struct {
 	wg             sync.WaitGroup
 	firstTokOfLine bool
-
-	File   *File
-	Pos    int
-	Column int
-	Row    int
-	Logs   []jnlog.CompilerLog
-	braces []Tok
+	File           *File
+	Pos            int
+	Column         int
+	Row            int
+	Logs           []jnlog.CompilerLog
+	braces         []Tok
 }
 
-func NewLex(f *File) *Lexer {
-	l := new(Lexer)
+func NewLex(f *File) *Lex {
+	l := new(Lex)
 	l.File = f
 	l.Pos = 0
 	l.Row = -1
@@ -36,7 +35,7 @@ func NewLex(f *File) *Lexer {
 	return l
 }
 
-func (l *Lexer) pusherr(key string, args ...any) {
+func (l *Lex) pusherr(key string, args ...any) {
 	l.Logs = append(l.Logs, jnlog.CompilerLog{
 		Type:   jnlog.Err,
 		Row:    l.Row,
@@ -46,7 +45,7 @@ func (l *Lexer) pusherr(key string, args ...any) {
 	})
 }
 
-func (l *Lexer) pusherrtok(tok Tok, err string) {
+func (l *Lex) pusherrtok(tok Tok, err string) {
 	l.Logs = append(l.Logs, jnlog.CompilerLog{
 		Type:   jnlog.Err,
 		Row:    tok.Row,
@@ -56,7 +55,7 @@ func (l *Lexer) pusherrtok(tok Tok, err string) {
 	})
 }
 
-func (l *Lexer) Lex() []Tok {
+func (l *Lex) Lex() []Tok {
 	var toks []Tok
 	l.Logs = nil
 	l.Newln()
@@ -72,7 +71,7 @@ func (l *Lexer) Lex() []Tok {
 	return toks
 }
 
-func (l *Lexer) checkRangesAsync() {
+func (l *Lex) checkRangesAsync() {
 	defer func() { l.wg.Done() }()
 	for _, tok := range l.braces {
 		switch tok.Kind {
@@ -103,7 +102,7 @@ func iskw(ln, kw string) bool {
 		!unicode.IsLetter(r)
 }
 
-func (l *Lexer) id(ln string) string {
+func (l *Lex) id(ln string) string {
 	if ln[0] != '_' {
 		r, _ := utf8.DecodeRuneInString(ln)
 		if !unicode.IsLetter(r) {
@@ -123,7 +122,7 @@ func (l *Lexer) id(ln string) string {
 	return sb.String()
 }
 
-func (l *Lexer) resume() string {
+func (l *Lex) resume() string {
 	var ln string
 	runes := l.File.Data[l.Pos:]
 	for i, r := range runes {
@@ -142,7 +141,7 @@ func (l *Lexer) resume() string {
 	return ln
 }
 
-func (l *Lexer) lncomment(tok *Tok) {
+func (l *Lex) lncomment(tok *Tok) {
 	start := l.Pos
 	l.Pos += 2
 	for ; l.Pos < len(l.File.Data); l.Pos++ {
@@ -160,7 +159,7 @@ func (l *Lexer) lncomment(tok *Tok) {
 	}
 }
 
-func (l *Lexer) rangecomment() {
+func (l *Lex) rangecomment() {
 	l.Pos += 2
 	for ; l.Pos < len(l.File.Data); l.Pos++ {
 		run := l.File.Data[l.Pos]
@@ -180,7 +179,7 @@ func (l *Lexer) rangecomment() {
 
 var NumRegexp = *regexp.MustCompile(`^((0x[[:xdigit:]]+)|0b([0-1]{1,})|0([0-7]{1,})|(\d+((\.\d+)?((e|E)(\-|\+|)\d+)?|(\.\d+))))`)
 
-func (l *Lexer) num(txt string) string {
+func (l *Lex) num(txt string) string {
 	val := NumRegexp.FindString(txt)
 	l.Pos += len(val)
 	return val
@@ -188,7 +187,7 @@ func (l *Lexer) num(txt string) string {
 
 var escSeqRegexp = regexp.MustCompile(`^\\([\\'"abfnrtv]|U.{8}|u.{4}|x..|[0-7]{1,3})`)
 
-func (l *Lexer) escseq(txt string) string {
+func (l *Lex) escseq(txt string) string {
 	seq := escSeqRegexp.FindString(txt)
 	if seq != "" {
 		l.Pos += len([]rune(seq))
@@ -199,7 +198,7 @@ func (l *Lexer) escseq(txt string) string {
 	return seq
 }
 
-func (l *Lexer) getrune(txt string, raw bool) string {
+func (l *Lex) getrune(txt string, raw bool) string {
 	if !raw && txt[0] == '\\' {
 		return l.escseq(txt)
 	}
@@ -208,7 +207,7 @@ func (l *Lexer) getrune(txt string, raw bool) string {
 	return string(run)
 }
 
-func (l *Lexer) rune(txt string) string {
+func (l *Lex) rune(txt string) string {
 	var sb strings.Builder
 	sb.WriteByte('\'')
 	l.Column++
@@ -242,7 +241,7 @@ func (l *Lexer) rune(txt string) string {
 	return sb.String()
 }
 
-func (l *Lexer) str(txt string) string {
+func (l *Lex) str(txt string) string {
 	var sb strings.Builder
 	mark := txt[0]
 	raw := mark == '`'
@@ -274,13 +273,13 @@ func (l *Lexer) str(txt string) string {
 	return sb.String()
 }
 
-func (l *Lexer) Newln() {
+func (l *Lex) Newln() {
 	l.firstTokOfLine = true
 	l.Row++
 	l.Column = 1
 }
 
-func (l *Lexer) isop(txt, kind string, id uint8, tok *Tok) bool {
+func (l *Lex) isop(txt, kind string, id uint8, tok *Tok) bool {
 	if !strings.HasPrefix(txt, kind) {
 		return false
 	}
@@ -290,7 +289,7 @@ func (l *Lexer) isop(txt, kind string, id uint8, tok *Tok) bool {
 	return true
 }
 
-func (l *Lexer) iskw(txt, kind string, id uint8, tok *Tok) bool {
+func (l *Lex) iskw(txt, kind string, id uint8, tok *Tok) bool {
 	if !iskw(txt, kind) {
 		return false
 	}
@@ -390,7 +389,7 @@ var basicOps = [...]oppair{
 	37: {tokens.EQUAL, tokens.Operator},
 }
 
-func (l *Lexer) lexKeywords(txt string, tok *Tok) bool {
+func (l *Lex) lexKeywords(txt string, tok *Tok) bool {
 	for key, value := range keywords {
 		if l.iskw(txt, key, value, tok) {
 			return true
@@ -399,7 +398,7 @@ func (l *Lexer) lexKeywords(txt string, tok *Tok) bool {
 	return false
 }
 
-func (l *Lexer) lexBasicOps(txt string, tok *Tok) bool {
+func (l *Lex) lexBasicOps(txt string, tok *Tok) bool {
 	for _, pair := range basicOps {
 		if l.isop(txt, pair.op, pair.id, tok) {
 			return true
@@ -408,7 +407,7 @@ func (l *Lexer) lexBasicOps(txt string, tok *Tok) bool {
 	return false
 }
 
-func (l *Lexer) lexIdentifier(txt string, tok *Tok) bool {
+func (l *Lex) lexIdentifier(txt string, tok *Tok) bool {
 	lex := l.id(txt)
 	if lex == "" {
 		return false
@@ -418,7 +417,7 @@ func (l *Lexer) lexIdentifier(txt string, tok *Tok) bool {
 	return true
 }
 
-func (l *Lexer) lexNumeric(txt string, tok *Tok) bool {
+func (l *Lex) lexNumeric(txt string, tok *Tok) bool {
 	lex := l.num(txt)
 	if lex == "" {
 		return false
@@ -428,7 +427,7 @@ func (l *Lexer) lexNumeric(txt string, tok *Tok) bool {
 	return true
 }
 
-func (l *Lexer) Tok() Tok {
+func (l *Lex) Tok() Tok {
 	defer func() { l.firstTokOfLine = false }()
 
 	tok := Tok{File: l.File, Id: tokens.NA}
@@ -497,7 +496,7 @@ func getCloseKindOfBrace(open string) string {
 	return close
 }
 
-func (l *Lexer) rmrange(i int, kind string) {
+func (l *Lex) rmrange(i int, kind string) {
 	close := getCloseKindOfBrace(kind)
 	for ; i >= 0; i-- {
 		tok := l.braces[i]
@@ -509,7 +508,7 @@ func (l *Lexer) rmrange(i int, kind string) {
 	}
 }
 
-func (l *Lexer) pushRangeClose(tok Tok, open string) {
+func (l *Lex) pushRangeClose(tok Tok, open string) {
 	len := len(l.braces)
 	if len == 0 {
 		switch tok.Kind {
@@ -527,7 +526,7 @@ func (l *Lexer) pushRangeClose(tok Tok, open string) {
 	l.rmrange(len-1, tok.Kind)
 }
 
-func (l *Lexer) pushWrongOrderCloseErr(tok Tok) {
+func (l *Lex) pushWrongOrderCloseErr(tok Tok) {
 	var msg string
 	switch l.braces[len(l.braces)-1].Kind {
 	case tokens.LPARENTHESES:

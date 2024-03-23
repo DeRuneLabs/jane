@@ -2,14 +2,14 @@ package jnapi
 
 var CxxMain = `// region JN_ENTRY_POINT
 int main(void) {
-  std::set_terminate(&jn_terminate_handler);
-  std::cout << std::boolalpha;
+    std::set_terminate(&jn_terminate_handler);
+    std::cout << std::boolalpha;
 #ifdef _WINDOWS
-  SetConsoleOutputCP(CP_UTF8);
-  _setmode(_fileno(stdin), 0x00020000);
+    SetConsoleOutputCP(CP_UTF8);
+    _setmode(_fileno(stdin), 0x00020000);
 #endif
-  JNID(main());
-  return EXIT_SUCCESS;
+    JNID(main());
+    return EXIT_SUCCESS;
 }
 // endregion JN_ENTRY_POINT`
 
@@ -20,12 +20,12 @@ var CxxDefault = `#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) ||
 // region JN_STANDARD_IMPORTS
 #include <iostream>
 #include <cstring>
+#include <string>
 #include <sstream>
 #include <functional>
 #include <vector>
 #include <map>
 #include <thread>
-#include <cstdint>
 #include <typeinfo>
 #ifdef _WINDOWS
 #include <codecvt>
@@ -63,7 +63,6 @@ typedef bool                              bool_jnt;
 typedef void                              *voidptr_jnt;
 typedef intptr_t                          intptr_jnt;
 typedef uintptr_t                         uintptr_jnt;
-
 #define func std::function
 
 // region JN_STRUCTURES
@@ -166,6 +165,7 @@ public:
         return _Stream;
     }
 };
+// endregion JN_STRUCTURES
 
 template<typename _Key_t, typename _Value_t>
 class map: public std::map<_Key_t, _Value_t> {
@@ -209,7 +209,6 @@ public:
         return _Stream;
     }
 };
-// endregion JN_STRUCTURES
 
 class str_jnt {
 public:
@@ -360,77 +359,73 @@ public:
     bool operator==(const str_jnt &_Str) const noexcept { return this->_buffer == _Str._buffer; }
     bool operator!=(const str_jnt &_Str) const noexcept { return !this->operator==(_Str); }
 
-
     friend std::ostream& operator<<(std::ostream &_Stream, const str_jnt &_Src)
     { return _Stream << _Src._buffer; }
 };
 
 struct any_jnt {
 public:
-  void *_expr{nil};
-  char *_inf{nil};
+    void *_expr{nil};
+    char *_inf{nil};
 
+    template<typename T>
+    any_jnt(const T &_Expr) noexcept
+    { this->operator=(_Expr); }
 
-  template<typename T>
-  any_jnt(const T &_Expr) noexcept
-  { this->operator=(_Expr); }
+    ~any_jnt(void) noexcept
+    { this->_delete(); }
 
-  ~any_jnt(void) noexcept
-  { this->_delete(); }
-
-  inline void _delete(void) noexcept {
-    this->_expr = nil;
-    this->_inf = nil;
-  }
-
-  template<typename T>
-  inline bool type_is(void) const noexcept {
-    if (!this->_expr) {
-      return std::is_same<std::nullptr_t, T>::value;
+    inline void _delete(void) noexcept {
+        this->_expr = nil;
+        this->_inf = nil;
     }
-    return std::strcmp(this->_inf, typeid(T).name()) == 0;
-  }
 
-  template<typename T>
-  void operator=(const T &_Expr) noexcept {
-      this->_delete();
-      this->_expr = (void*)&_Expr;
-      this->_inf  = (char*)(typeid(T).name());
-  }
+    template<typename T>
+    inline bool type_is(void) const noexcept {
+        if (!this->_expr)
+        { return std::is_same<std::nullptr_t, T>::value; }
+        return std::strcmp(this->_inf, typeid(T).name()) == 0;
+    }
 
-  void operator=(const std::nullptr_t) noexcept
-  { this->_delete(); }
+    template<typename T>
+    void operator=(const T &_Expr) noexcept {
+        this->_delete();
+        this->_expr = (void*)&_Expr;
+        this->_inf  = (char*)(typeid(T).name());
+    }
 
-  template<typename T>
-  operator T(void) const noexcept {
-    if (!this->_expr)
-    { JNID(panic)("casting failed because data is nil"); }
-    if (std::strcmp(this->_inf, typeid(T).name()) != 0)
-    { JNID(panic)("incompatible type"); }
-    return *(T*)(this->_expr);
-  }
+    void operator=(const std::nullptr_t) noexcept
+    { this->_delete(); }
 
-  template<typename T>
-  inline bool operator==(const T &_Expr) const noexcept
-  { return this->type_is<T>() && *(T*)(this->_expr) == _Expr; }
+    template<typename T>
+    operator T(void) const noexcept {
+        if (!this->_expr)
+        { JNID(panic)("casting failed because data is nil"); }
+        if (std::strcmp(this->_inf, typeid(T).name()) != 0)
+        { JNID(panic)("incompatible type"); }
+        return *(T*)(this->_expr);
+    }
 
-  template<typename T>
-  inline bool operator!=(const T &_Expr) const noexcept
-  { return !this->operator==(_Expr); }
+    template<typename T>
+    inline bool operator==(const T &_Expr) const noexcept
+    { return this->type_is<T>() && *(T*)(this->_expr) == _Expr; }
 
-  inline bool operator==(const any_jnt &_Any) const noexcept
-  { return this->_expr == _Any._expr; }
+    template<typename T>
+    inline bool operator!=(const T &_Expr) const noexcept
+    { return !this->operator==(_Expr); }
 
-  inline bool operator!=(const any_jnt &_Any) const noexcept
-  { return !this->operator==(_Any); }
+    inline bool operator==(const any_jnt &_Any) const noexcept
+    { return this->_expr == _Any._expr; }
 
-  friend std::ostream& operator<<(std::ostream &_Stream, const any_jnt &_Src)
-  { return _Stream << _Src._expr; }
+    inline bool operator!=(const any_jnt &_Any) const noexcept
+    { return !this->operator==(_Any); }
+
+    friend std::ostream& operator<<(std::ostream &_Stream, const any_jnt &_Src)
+    { return _Stream << _Src._expr; }
 };
 // endregion JN_BUILTIN_TYPES
 
 // region JN_MISC
-
 template <typename _Enum_t, typename _Index_t, typename _Item_t>
 static inline void foreach(const _Enum_t _Enum,
                            const func<void(_Index_t, _Item_t)> _Body) {
@@ -510,9 +505,8 @@ std::ostream &operator<<(std::ostream &_Stream, const i8_jnt &_Src)
 std::ostream &operator<<(std::ostream &_Stream, const u8_jnt &_Src)
 { return _Stream << (i32_jnt)(_Src); }
 
-std::ostream &operator<<(std::ostream &_Stream, const std::nullptr_t) {
-  return _Stream << "<nil>";
-}
+std::ostream &operator<<(std::ostream &_Stream, const std::nullptr_t)
+{ return _Stream << "<nil>"; }
 
 template<typename _Obj_t>
 str_jnt tostr(const _Obj_t &_Obj) noexcept {
@@ -521,14 +515,14 @@ str_jnt tostr(const _Obj_t &_Obj) noexcept {
     return str_jnt{_stream.str()};
 }
 
-#define DEFER(_Expr) defer CONCAT(JNDEFER_, __LINE__){[&](void) mutable -> void { _Expr; }}
+#define DEFER(_Expr) defer CONCAT(JNXDEFER_, __LINE__){[&](void) mutable -> void { _Expr; }}
 #define CO(_Expr) std::thread{[&](void) mutable -> void { _Expr; }}.detach()
 // endregion JN_MISC
 
 // region PANIC_DEFINES
 struct JNID(Error) {
 public:
-    str_jnt JNID(message);
+  str_jnt JNID(message);
 };
 
 std::ostream &operator<<(std::ostream &_Stream, const JNID(Error) &_Error)
@@ -558,5 +552,5 @@ void jn_terminate_handler(void) noexcept {
     { std::cout << "panic: <undefined panics>" << std::endl; }
     std::exit(EXIT_FAILURE);
 }
-// endregion BOTTOM_MIST
-// endregion JN_CXX_API`
+// endregion BOTTOM_MISC
+`

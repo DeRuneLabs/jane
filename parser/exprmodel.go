@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DeRuneLabs/jane/ast"
+	"github.com/DeRuneLabs/jane/ast/models"
 )
 
 type iExpr interface {
@@ -114,9 +114,7 @@ func (m mapExpr) String() string {
 	return cxx.String()
 }
 
-type argsExpr struct {
-	args []ast.Arg
-}
+type argsExpr struct{ args []models.Arg }
 
 func (a argsExpr) String() string {
 	if len(a.args) == 0 {
@@ -130,9 +128,7 @@ func (a argsExpr) String() string {
 	return cxx.String()[:cxx.Len()-1]
 }
 
-type multiRetExpr struct {
-	models []iExpr
-}
+type multiRetExpr struct{ models []iExpr }
 
 func (mre multiRetExpr) String() string {
 	var cxx strings.Builder
@@ -144,9 +140,7 @@ func (mre multiRetExpr) String() string {
 	return cxx.String()[:cxx.Len()-1] + ")"
 }
 
-type assignExpr struct {
-	assign ast.Assign
-}
+type assignExpr struct{ assign models.Assign }
 
 func (a assignExpr) String() string {
 	var cxx strings.Builder
@@ -156,9 +150,7 @@ func (a assignExpr) String() string {
 	return cxx.String()
 }
 
-type serieExpr struct {
-	exprs []any
-}
+type serieExpr struct{ exprs []any }
 
 func (se serieExpr) String() string {
 	var exprs strings.Builder

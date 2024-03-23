@@ -6,11 +6,9 @@ import (
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
-var (
-	IntCode  uint8
-	UIntCode uint8
-	BitSize  int
-)
+var IntCode uint8
+var UIntCode uint8
+var BitSize int
 
 const (
 	NumericTypeStr = "<numeric>"
