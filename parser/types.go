@@ -31,7 +31,7 @@ func typeIsGeneric(generics []*GenericType, t DataType) bool {
 	if t.Id != jntype.Id {
 		return false
 	}
-	id, _ := t.GetValId()
+	id, _ := t.KindId()
 	for _, generic := range generics {
 		if id == generic.Id {
 			return true

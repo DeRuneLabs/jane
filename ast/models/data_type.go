@@ -19,33 +19,34 @@ func (gt genericableTypes) Generics() []DataType {
 func (gt genericableTypes) SetGenerics([]DataType) {}
 
 type DataType struct {
-	Tok        Tok
-	Id         uint8
-	Original   any
-	Kind       string
-	MultiTyped bool
-	Tag        any
+	Tok             Tok
+	Id              uint8
+	Original        any
+	Kind            string
+	MultiTyped      bool
+	Tag             any
+	DontUseOriginal bool
 }
 
-func (dt *DataType) ValWithOriginalId() string {
+func (dt *DataType) KindWithOriginalId() string {
 	if dt.Original == nil {
 		return dt.Kind
 	}
-	_, prefix := dt.GetValId()
+	_, prefix := dt.KindId()
 	original := dt.Original.(DataType)
 	return prefix + original.Tok.Kind
 }
 
-func (dt *DataType) OriginalValId() string {
+func (dt *DataType) OriginalKindId() string {
 	if dt.Original == nil {
 		return ""
 	}
 	t := dt.Original.(DataType)
-	id, _ := t.GetValId()
+	id, _ := t.KindId()
 	return id
 }
 
-func (dt *DataType) GetValId() (id, prefix string) {
+func (dt *DataType) KindId() (id, prefix string) {
 	id = dt.Kind
 	runes := []rune(dt.Kind)
 	for i, r := range dt.Kind {
@@ -69,7 +70,7 @@ func (dt *DataType) setToOriginal() {
 	if dt.Original == nil {
 		return
 	}
-	val := dt.ValWithOriginalId()
+	val := dt.KindWithOriginalId()
 	tok := dt.Tok
 	*dt = dt.Original.(DataType)
 	dt.Kind = val
@@ -143,7 +144,8 @@ func (dt *DataType) MapString() string {
 
 func (dt *DataType) StructString() string {
 	var cxx strings.Builder
-	cxx.WriteString(jnapi.OutId(dt.Kind, dt.Tok.File))
+	id, _ := dt.KindId()
+	cxx.WriteString(jnapi.OutId(id, dt.Tok.File))
 	s := dt.Tag.(Genericable)
 	types := s.Generics()
 	if len(types) == 0 {
@@ -151,6 +153,7 @@ func (dt *DataType) StructString() string {
 	}
 	cxx.WriteByte('<')
 	for _, t := range types {
+		t.DontUseOriginal = dt.DontUseOriginal
 		cxx.WriteString(t.String())
 		cxx.WriteByte(',')
 	}
