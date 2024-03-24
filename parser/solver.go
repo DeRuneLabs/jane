@@ -191,24 +191,6 @@ func (s *solver) logical() (v models.Data) {
 	return
 }
 
-func (s *solver) char() (v models.Data) {
-	v.Tok = s.operator
-	if !typesAreCompatible(s.leftVal.Type, s.rightVal.Type, true) {
-		s.p.pusherrtok(s.operator, "incompatible_datatype",
-			s.rightVal.Type.Kind, s.leftVal.Type.Kind)
-		return
-	}
-	switch s.operator.Kind {
-	case tokens.EQUALS, tokens.NOT_EQUALS:
-		v.Type.Id = jntype.Bool
-		v.Type.Kind = tokens.BOOL
-	default:
-		s.p.pusherrtok(s.operator, "operator_notfor_jntype",
-			s.operator.Kind, tokens.CHAR)
-	}
-	return
-}
-
 func (s *solver) array() (v models.Data) {
 	v.Tok = s.operator
 	if !typesAreCompatible(s.leftVal.Type, s.rightVal.Type, true) {
@@ -279,8 +261,6 @@ func (s *solver) solve() (v models.Data) {
 		return s.enum()
 	case s.leftVal.Type.Id == jntype.Nil, s.rightVal.Type.Id == jntype.Nil:
 		return s.nil()
-	case s.leftVal.Type.Id == jntype.Char, s.rightVal.Type.Id == jntype.Char:
-		return s.char()
 	case s.leftVal.Type.Id == jntype.Any, s.rightVal.Type.Id == jntype.Any:
 		return s.any()
 	case s.leftVal.Type.Id == jntype.Bool, s.rightVal.Type.Id == jntype.Bool:

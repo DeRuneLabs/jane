@@ -1,5 +1,3 @@
-type TEST_TYPEDEF i32
-
 testing_looping() {
   iter index:i32 in "Khairanabilla" {
     println(index)

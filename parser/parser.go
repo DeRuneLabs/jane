@@ -1910,7 +1910,7 @@ func (p *Parser) checkCastStr(vt DataType, errtok Tok) {
 		return
 	}
 	vt.Kind = vt.Kind[2:]
-	if !typeIsPure(vt) || (vt.Id != jntype.Char && vt.Id != jntype.U8) {
+	if !typeIsPure(vt) || vt.Id != jntype.U8 {
 		p.pusherrtok(errtok, "type_notsupports_casting", vt.Kind)
 	}
 }
@@ -1957,7 +1957,7 @@ func (p *Parser) checkCastArray(t, vt DataType, errtok Tok) {
 		return
 	}
 	t.Kind = t.Kind[2:]
-	if !typeIsPure(t) || (t.Id != jntype.Char && t.Id != jntype.U8) {
+	if !typeIsPure(vt) || vt.Id != jntype.U8 {
 		p.pusherrtok(errtok, "type_notsupports_casting", vt.Kind)
 	}
 }
@@ -2255,7 +2255,7 @@ func (p *Parser) evalMapSelect(mapv, selectv value, errtok Tok) value {
 
 func (p *Parser) evalStrSelect(strv, selectv value, errtok Tok) value {
 	strv.lvalue = true
-	strv.data.Type.Id = jntype.Char
+	strv.data.Type.Id = jntype.U8
 	p.wg.Add(1)
 	go assignChecker{
 		p:      p,

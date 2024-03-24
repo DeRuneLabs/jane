@@ -18,8 +18,6 @@ const (
 
 func GetRealCode(t uint8) uint8 {
 	switch t {
-	case Char:
-		t = U8
 	case Int, Intptr:
 		t = IntCode
 	case UInt, UIntptr:
@@ -248,17 +246,16 @@ func CxxTypeIdFromType(t uint8) string {
 	return id
 }
 
-func DefaultValOfType(code uint8) string {
-	if IsNumericType(code) || code == Enum {
+func DefaultValOfType(t uint8) string {
+	t = GetRealCode(t)
+	if IsNumericType(t) || t == Enum {
 		return "0"
 	}
-	switch code {
+	switch t {
 	case Bool:
 		return "false"
 	case Str:
 		return `""`
-	case Char:
-		return `'\0'`
 	}
 	return "nil"
 }
