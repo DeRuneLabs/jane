@@ -9,6 +9,7 @@ import (
 )
 
 const Ignore = "_"
+const typeExtension = "_jnt"
 
 func IsIgnoreId(id string) bool {
 	return id == Ignore

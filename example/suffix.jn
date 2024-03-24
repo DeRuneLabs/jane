@@ -1,0 +1,11 @@
+test_suffix_function() {
+  a: = 100
+  a++
+  a--
+  println((a++))
+}
+
+main() {
+  println("testing suffix function")
+  suffix_function()
+}

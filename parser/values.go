@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/DeRuneLabs/jane/ast/models"
 	"github.com/DeRuneLabs/jane/lexer/tokens"
 	"github.com/DeRuneLabs/jane/package/jnbits"
@@ -29,52 +31,56 @@ func isbool(s string) bool {
 
 func isBoolExpr(val value) bool {
 	switch {
-	case typeIsNilCompatible(val.ast.Type):
+	case typeIsNilCompatible(val.data.Type):
 		return true
-	case val.ast.Type.Id == jntype.Bool && typeIsSingle(val.ast.Type):
+	case val.data.Type.Id == jntype.Bool && typeIsPure(val.data.Type):
 		return true
 	}
 	return false
 }
 
+func isfloat(s string) bool {
+  return strings.Contains(s, tokens.DOT) || strings.ContainsAny(s, "eE")
+}
+
 func isForeachIterExpr(val value) bool {
 	switch {
-	case typeIsArray(val.ast.Type),
-		typeIsMap(val.ast.Type):
+	case typeIsArray(val.data.Type),
+		typeIsMap(val.data.Type):
 		return true
-	case !typeIsSingle(val.ast.Type):
+	case !typeIsPure(val.data.Type):
 		return false
 	}
-	code := val.ast.Type.Id
+	code := val.data.Type.Id
 	return code == jntype.Str
 }
 
-func isConstNum(v string) bool {
+func isConstNumeric(v string) bool {
 	if v == "" {
 		return false
 	}
 	return v[0] == '-' || (v[0] >= '0' && v[0] <= '9')
 }
 
-func isConstExpr(v string) bool {
-	return isConstNum(v) || isstr(v) || ischar(v) || isnil(v) || isbool(v)
+func isConstExpression(v string) bool {
+	return isConstNumeric(v) || isstr(v) || ischar(v) || isnil(v) || isbool(v)
 }
 
-func checkIntBit(v models.Value, bit int) bool {
+func checkIntBit(v models.Data, bit int) bool {
 	if bit == 0 {
 		return false
 	}
 	if jntype.IsSignedNumericType(v.Type.Id) {
-		return jnbits.CheckBitInt(v.Data, bit)
+		return jnbits.CheckBitInt(v.Value, bit)
 	}
-	return jnbits.CheckBitUInt(v.Data, bit)
+	return jnbits.CheckBitUInt(v.Value, bit)
 }
 
-func checkFloatBit(v models.Value, bit int) bool {
+func checkFloatBit(v models.Data, bit int) bool {
 	if bit == 0 {
 		return false
 	}
-	return jnbits.CheckBitFloat(v.Data, bit)
+	return jnbits.CheckBitFloat(v.Value, bit)
 }
 
 func defaultValueOfType(t DataType) string {

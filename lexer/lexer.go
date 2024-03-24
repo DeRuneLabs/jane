@@ -37,21 +37,21 @@ func NewLex(f *File) *Lex {
 
 func (l *Lex) pusherr(key string, args ...any) {
 	l.Logs = append(l.Logs, jnlog.CompilerLog{
-		Type:   jnlog.Err,
+		Type:   jnlog.Error,
 		Row:    l.Row,
 		Column: l.Column,
 		Path:   l.File.Path(),
-		Msg:    jn.GetErr(key, args...),
+		Message:    jn.GetError(key, args...),
 	})
 }
 
 func (l *Lex) pusherrtok(tok Tok, err string) {
 	l.Logs = append(l.Logs, jnlog.CompilerLog{
-		Type:   jnlog.Err,
+		Type:   jnlog.Error,
 		Row:    tok.Row,
 		Column: tok.Column,
 		Path:   l.File.Path(),
-		Msg:    jn.GetErr(err),
+		Message:    jn.GetError(err),
 	})
 }
 

@@ -2,28 +2,51 @@ package ast
 
 import "github.com/DeRuneLabs/jane/lexer/tokens"
 
-func IsSingleOperator(kind string) bool {
-	return kind == tokens.MINUS ||
-		kind == tokens.PLUS ||
-		kind == tokens.TILDE ||
-		kind == tokens.EXCLAMATION ||
-		kind == tokens.STAR ||
-		kind == tokens.AMPER
+var UnaryOperators = [...]string{
+	0: tokens.MINUS,
+	1: tokens.PLUS,
+	2: tokens.TILDE,
+	3: tokens.EXCLAMATION,
+	4: tokens.STAR,
+	5: tokens.AMPER,
+}
+
+var SolidOperators = [...]string{
+	0:  tokens.PLUS,
+	1:  tokens.MINUS,
+	2:  tokens.STAR,
+	3:  tokens.SLASH,
+	4:  tokens.PERCENT,
+	5:  tokens.AMPER,
+	6:  tokens.VLINE,
+	7:  tokens.CARET,
+	8:  tokens.LESS,
+	9:  tokens.GREAT,
+	10: tokens.TILDE,
+	11: tokens.EXCLAMATION,
+}
+
+var ExpressionOperators = [...]string{
+	0: tokens.TRIPLE_DOT,
+}
+
+func IsUnaryOperator(kind string) bool {
+	return existOperator(kind, UnaryOperators[:])
 }
 
 func IsSolidOperator(kind string) bool {
-	return kind == tokens.PLUS ||
-		kind == tokens.MINUS ||
-		kind == tokens.STAR ||
-		kind == tokens.SLASH ||
-		kind == tokens.PERCENT ||
-		kind == tokens.AMPER ||
-		kind == tokens.VLINE ||
-		kind == tokens.CARET ||
-		kind == tokens.LESS ||
-		kind == tokens.GREAT ||
-		kind == tokens.TILDE ||
-		kind == tokens.EXCLAMATION
+	return existOperator(kind, SolidOperators[:])
 }
 
-func IsExprOperator(kind string) bool { return kind == tokens.TRIPLE_DOT }
+func IsExpressionOperator(kind string) bool {
+	return existOperator(kind, ExpressionOperators[:])
+}
+
+func existOperator(kind string, operators []string) bool {
+	for _, operator := range operators {
+		if kind == operator {
+			return true
+		}
+	}
+	return false
+}

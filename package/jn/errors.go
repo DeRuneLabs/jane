@@ -2,7 +2,7 @@ package jn
 
 import "fmt"
 
-var Errs = map[string]string{
+var Errors = map[string]string{
 	`no_stdlib`:                                `standard library directory not found`,
 	`file_not_useable`:                         `file is not useable for this operating system or architecture`,
 	`file_not_jn`:                              `this is not jane source file: %s`,
@@ -130,6 +130,6 @@ var Errs = map[string]string{
 	`error`:                                    `error: %s`,
 }
 
-func GetErr(key string, args ...any) string {
-	return fmt.Sprintf(Errs[key], args...)
+func GetError(key string, args ...any) string {
+	return fmt.Sprintf(Errors[key], args...)
 }

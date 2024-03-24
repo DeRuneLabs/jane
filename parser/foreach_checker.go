@@ -18,7 +18,7 @@ func (fc *foreachChecker) array() {
 		return
 	}
 	elementType := fc.profile.ExprType
-	elementType.Val = elementType.Val[2:]
+	elementType.Kind = elementType.Kind[2:]
 	keyB := &fc.profile.KeyB
 	if keyB.Type.Id == jntype.Void {
 		keyB.Type = elementType
@@ -40,15 +40,15 @@ func (fc *foreachChecker) checkKeyASize() {
 	keyA := &fc.profile.KeyA
 	if keyA.Type.Id == jntype.Void {
 		keyA.Type.Id = jntype.UInt
-		keyA.Type.Val = jntype.CxxTypeIdFromType(keyA.Type.Id)
+		keyA.Type.Kind = jntype.CxxTypeIdFromType(keyA.Type.Id)
 		return
 	}
 	var ok bool
 	keyA.Type, ok = fc.p.realType(keyA.Type, true)
 	if ok {
-		if !typeIsSingle(keyA.Type) || !jntype.IsNumericType(keyA.Type.Id) {
+    if !typeIsPure(keyA.Type) || !jntype.IsNumericType(keyA.Type.Id) {
 			fc.p.pusherrtok(keyA.IdTok, "incompatible_datatype",
-				keyA.Type.Val, jntype.NumericTypeStr)
+				keyA.Type.Kind, jntype.NumericTypeStr)
 		}
 	}
 }
@@ -57,7 +57,7 @@ func (fc *foreachChecker) checkKeyAMapKey() {
 	if jnapi.IsIgnoreId(fc.profile.KeyA.Id) {
 		return
 	}
-	keyType := fc.val.ast.Type.Tag.([]DataType)[0]
+	keyType := fc.val.data.Type.Tag.([]DataType)[0]
 	keyA := &fc.profile.KeyA
 	if keyA.Type.Id == jntype.Void {
 		keyA.Type = keyType
@@ -71,7 +71,7 @@ func (fc *foreachChecker) checkKeyBMapVal() {
 	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
 		return
 	}
-	valType := fc.val.ast.Type.Tag.([]DataType)[1]
+	valType := fc.val.data.Type.Tag.([]DataType)[1]
 	keyB := &fc.profile.KeyB
 	if keyB.Type.Id == jntype.Void {
 		keyB.Type = valType
@@ -88,7 +88,7 @@ func (fc *foreachChecker) str() {
 	}
 	runeType := DataType{
 		Id:  jntype.Char,
-		Val: jntype.CxxTypeIdFromType(jntype.Char),
+		Kind: jntype.CxxTypeIdFromType(jntype.Char),
 	}
 	keyB := &fc.profile.KeyB
 	if keyB.Type.Id == jntype.Void {
@@ -101,11 +101,11 @@ func (fc *foreachChecker) str() {
 
 func (fc *foreachChecker) check() {
 	switch {
-	case typeIsArray(fc.val.ast.Type):
+	case typeIsArray(fc.val.data.Type):
 		fc.array()
-	case typeIsMap(fc.val.ast.Type):
+	case typeIsMap(fc.val.data.Type):
 		fc.xmap()
-	case fc.val.ast.Type.Id == jntype.Str:
+	case fc.val.data.Type.Id == jntype.Str:
 		fc.str()
 	}
 }

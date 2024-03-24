@@ -34,7 +34,8 @@ func ParseBlock(b Block) string {
 		cxx.WriteString(s.String())
 	}
 	cxx.WriteByte('\n')
-	cxx.WriteString(strings.Repeat(jn.Set.Indent, int(Indent-1)*jn.Set.IndentCount))
+  indent := strings.Repeat(jn.Set.Indent, int(Indent-1)*jn.Set.IndentCount)
+  cxx.WriteString(indent)
 	cxx.WriteByte('}')
 	return cxx.String()
 }

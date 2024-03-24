@@ -57,23 +57,21 @@ func (rc *retChecker) checkepxrs() {
 }
 
 func (rc *retChecker) single() {
-	rc.retAST.Expr.Model = rc.expModel.models[0]
+  rc.retAST.Expr.Model = rc.expModel.models[0]
 	if len(rc.values) > 1 {
 		rc.p.pusherrtok(rc.retAST.Tok, "overflow_return")
 	}
 	rc.p.wg.Add(1)
 	go assignChecker{
-		p:         rc.p,
-		constant:  false,
-		t:         rc.f.RetType.Type,
-		v:         rc.values[0],
-		ignoreAny: false,
-		errtok:    rc.retAST.Tok,
+		p:      rc.p,
+		t:      rc.f.RetType.Type,
+		v:      rc.values[0],
+		errtok: rc.retAST.Tok,
 	}.checkAssignTypeAsync()
 }
 
 func (rc *retChecker) multi() {
-	rc.retAST.Expr.Model = rc.expModel
+  rc.retAST.Expr.Model = rc.expModel
 	types := rc.f.RetType.Type.Tag.([]DataType)
 	valLength := len(rc.values)
 	if valLength == 1 {
@@ -88,12 +86,10 @@ func (rc *retChecker) multi() {
 		}
 		rc.p.wg.Add(1)
 		go assignChecker{
-			p:         rc.p,
-			constant:  false,
-			t:         t,
-			v:         rc.values[i],
-			ignoreAny: false,
-			errtok:    rc.retAST.Tok,
+			p:      rc.p,
+			t:      t,
+			v:      rc.values[i],
+			errtok: rc.retAST.Tok,
 		}.checkAssignTypeAsync()
 	}
 }
@@ -108,11 +104,11 @@ func (rc *retChecker) checkExprTypes() {
 
 func (rc *retChecker) checkMultiRetAsMutliRet() {
 	val := rc.values[0]
-	if !val.ast.Type.MultiTyped {
+	if !val.data.Type.MultiTyped {
 		rc.p.pusherrtok(rc.retAST.Tok, "missing_multi_return")
 		return
 	}
-	valTypes := val.ast.Type.Tag.([]DataType)
+	valTypes := val.data.Type.Tag.([]DataType)
 	retTypes := rc.f.RetType.Type.Tag.([]DataType)
 	if len(valTypes) < len(retTypes) {
 		rc.p.pusherrtok(rc.retAST.Tok, "missing_multi_return")
@@ -124,15 +120,13 @@ func (rc *retChecker) checkMultiRetAsMutliRet() {
 	rc.retAST.Expr.Model = rc.expModel.models[0]
 	for i, rt := range retTypes {
 		vt := valTypes[i]
-		val := value{ast: models.Value{Type: vt}}
+		val := value{data: models.Data{Type: vt}}
 		rc.p.wg.Add(1)
 		go assignChecker{
-			p:         rc.p,
-			constant:  false,
-			t:         rt,
-			v:         val,
-			ignoreAny: false,
-			errtok:    rc.retAST.Tok,
+			p:      rc.p,
+			t:      rt,
+			v:      val,
+			errtok: rc.retAST.Tok,
 		}.checkAssignTypeAsync()
 	}
 }

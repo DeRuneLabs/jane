@@ -10,30 +10,52 @@ type AssignInfo struct {
 	IsExpr bool
 }
 
-func IsAssign(id uint8) bool {
-	return id == tokens.Id ||
-		id == tokens.Brace ||
-		id == tokens.Operator
+var SuffixOperators = [...]string{
+	0: tokens.DOUBLE_PLUS,
+	1: tokens.DOUBLE_MINUS,
 }
 
-func IsPostfixOperator(kind string) bool {
-	return kind == tokens.DOUBLE_PLUS ||
-		kind == tokens.DOUBLE_MINUS
+var AssignOperators = [...]string{
+	0:  tokens.EQUAL,
+	1:  tokens.PLUS_EQUAL,
+	2:  tokens.MINUS_EQUAL,
+	3:  tokens.SLASH_EQUAL,
+	4:  tokens.STAR_EQUAL,
+	5:  tokens.PERCENT_EQUAL,
+	6:  tokens.RSHIFT_EQUAL,
+	7:  tokens.LSHIFT_EQUAL,
+	8:  tokens.VLINE_EQUAL,
+	9:  tokens.AMPER_EQUAL,
+	10: tokens.CARET_EQUAL,
+}
+
+func IsAssign(id uint8) bool {
+	switch id {
+	case tokens.Id, tokens.Brace, tokens.Operator:
+		return true
+	}
+	return false
+}
+
+func IsSuffixOperator(kind string) bool {
+  for _, operator := range SuffixOperators {
+		if kind == operator {
+			return true
+		}
+	}
+	return false
 }
 
 func IsAssignOperator(kind string) bool {
-	return IsPostfixOperator(kind) ||
-		kind == tokens.EQUAL ||
-		kind == tokens.PLUS_EQUAL ||
-		kind == tokens.MINUS_EQUAL ||
-		kind == tokens.SLASH_EQUAL ||
-		kind == tokens.STAR_EQUAL ||
-		kind == tokens.PERCENT_EQUAL ||
-		kind == tokens.RSHIFT_EQUAL ||
-		kind == tokens.LSHIFT_EQUAL ||
-		kind == tokens.VLINE_EQUAL ||
-		kind == tokens.AMPER_EQUAL ||
-		kind == tokens.CARET_EQUAL
+  if IsSuffixOperator(kind) {
+    return true
+  }
+  for _, operator := range AssignOperators {
+    if kind == operator {
+      return true
+    }
+  }
+  return false
 }
 
 func CheckAssignToks(toks Toks) bool {
@@ -54,11 +76,9 @@ func CheckAssignToks(toks Toks) bool {
 			return false
 		} else if braceCount > 0 {
 			continue
-		}
-		if tok.Id == tokens.Operator &&
-			IsAssignOperator(tok.Kind) {
-			return true
-		}
+		} else if tok.Id == tokens.Operator && IsAssignOperator(tok.Kind) {
+      return true
+    }
 	}
 	return false
 }

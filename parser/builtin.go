@@ -12,14 +12,14 @@ var i8statics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.I8, Val: tokens.I8},
+			Type:  DataType{Id: jntype.I8, Kind: tokens.I8},
 			Tag:   "INT8_MAX",
 		},
 		{
 			Pub:   true,
 			Id:    "min",
 			Const: true,
-			Type:  DataType{Id: jntype.I8, Val: tokens.I8},
+			Type:  DataType{Id: jntype.I8, Kind: tokens.I8},
 			Tag:   "INT8_MIN",
 		},
 	},
@@ -31,14 +31,14 @@ var i16statics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.I16, Val: tokens.I16},
+			Type:  DataType{Id: jntype.I16, Kind: tokens.I16},
 			Tag:   "INT16_MAX",
 		},
 		{
 			Pub:   true,
 			Id:    "min",
 			Const: true,
-			Type:  DataType{Id: jntype.I16, Val: tokens.I16},
+			Type:  DataType{Id: jntype.I16, Kind: tokens.I16},
 			Tag:   "INT16_MIN",
 		},
 	},
@@ -50,14 +50,14 @@ var i32statics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.I32, Val: tokens.I32},
+			Type:  DataType{Id: jntype.I32, Kind: tokens.I32},
 			Tag:   "INT32_MAX",
 		},
 		{
 			Pub:   true,
 			Id:    "min",
 			Const: true,
-			Type:  DataType{Id: jntype.I32, Val: tokens.I32},
+			Type:  DataType{Id: jntype.I32, Kind: tokens.I32},
 			Tag:   "INT32_MIN",
 		},
 	},
@@ -69,14 +69,14 @@ var i64statics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.I64, Val: tokens.I64},
+			Type:  DataType{Id: jntype.I64, Kind: tokens.I64},
 			Tag:   "INT64_MAX",
 		},
 		{
 			Pub:   true,
 			Id:    "min",
 			Const: true,
-			Type:  DataType{Id: jntype.I64, Val: tokens.I64},
+			Type:  DataType{Id: jntype.I64, Kind: tokens.I64},
 			Tag:   "INT64_MIN",
 		},
 	},
@@ -88,7 +88,7 @@ var u8statics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.U8, Val: tokens.U8},
+			Type:  DataType{Id: jntype.U8, Kind: tokens.U8},
 			Tag:   "UINT8_MAX",
 		},
 	},
@@ -100,7 +100,7 @@ var u16statics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.U16, Val: tokens.U16},
+			Type:  DataType{Id: jntype.U16, Kind: tokens.U16},
 			Tag:   "UINT16_MAX",
 		},
 	},
@@ -112,7 +112,7 @@ var u32statics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.U32, Val: tokens.U32},
+			Type:  DataType{Id: jntype.U32, Kind: tokens.U32},
 			Tag:   "UINT32_MAX",
 		},
 	},
@@ -124,7 +124,7 @@ var u64statics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.U64, Val: tokens.U64},
+			Type:  DataType{Id: jntype.U64, Kind: tokens.U64},
 			Tag:   "UINT64_MAX",
 		},
 	},
@@ -136,7 +136,7 @@ var uintStatics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.UInt, Val: tokens.UINT},
+			Type:  DataType{Id: jntype.UInt, Kind: tokens.UINT},
 			Tag:   "SIZE_MAX",
 		},
 	},
@@ -147,13 +147,13 @@ var intStatics = &Defmap{
 		{
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.Int, Val: tokens.INT},
+			Type:  DataType{Id: jntype.Int, Kind: tokens.INT},
 			Tag:   "",
 		},
 		{
 			Id:    "min",
 			Const: true,
-			Type:  DataType{Id: jntype.Int, Val: tokens.INT},
+			Type:  DataType{Id: jntype.Int, Kind: tokens.INT},
 			Tag:   "",
 		},
 	},
@@ -165,14 +165,14 @@ var f32statics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.F32, Val: tokens.F32},
+			Type:  DataType{Id: jntype.F32, Kind: tokens.F32},
 			Tag:   "__FLT_MAX__",
 		},
 		{
 			Pub:   true,
 			Id:    "min",
 			Const: true,
-			Type:  DataType{Id: jntype.F32, Val: tokens.F32},
+			Type:  DataType{Id: jntype.F32, Kind: tokens.F32},
 			Tag:   "__FLT_MIN__",
 		},
 	},
@@ -184,14 +184,14 @@ var f64statics = &Defmap{
 			Pub:   true,
 			Id:    "max",
 			Const: true,
-			Type:  DataType{Id: jntype.F64, Val: tokens.F64},
+			Type:  DataType{Id: jntype.F64, Kind: tokens.F64},
 			Tag:   "__DBL_MAX__",
 		},
 		{
 			Pub:   true,
 			Id:    "min",
 			Const: true,
-			Type:  DataType{Id: jntype.F64, Val: tokens.F64},
+			Type:  DataType{Id: jntype.F64, Kind: tokens.F64},
 			Tag:   "__DBL_MIN__",
 		},
 	},
@@ -203,7 +203,7 @@ var strStatics = &Defmap{
 			Pub:   true,
 			Id:    "npos",
 			Const: true,
-			Type:  DataType{Id: jntype.UInt, Val: tokens.UINT},
+			Type:  DataType{Id: jntype.UInt, Kind: tokens.UINT},
 			Tag:   "std::string::npos",
 		},
 	},
@@ -212,8 +212,8 @@ var strStatics = &Defmap{
 var strDefaultFunc = Func{
 	Pub:     true,
 	Id:      "str",
-	Params:  []Param{{Id: "obj", Type: DataType{Id: jntype.Any, Val: tokens.ANY}}},
-	RetType: RetType{Type: DataType{Id: jntype.Str, Val: tokens.STR}},
+	Params:  []Param{{Id: "obj", Type: DataType{Id: jntype.Any, Kind: tokens.ANY}}},
+	RetType: RetType{Type: DataType{Id: jntype.Str, Kind: tokens.STR}},
 }
 
 var errorStruct = &jnstruct{
@@ -225,7 +225,7 @@ var errorStruct = &jnstruct{
 			{
 				Pub:  true,
 				Id:   "message",
-				Type: DataType{Id: jntype.Str, Val: tokens.STR},
+				Type: DataType{Id: jntype.Str, Kind: tokens.STR},
 			},
 		},
 	},
@@ -234,7 +234,7 @@ var errorStruct = &jnstruct{
 		Params: []Param{
 			{
 				Id:      "message",
-				Type:    DataType{Id: jntype.Str, Val: tokens.STR},
+				Type:    DataType{Id: jntype.Str, Kind: tokens.STR},
 				Default: Expr{Model: exprNode{jnapi.ToStr(`"error: undefined error"`)}},
 			},
 		},
@@ -243,7 +243,7 @@ var errorStruct = &jnstruct{
 
 var errorType = DataType{
 	Id:  jntype.Struct,
-	Val: errorStruct.Ast.Id,
+	Kind: errorStruct.Ast.Id,
 	Tag: errorStruct,
 }
 
@@ -253,11 +253,11 @@ var Builtin = &Defmap{
 			Ast: &Func{
 				Pub:     true,
 				Id:      "print",
-				RetType: RetType{Type: DataType{Id: jntype.Void, Val: jntype.VoidTypeStr}},
+				RetType: RetType{Type: DataType{Id: jntype.Void, Kind: jntype.VoidTypeStr}},
 				Params: []Param{{
 					Id:      "v",
 					Const:   true,
-					Type:    DataType{Id: jntype.Any, Val: tokens.ANY},
+					Type:    DataType{Id: jntype.Any, Kind: tokens.ANY},
 					Default: Expr{Model: exprNode{`""`}},
 				}},
 			},
@@ -266,11 +266,11 @@ var Builtin = &Defmap{
 			Ast: &Func{
 				Pub:     true,
 				Id:      "println",
-				RetType: RetType{Type: DataType{Id: jntype.Void, Val: jntype.VoidTypeStr}},
+				RetType: RetType{Type: DataType{Id: jntype.Void, Kind: jntype.VoidTypeStr}},
 				Params: []Param{{
 					Id:      "v",
 					Const:   true,
-					Type:    DataType{Id: jntype.Any, Val: tokens.ANY},
+					Type:    DataType{Id: jntype.Any, Kind: tokens.ANY},
 					Default: Expr{Model: exprNode{`""`}},
 				}},
 			},
@@ -287,7 +287,7 @@ var strDefs = &Defmap{
 			Pub:   true,
 			Id:    "len",
 			Const: true,
-			Type:  DataType{Id: jntype.UInt, Val: tokens.UINT},
+			Type:  DataType{Id: jntype.UInt, Kind: tokens.UINT},
 			Tag:   "len()",
 		},
 	},
@@ -295,70 +295,70 @@ var strDefs = &Defmap{
 		{Ast: &Func{
 			Pub:     true,
 			Id:      "empty",
-			RetType: RetType{Type: DataType{Id: jntype.Bool, Val: tokens.BOOL}},
+			RetType: RetType{Type: DataType{Id: jntype.Bool, Kind: tokens.BOOL}},
 		}},
 		{Ast: &Func{
 			Pub:     true,
 			Id:      "has_prefix",
-			Params:  []Param{{Id: "sub", Type: DataType{Id: jntype.Str, Val: tokens.STR}}},
-			RetType: RetType{Type: DataType{Id: jntype.Bool, Val: tokens.BOOL}},
+			Params:  []Param{{Id: "sub", Type: DataType{Id: jntype.Str, Kind: tokens.STR}}},
+			RetType: RetType{Type: DataType{Id: jntype.Bool, Kind: tokens.BOOL}},
 		}},
 		{Ast: &Func{
 			Pub:     true,
 			Id:      "has_suffix",
-			Params:  []Param{{Id: "sub", Type: DataType{Id: jntype.Str, Val: tokens.STR}}},
-			RetType: RetType{Type: DataType{Id: jntype.Bool, Val: tokens.BOOL}},
+			Params:  []Param{{Id: "sub", Type: DataType{Id: jntype.Str, Kind: tokens.STR}}},
+			RetType: RetType{Type: DataType{Id: jntype.Bool, Kind: tokens.BOOL}},
 		}},
 		{Ast: &Func{
 			Pub:     true,
 			Id:      "find",
-			Params:  []Param{{Id: "sub", Type: DataType{Id: jntype.Str, Val: tokens.STR}}},
-			RetType: RetType{Type: DataType{Id: jntype.UInt, Val: tokens.UINT}},
+			Params:  []Param{{Id: "sub", Type: DataType{Id: jntype.Str, Kind: tokens.STR}}},
+			RetType: RetType{Type: DataType{Id: jntype.UInt, Kind: tokens.UINT}},
 		}},
 		{Ast: &Func{
 			Pub:     true,
 			Id:      "rfind",
-			Params:  []Param{{Id: "sub", Type: DataType{Id: jntype.Str, Val: tokens.STR}}},
-			RetType: RetType{Type: DataType{Id: jntype.UInt, Val: tokens.UINT}},
+			Params:  []Param{{Id: "sub", Type: DataType{Id: jntype.Str, Kind: tokens.STR}}},
+			RetType: RetType{Type: DataType{Id: jntype.UInt, Kind: tokens.UINT}},
 		}},
 		{Ast: &Func{
 			Pub:     true,
 			Id:      "trim",
-			Params:  []Param{{Id: "bytes", Type: DataType{Id: jntype.Str, Val: tokens.STR}}},
-			RetType: RetType{Type: DataType{Id: jntype.Str, Val: tokens.STR}},
+			Params:  []Param{{Id: "bytes", Type: DataType{Id: jntype.Str, Kind: tokens.STR}}},
+			RetType: RetType{Type: DataType{Id: jntype.Str, Kind: tokens.STR}},
 		}},
 		{Ast: &Func{
 			Pub:     true,
 			Id:      "rtrim",
-			Params:  []Param{{Id: "bytes", Type: DataType{Id: jntype.Str, Val: tokens.STR}}},
-			RetType: RetType{Type: DataType{Id: jntype.Str, Val: tokens.STR}},
+			Params:  []Param{{Id: "bytes", Type: DataType{Id: jntype.Str, Kind: tokens.STR}}},
+			RetType: RetType{Type: DataType{Id: jntype.Str, Kind: tokens.STR}},
 		}},
 		{Ast: &Func{
 			Pub: true,
 			Id:  "split",
 			Params: []Param{
-				{Id: "sub", Type: DataType{Id: jntype.Str, Val: tokens.STR}},
+				{Id: "sub", Type: DataType{Id: jntype.Str, Kind: tokens.STR}},
 				{
 					Id:      "n",
-					Type:    DataType{Id: jntype.I64, Val: tokens.I64},
+					Type:    DataType{Id: jntype.I64, Kind: tokens.I64},
 					Default: Expr{Model: exprNode{"-1"}},
 				},
 			},
-			RetType: RetType{Type: DataType{Id: jntype.Str, Val: "[]" + tokens.STR}},
+			RetType: RetType{Type: DataType{Id: jntype.Str, Kind: "[]" + tokens.STR}},
 		}},
 		{Ast: &Func{
 			Pub: true,
 			Id:  "replace",
 			Params: []Param{
-				{Id: "sub", Type: DataType{Id: jntype.Str, Val: tokens.STR}},
-				{Id: "new", Type: DataType{Id: jntype.Str, Val: tokens.STR}},
+				{Id: "sub", Type: DataType{Id: jntype.Str, Kind: tokens.STR}},
+				{Id: "new", Type: DataType{Id: jntype.Str, Kind: tokens.STR}},
 				{
 					Id:      "n",
-					Type:    DataType{Id: jntype.I64, Val: tokens.I64},
+					Type:    DataType{Id: jntype.I64, Kind: tokens.I64},
 					Default: Expr{Model: exprNode{"-1"}},
 				},
 			},
-			RetType: RetType{Type: DataType{Id: jntype.Str, Val: tokens.STR}},
+			RetType: RetType{Type: DataType{Id: jntype.Str, Kind: tokens.STR}},
 		}},
 	},
 }
@@ -369,7 +369,7 @@ var arrDefs = &Defmap{
 			Pub:   true,
 			Id:    "len",
 			Const: true,
-			Type:  DataType{Id: jntype.UInt, Val: tokens.UINT},
+			Type:  DataType{Id: jntype.UInt, Kind: tokens.UINT},
 			Tag:   "len()",
 		},
 	},
@@ -378,7 +378,7 @@ var arrDefs = &Defmap{
 		{Ast: &Func{
 			Pub:     true,
 			Id:      "empty",
-			RetType: RetType{Type: DataType{Id: jntype.Bool, Val: tokens.BOOL}},
+			RetType: RetType{Type: DataType{Id: jntype.Bool, Kind: tokens.BOOL}},
 		}},
 		{Ast: &Func{
 			Pub:    true,
@@ -409,10 +409,10 @@ var arrDefs = &Defmap{
 			Pub: true,
 			Id:  "insert",
 			Params: []Param{
-				{Id: "start", Type: DataType{Id: jntype.UInt, Val: tokens.UINT}},
+				{Id: "start", Type: DataType{Id: jntype.UInt, Kind: tokens.UINT}},
 				{Id: "values", Variadic: true},
 			},
-			RetType: RetType{Type: DataType{Id: jntype.Bool, Val: tokens.BOOL}},
+			RetType: RetType{Type: DataType{Id: jntype.Bool, Kind: tokens.BOOL}},
 		}},
 	},
 }
@@ -423,12 +423,12 @@ func readyArrDefs(arrt DataType) {
 	findFunc, _, _ := arrDefs.funcById("find", nil)
 	findFunc.Ast.Params[0].Type = elemType
 	findFunc.Ast.RetType.Type = elemType
-	findFunc.Ast.RetType.Type.Val = tokens.STAR + findFunc.Ast.RetType.Type.Val
+	findFunc.Ast.RetType.Type.Kind = tokens.STAR + findFunc.Ast.RetType.Type.Kind
 
 	rfindFunc, _, _ := arrDefs.funcById("rfind", nil)
 	rfindFunc.Ast.Params[0].Type = elemType
 	rfindFunc.Ast.RetType.Type = elemType
-	rfindFunc.Ast.RetType.Type.Val = tokens.STAR + rfindFunc.Ast.RetType.Type.Val
+	rfindFunc.Ast.RetType.Type.Kind = tokens.STAR + rfindFunc.Ast.RetType.Type.Kind
 
 	eraseFunc, _, _ := arrDefs.funcById("erase", nil)
 	eraseFunc.Ast.Params[0].Type = elemType
@@ -449,7 +449,7 @@ var mapDefs = &Defmap{
 			Pub:   true,
 			Id:    "len",
 			Const: true,
-			Type:  DataType{Id: jntype.UInt, Val: tokens.UINT},
+			Type:  DataType{Id: jntype.UInt, Kind: tokens.UINT},
 			Tag:   "size()",
 		},
 	},
@@ -460,13 +460,13 @@ var mapDefs = &Defmap{
 		{Ast: &Func{
 			Pub:     true,
 			Id:      "empty",
-			RetType: RetType{Type: DataType{Id: jntype.Bool, Val: tokens.BOOL}},
+			RetType: RetType{Type: DataType{Id: jntype.Bool, Kind: tokens.BOOL}},
 		}},
 		{Ast: &Func{
 			Pub:     true,
 			Id:      "has",
 			Params:  []Param{{Id: "key", Const: true}},
-			RetType: RetType{Type: DataType{Id: jntype.Bool, Val: tokens.BOOL}},
+			RetType: RetType{Type: DataType{Id: jntype.Bool, Kind: tokens.BOOL}},
 		}},
 		{Ast: &Func{
 			Pub:    true,
@@ -483,11 +483,11 @@ func readyMapDefs(mapt DataType) {
 
 	keysFunc, _, _ := mapDefs.funcById("keys", nil)
 	keysFunc.Ast.RetType.Type = keyt
-	keysFunc.Ast.RetType.Type.Val = "[]" + keysFunc.Ast.RetType.Type.Val
+	keysFunc.Ast.RetType.Type.Kind = "[]" + keysFunc.Ast.RetType.Type.Kind
 
 	valuesFunc, _, _ := mapDefs.funcById("values", nil)
 	valuesFunc.Ast.RetType.Type = valt
-	valuesFunc.Ast.RetType.Type.Val = "[]" + valuesFunc.Ast.RetType.Type.Val
+	valuesFunc.Ast.RetType.Type.Kind = "[]" + valuesFunc.Ast.RetType.Type.Kind
 
 	hasFunc, _, _ := mapDefs.funcById("has", nil)
 	hasFunc.Ast.Params[0].Type = keyt

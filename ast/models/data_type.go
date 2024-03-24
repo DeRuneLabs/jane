@@ -22,14 +22,14 @@ type DataType struct {
 	Tok        Tok
 	Id         uint8
 	Original   any
-	Val        string
+	Kind       string
 	MultiTyped bool
 	Tag        any
 }
 
 func (dt *DataType) ValWithOriginalId() string {
 	if dt.Original == nil {
-		return dt.Val
+		return dt.Kind
 	}
 	_, prefix := dt.GetValId()
 	original := dt.Original.(DataType)
@@ -46,9 +46,9 @@ func (dt *DataType) OriginalValId() string {
 }
 
 func (dt *DataType) GetValId() (id, prefix string) {
-	id = dt.Val
-	runes := []rune(dt.Val)
-	for i, r := range dt.Val {
+	id = dt.Kind
+	runes := []rune(dt.Kind)
+	for i, r := range dt.Kind {
 		if r == '_' || unicode.IsLetter(r) {
 			id = string(runes[i:])
 			prefix = string(runes[:i])
@@ -65,74 +65,85 @@ func (dt *DataType) GetValId() (id, prefix string) {
 	return
 }
 
-func (dt DataType) String() string {
-	var cxx strings.Builder
-	if dt.Original != nil {
-		val := dt.ValWithOriginalId()
-		tok := dt.Tok
-		dt = dt.Original.(DataType)
-		dt.Val = val
-		dt.Tok = tok
+func (dt *DataType) setToOriginal() {
+	if dt.Original == nil {
+		return
 	}
-	for i, run := range dt.Val {
-		if run == '*' {
-			cxx.WriteRune(run)
-			continue
+	val := dt.ValWithOriginalId()
+	tok := dt.Tok
+	*dt = dt.Original.(DataType)
+	dt.Kind = val
+	dt.Tok = tok
+}
+
+func (dt *DataType) Pointers() string {
+	for i, run := range dt.Kind {
+		if run != '*' {
+			return dt.Kind[:i]
 		}
-		dt.Val = dt.Val[i:]
-		break
 	}
+	return ""
+}
+
+func (dt DataType) String() string {
+	dt.setToOriginal()
 	if dt.MultiTyped {
-		return dt.MultiTypeString() + cxx.String()
+		return dt.MultiTypeString()
 	}
-	if dt.Val != "" {
+	pointers := dt.Pointers()
+	dt.Kind = dt.Kind[len(pointers):]
+	if dt.Kind != "" {
 		switch {
-		case strings.HasPrefix(dt.Val, "[]"):
-			pointers := cxx.String()
-			cxx.Reset()
-			cxx.WriteString("array<")
-			dt.Val = dt.Val[2:]
-			cxx.WriteString(dt.String())
-			cxx.WriteByte('>')
-			cxx.WriteString(pointers)
-			return cxx.String()
-		case dt.Id == jntype.Map && dt.Val[0] == '[':
-			pointers := cxx.String()
-			types := dt.Tag.([]DataType)
-			cxx.Reset()
-			cxx.WriteString("map<")
-			cxx.WriteString(types[0].String())
-			cxx.WriteByte(',')
-			cxx.WriteString(types[1].String())
-			cxx.WriteByte('>')
-			cxx.WriteString(pointers)
-			return cxx.String()
+		case strings.HasPrefix(dt.Kind, "[]"):
+			return dt.ArrayString() + pointers
+		case dt.Id == jntype.Map && dt.Kind[0] == '[':
+			return dt.MapString() + pointers
 		}
 	}
 	if dt.Tag != nil {
 		switch t := dt.Tag.(type) {
-		case Genericable:
-			return dt.StructString() + cxx.String()
 		case []DataType:
 			dt.Tag = genericableTypes{t}
-			return dt.StructString() + cxx.String()
+			return dt.StructString()
+		case Genericable:
+			return dt.StructString()
 		}
 	}
 	switch dt.Id {
 	case jntype.Id, jntype.Enum:
-		return jnapi.OutId(dt.Val, dt.Tok.File) + cxx.String()
+		return jnapi.OutId(dt.Kind, dt.Tok.File) + pointers
 	case jntype.Struct:
-		return dt.StructString() + cxx.String()
+		return dt.StructString() + pointers
 	case jntype.Func:
-		return dt.FuncString() + cxx.String()
+		return dt.FuncString() + pointers
 	default:
-		return jntype.CxxTypeIdFromType(dt.Id) + cxx.String()
+		return jntype.CxxTypeIdFromType(dt.Id) + pointers
 	}
+}
+
+func (dt DataType) ArrayString() string {
+	var cxx strings.Builder
+	cxx.WriteString("array<")
+	dt.Kind = dt.Kind[2:]
+	cxx.WriteString(dt.String())
+	cxx.WriteByte('>')
+	return cxx.String()
+}
+
+func (dt *DataType) MapString() string {
+	var cxx strings.Builder
+	types := dt.Tag.([]DataType)
+	cxx.WriteString("map<")
+	cxx.WriteString(types[0].String())
+	cxx.WriteByte(',')
+	cxx.WriteString(types[1].String())
+	cxx.WriteByte('>')
+	return cxx.String()
 }
 
 func (dt *DataType) StructString() string {
 	var cxx strings.Builder
-	cxx.WriteString(jnapi.OutId(dt.Val, dt.Tok.File))
+	cxx.WriteString(jnapi.OutId(dt.Kind, dt.Tok.File))
 	s := dt.Tag.(Genericable)
 	types := s.Generics()
 	if len(types) == 0 {
@@ -175,5 +186,5 @@ func (dt *DataType) MultiTypeString() string {
 		cxx.WriteString(t.String())
 		cxx.WriteByte(',')
 	}
-	return cxx.String()[:cxx.Len()-1] + ">"
+	return cxx.String()[:cxx.Len()-1] + ">" + dt.Pointers()
 }

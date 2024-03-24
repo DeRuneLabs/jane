@@ -16,23 +16,33 @@ import (
 	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 	"github.com/DeRuneLabs/jane/package/jnio"
-	"github.com/DeRuneLabs/jane/package/jnlog"
 	"github.com/DeRuneLabs/jane/package/jnset"
 	"github.com/DeRuneLabs/jane/parser"
 )
 
 type Parser = parser.Parser
 
+const commandHelp = "help"
+const commandVersion = "version"
+const commandInit = "init"
+const commandDoc = "doc"
+
+const localizationErrors = "error.json"
+const localizationWarnings = "warning.json"
+
+const builtinBaseFile = "lib.xx"
+
+var helpmap = [...][2]string{
+	0: {commandHelp, "Show help."},
+	1: {commandVersion, "Show version."},
+	2: {commandInit, "Initialize new project here."},
+	3: {commandDoc, "Documentize Jn source code."},
+}
+
 func help(cmd string) {
 	if cmd != "" {
 		println("This module can only be used as single")
 		return
-	}
-	helpmap := [][]string{
-		{"help", "Show help."},
-		{"version", "Show version."},
-		{"init", "Initialize new project here."},
-		{"doc", "Documentize Jane source code."},
 	}
 	max := len(helpmap[0][0])
 	for _, key := range helpmap {
@@ -88,12 +98,12 @@ func doc(cmd string) {
 			continue
 		}
 		if printlogs(p) {
-			fmt.Println(jn.GetErr("doc_couldnt_generated", path))
+			fmt.Println(jn.GetError("doc_couldnt_generated", path))
 			continue
 		}
 		docjson, err := documenter.Doc(p)
 		if err != nil {
-			fmt.Println(jn.GetErr("error", err.Error()))
+			fmt.Println(jn.GetError("error", err.Error()))
 			continue
 		}
 		path = path[len(filepath.Dir(path)):]
@@ -103,19 +113,19 @@ func doc(cmd string) {
 }
 
 func processCommand(namespace, cmd string) bool {
-	switch namespace {
-	case "help":
+  switch namespace {
+	case commandHelp:
 		help(cmd)
-	case "version":
+	case commandVersion:
 		version(cmd)
-	case "init":
+	case commandInit:
 		initProject(cmd)
-	case "doc":
+	case commandDoc:
 		doc(cmd)
 	default:
 		return false
 	}
-	return true
+  return true
 }
 
 func init() {
@@ -150,7 +160,7 @@ func init() {
 func loadLangWarns(path string, infos []fs.FileInfo) {
 	i := -1
 	for j, f := range infos {
-		if f.IsDir() || f.Name() != "warns.json" {
+		if f.IsDir() || f.Name() != localizationWarnings {
 			continue
 		}
 		i = j
@@ -166,7 +176,7 @@ func loadLangWarns(path string, infos []fs.FileInfo) {
 		println(err.Error())
 		return
 	}
-	err = json.Unmarshal(bytes, &jn.Warns)
+	err = json.Unmarshal(bytes, &jn.Warnings)
 	if err != nil {
 		println("Language's warnings couldn't loaded (uses default);")
 		println(err.Error())
@@ -193,7 +203,7 @@ func loadLangErrs(path string, infos []fs.FileInfo) {
 		println(err.Error())
 		return
 	}
-	err = json.Unmarshal(bytes, &jn.Errs)
+	err = json.Unmarshal(bytes, &jn.Errors)
 	if err != nil {
 		println("Language's errors couldn't loaded (uses default);")
 		println(err.Error())
@@ -224,7 +234,7 @@ func checkMode() {
 		key, _ := reflect.TypeOf(jn.Set).Elem().FieldByName("Mode")
 		tag := string(key.Tag)
 		tag = tag[6 : len(tag)-1]
-		println(jn.GetErr("invalid_value_for_key", jn.Set.Mode, tag))
+		println(jn.GetError("invalid_value_for_key", jn.Set.Mode, tag))
 		os.Exit(0)
 	}
 	jn.Set.Mode = lower
@@ -252,42 +262,17 @@ func loadJnSet() {
 }
 
 func printlogs(p *Parser) bool {
-	var str strings.Builder
-	for _, log := range p.Warns {
-		switch log.Type {
-		case jnlog.FlatWarn:
-			str.WriteString("WARNING: ")
-			str.WriteString(log.Msg)
-		case jnlog.Warn:
-			str.WriteString("WARNING: ")
-			str.WriteString(log.Path)
-			str.WriteByte(':')
-			str.WriteString(fmt.Sprint(log.Row))
-			str.WriteByte(':')
-			str.WriteString(fmt.Sprint(log.Column))
-			str.WriteByte(' ')
-			str.WriteString(log.Msg)
-		}
+  var str strings.Builder
+	for _, log := range p.Warnings {
+		str.WriteString(log.String())
 		str.WriteByte('\n')
 	}
-	for _, log := range p.Errs {
-		switch log.Type {
-		case jnlog.FlatErr:
-			str.WriteString("ERROR: ")
-			str.WriteString(log.Msg)
-		case jnlog.Err:
-			str.WriteString(log.Path)
-			str.WriteByte(':')
-			str.WriteString(fmt.Sprint(log.Row))
-			str.WriteByte(':')
-			str.WriteString(fmt.Sprint(log.Column))
-			str.WriteByte(' ')
-			str.WriteString(log.Msg)
-		}
+	for _, log := range p.Errors {
+		str.WriteString(log.String())
 		str.WriteByte('\n')
 	}
 	print(str.String())
-	return len(p.Errs) > 0
+	return len(p.Errors) > 0
 }
 
 func appendStandard(code *string) {
@@ -318,13 +303,13 @@ func appendStandard(code *string) {
 }
 
 func writeOutput(path, content string) {
-	err := os.MkdirAll(jn.Set.CxxOutDir, 0777)
+	err := os.MkdirAll(jn.Set.CxxOutDir, 0o777)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
 	}
 	bytes := []byte(content)
-	err = ioutil.WriteFile(path, bytes, 0666)
+	err = ioutil.WriteFile(path, bytes, 0o666)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)

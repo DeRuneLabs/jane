@@ -17,22 +17,22 @@ type assignChecker struct {
 func (ac assignChecker) checkAssignTypeAsync() {
 	defer func() { ac.p.wg.Done() }()
 	ac.p.checkAssignConst(ac.constant, ac.t, ac.v, ac.errtok)
-	if typeIsSingle(ac.t) && isConstNum(ac.v.ast.Data) {
+	if typeIsPure(ac.t) && isConstNumeric(ac.v.data.Value) {
 		switch {
 		case jntype.IsSignedIntegerType(ac.t.Id):
-			if jnbits.CheckBitInt(ac.v.ast.Data, jnbits.BitsizeType(ac.t.Id)) {
+			if jnbits.CheckBitInt(ac.v.data.Value, jnbits.BitsizeType(ac.t.Id)) {
 				return
 			}
 		case jntype.IsFloatType(ac.t.Id):
-			if checkFloatBit(ac.v.ast, jnbits.BitsizeType(ac.t.Id)) {
+			if checkFloatBit(ac.v.data, jnbits.BitsizeType(ac.t.Id)) {
 				return
 			}
 		case jntype.IsUnsignedNumericType(ac.t.Id):
-			if jnbits.CheckBitUInt(ac.v.ast.Data, jnbits.BitsizeType(ac.t.Id)) {
+			if jnbits.CheckBitUInt(ac.v.data.Value, jnbits.BitsizeType(ac.t.Id)) {
 				return
 			}
 		}
 	}
 	ac.p.wg.Add(1)
-	go ac.p.checkTypeAsync(ac.t, ac.v.ast.Type, ac.ignoreAny, ac.errtok)
+	go ac.p.checkTypeAsync(ac.t, ac.v.data.Type, ac.ignoreAny, ac.errtok)
 }

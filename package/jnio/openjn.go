@@ -11,7 +11,7 @@ import (
 func OpenJn(path string) (*File, error) {
 	path, _ = filepath.Abs(path)
 	if filepath.Ext(path) != jn.SrcExt {
-		return nil, errors.New(jn.GetErr("file_not_jn", path))
+		return nil, errors.New(jn.GetError("file_not_jn", path))
 	}
 	bytes, err := os.ReadFile(path)
 	if err != nil {
