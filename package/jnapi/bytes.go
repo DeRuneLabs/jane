@@ -28,23 +28,34 @@ func ToRawStr(bytes []byte) string {
 }
 
 func ToChar(b byte) string {
-	return strconv.Itoa(int(b))
+	return "'" + string(b) + "'"
 }
 
 func ToRune(bytes []byte) string {
+	if len(bytes) == 0 {
+		return ""
+	} else if bytes[0] == '\\' {
+		if len(bytes) > 1 && (bytes[1] == 'u' || bytes[1] == 'U') {
+			bytes = bytes[2:]
+			i, _ := strconv.ParseInt(string(bytes), 16, 32)
+			return "0x" + strconv.FormatInt(i, 16)
+		}
+	}
 	r, _ := utf8.DecodeRune(bytes)
-	return strconv.FormatInt(int64(r), 10)
+	return "0x" + strconv.FormatInt(int64(r), 16)
+}
+
+func btoa(b byte) string {
+	if b <= 127 {
+		return string(b)
+	}
+	return "\\x" + hex.EncodeToString([]byte{b})
 }
 
 func bytesToStr(bytes []byte) string {
 	var str strings.Builder
 	for _, b := range bytes {
-		if b <= 127 {
-			str.WriteByte(b)
-		} else {
-			str.WriteString("\\x")
-			str.WriteString(hex.EncodeToString([]byte{b}))
-		}
+		str.WriteString(btoa(b))
 	}
 	return str.String()
 }
