@@ -242,9 +242,9 @@ var errorStruct = &jnstruct{
 }
 
 var errorType = DataType{
-	Id:  jntype.Struct,
+	Id:   jntype.Struct,
 	Kind: errorStruct.Ast.Id,
-	Tag: errorStruct,
+	Tag:  errorStruct,
 }
 
 var Builtin = &Defmap{

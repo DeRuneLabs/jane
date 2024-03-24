@@ -48,7 +48,7 @@ type globalWaitPair struct {
 }
 
 type Parser struct {
-  attributes     []Attribute
+	attributes     []Attribute
 	docText        strings.Builder
 	iterCount      int
 	wg             sync.WaitGroup
@@ -84,21 +84,21 @@ func (p *Parser) pusherrtok(tok Tok, key string, args ...any) {
 
 func (p *Parser) pusherrmsgtok(tok Tok, msg string) {
 	p.Errors = append(p.Errors, jnlog.CompilerLog{
-		Type:   jnlog.Error,
-		Row:    tok.Row,
-		Column: tok.Column,
-		Path:   tok.File.Path(),
-		Message:    msg,
+		Type:    jnlog.Error,
+		Row:     tok.Row,
+		Column:  tok.Column,
+		Path:    tok.File.Path(),
+		Message: msg,
 	})
 }
 
 func (p *Parser) pushwarntok(tok Tok, key string, args ...any) {
 	p.Warnings = append(p.Warnings, jnlog.CompilerLog{
-		Type:   jnlog.Warning,
-		Row:    tok.Row,
-		Column: tok.Column,
-		Path:   tok.File.Path(),
-		Message:    jn.GetWarn(key, args...),
+		Type:    jnlog.Warning,
+		Row:     tok.Row,
+		Column:  tok.Column,
+		Path:    tok.File.Path(),
+		Message: jn.GetWarn(key, args...),
 	})
 }
 
@@ -112,15 +112,15 @@ func (p *Parser) PushErr(key string, args ...any) {
 
 func (p *Parser) pusherrmsg(msg string) {
 	p.Errors = append(p.Errors, jnlog.CompilerLog{
-		Type: jnlog.FlatError,
-		Message:  msg,
+		Type:    jnlog.FlatError,
+		Message: msg,
 	})
 }
 
 func (p *Parser) pushwarn(key string, args ...any) {
 	p.Warnings = append(p.Warnings, jnlog.CompilerLog{
-		Type: jnlog.FlatWarning,
-		Message:  jn.GetWarn(key, args...),
+		Type:    jnlog.FlatWarning,
+		Message: jn.GetWarn(key, args...),
 	})
 }
 
@@ -677,11 +677,11 @@ func (p *Parser) processFields(s *jnstruct) {
 	s.constructor.Id = s.Ast.Id
 	s.constructor.Params = make([]models.Param, len(s.Ast.Fields))
 	s.constructor.RetType.Type = DataType{
-    Id: jntype.Struct, 
-    Kind: s.Ast.Id, 
-    Tok: s.Ast.Tok, 
-    Tag: s,
-  }
+		Id:   jntype.Struct,
+		Kind: s.Ast.Id,
+		Tok:  s.Ast.Tok,
+		Tag:  s,
+	}
 	s.constructor.Generics = make([]*models.GenericType, len(s.Ast.Generics))
 	for i, generic := range s.Ast.Generics {
 		ng := new(models.GenericType)
@@ -1392,8 +1392,8 @@ func (p *Parser) evalToks(toks Toks) (value, iExpr) {
 }
 
 func (p *Parser) evalExpr(expr Expr) (value, iExpr) {
-  processes := make([]Toks, len(expr.Processes))
-  copy(processes, expr.Processes)
+	processes := make([]Toks, len(expr.Processes))
+	copy(processes, expr.Processes)
 	return p.evalProcesses(expr.Processes)
 }
 
@@ -3107,7 +3107,7 @@ func (p *Parser) processFuncMultiAssign(vsAST *models.Assign, funcVal value) {
 }
 
 func (p *Parser) processMultiAssign(assign *models.Assign, right []value) {
-  for i := range assign.Left {
+	for i := range assign.Left {
 		left := &assign.Left[i]
 		left.Ignore = jnapi.IsIgnoreId(left.Var.Id)
 		right := right[i]
@@ -3154,7 +3154,7 @@ func (p *Parser) checkSuffix(assign *models.Assign) {
 }
 
 func (p *Parser) checkAssign(assign *models.Assign) {
-  leftLength := len(assign.Left)
+	leftLength := len(assign.Left)
 	rightLength := len(assign.Right)
 	if rightLength == 0 && ast.IsSuffixOperator(assign.Setter.Kind) {
 		p.checkSuffix(assign)

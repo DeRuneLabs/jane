@@ -113,7 +113,7 @@ func doc(cmd string) {
 }
 
 func processCommand(namespace, cmd string) bool {
-  switch namespace {
+	switch namespace {
 	case commandHelp:
 		help(cmd)
 	case commandVersion:
@@ -125,7 +125,7 @@ func processCommand(namespace, cmd string) bool {
 	default:
 		return false
 	}
-  return true
+	return true
 }
 
 func init() {
@@ -262,7 +262,7 @@ func loadJnSet() {
 }
 
 func printlogs(p *Parser) bool {
-  var str strings.Builder
+	var str strings.Builder
 	for _, log := range p.Warnings {
 		str.WriteString(log.String())
 		str.WriteByte('\n')

@@ -57,7 +57,7 @@ func (rc *retChecker) checkepxrs() {
 }
 
 func (rc *retChecker) single() {
-  rc.retAST.Expr.Model = rc.expModel.models[0]
+	rc.retAST.Expr.Model = rc.expModel.models[0]
 	if len(rc.values) > 1 {
 		rc.p.pusherrtok(rc.retAST.Tok, "overflow_return")
 	}
@@ -71,7 +71,7 @@ func (rc *retChecker) single() {
 }
 
 func (rc *retChecker) multi() {
-  rc.retAST.Expr.Model = rc.expModel
+	rc.retAST.Expr.Model = rc.expModel
 	types := rc.f.RetType.Type.Tag.([]DataType)
 	valLength := len(rc.values)
 	if valLength == 1 {

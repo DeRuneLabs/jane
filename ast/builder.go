@@ -38,11 +38,11 @@ func NewBuilder(toks Toks) *Builder {
 
 func compilerErr(tok Tok, key string, args ...any) jnlog.CompilerLog {
 	return jnlog.CompilerLog{
-		Type:   jnlog.Error,
-		Row:    tok.Row,
-		Column: tok.Column,
-		Path:   tok.File.Path(),
-		Message:    jn.GetError(key, args...),
+		Type:    jnlog.Error,
+		Row:     tok.Row,
+		Column:  tok.Column,
+		Path:    tok.File.Path(),
+		Message: jn.GetError(key, args...),
 	}
 }
 
@@ -1534,7 +1534,7 @@ func (b *Builder) Var(toks Toks) (v models.Var) {
 	v.Id = v.IdTok.Kind
 	v.Type.Id = jntype.Void
 	v.Type.Kind = jntype.VoidTypeStr
-  v.Type.Kind = jntype.VoidTypeStr
+	v.Type.Kind = jntype.VoidTypeStr
 	i++
 	if i >= len(toks) {
 		b.pusherr(toks[i-1], "invalid_syntax")

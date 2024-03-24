@@ -1,9 +1,8 @@
 package parser
 
 import (
-  "github.com/DeRuneLabs/jane/package/jnio"
-  "github.com/DeRuneLabs/jane/package/jntype"
-
+	"github.com/DeRuneLabs/jane/package/jnio"
+	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
 type Defmap struct {
@@ -152,7 +151,7 @@ func (dm *Defmap) globalById(id string, f *File) (*Var, *Defmap, bool) {
 }
 
 func (dm *Defmap) defById(id string, f *File) (int, *Defmap, byte) {
-  var finders = map[byte]func(string, *jnio.File) (int, *Defmap, bool){
+	var finders = map[byte]func(string, *jnio.File) (int, *Defmap, bool){
 		'g': dm.findGlobalById,
 		'f': dm.findFuncById,
 		'e': dm.findEnumById,

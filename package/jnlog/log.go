@@ -15,7 +15,7 @@ const (
 const warningMark = "<!>"
 
 type CompilerLog struct {
-  Type    uint8
+	Type    uint8
 	Row     int
 	Column  int
 	Path    string

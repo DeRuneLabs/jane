@@ -46,7 +46,7 @@ func (fc *foreachChecker) checkKeyASize() {
 	var ok bool
 	keyA.Type, ok = fc.p.realType(keyA.Type, true)
 	if ok {
-    if !typeIsPure(keyA.Type) || !jntype.IsNumericType(keyA.Type.Id) {
+		if !typeIsPure(keyA.Type) || !jntype.IsNumericType(keyA.Type.Id) {
 			fc.p.pusherrtok(keyA.IdTok, "incompatible_datatype",
 				keyA.Type.Kind, jntype.NumericTypeStr)
 		}
@@ -87,7 +87,7 @@ func (fc *foreachChecker) str() {
 		return
 	}
 	runeType := DataType{
-		Id:  jntype.Char,
+		Id:   jntype.Char,
 		Kind: jntype.CxxTypeIdFromType(jntype.Char),
 	}
 	keyB := &fc.profile.KeyB

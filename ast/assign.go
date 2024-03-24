@@ -38,7 +38,7 @@ func IsAssign(id uint8) bool {
 }
 
 func IsSuffixOperator(kind string) bool {
-  for _, operator := range SuffixOperators {
+	for _, operator := range SuffixOperators {
 		if kind == operator {
 			return true
 		}
@@ -47,15 +47,15 @@ func IsSuffixOperator(kind string) bool {
 }
 
 func IsAssignOperator(kind string) bool {
-  if IsSuffixOperator(kind) {
-    return true
-  }
-  for _, operator := range AssignOperators {
-    if kind == operator {
-      return true
-    }
-  }
-  return false
+	if IsSuffixOperator(kind) {
+		return true
+	}
+	for _, operator := range AssignOperators {
+		if kind == operator {
+			return true
+		}
+	}
+	return false
 }
 
 func CheckAssignToks(toks Toks) bool {
@@ -77,8 +77,8 @@ func CheckAssignToks(toks Toks) bool {
 		} else if braceCount > 0 {
 			continue
 		} else if tok.Id == tokens.Operator && IsAssignOperator(tok.Kind) {
-      return true
-    }
+			return true
+		}
 	}
 	return false
 }
