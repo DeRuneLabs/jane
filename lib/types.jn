@@ -46,6 +46,9 @@ pub type byte u8
 //doc: type alias for i8
 pub type sbyte i8
 
+//doc: type alias for i32
+pub type rune i32
+
 //doc:
 // uint
 // can store the maximum size

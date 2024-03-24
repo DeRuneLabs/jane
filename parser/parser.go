@@ -2256,6 +2256,7 @@ func (p *Parser) evalMapSelect(mapv, selectv value, errtok Tok) value {
 func (p *Parser) evalStrSelect(strv, selectv value, errtok Tok) value {
 	strv.lvalue = true
 	strv.data.Type.Id = jntype.U8
+	strv.data.Type.Kind = jntype.TypeMap[strv.data.Type.Id]
 	p.wg.Add(1)
 	go assignChecker{
 		p:      p,

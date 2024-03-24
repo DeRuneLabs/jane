@@ -7,11 +7,24 @@ import (
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
-func toRawStrLiteral(literal string) string {
-	literal = literal[1 : len(literal)-1]
-	literal = `"(` + literal + `)"`
-	literal = jnapi.ToRawStr(literal)
-	return literal
+type valueEvaluator struct {
+	tok   Tok
+	model *exprModel
+	p     *Parser
+}
+
+func (ve *valueEvaluator) str() value {
+	var v value
+	v.data.Value = ve.tok.Kind
+	v.data.Type.Id = jntype.Str
+	v.data.Type.Kind = tokens.STR
+	content := []byte(ve.tok.Kind[1 : len(ve.tok.Kind)-1])
+	if israwstr(ve.tok.Kind) {
+		ve.model.appendSubNode(exprNode{jnapi.ToRawStr(content)})
+	} else {
+		ve.model.appendSubNode(exprNode{jnapi.ToStr(content)})
+	}
+	return v
 }
 
 func toCharLiteral(kind string) (string, bool) {
@@ -25,36 +38,23 @@ func toCharLiteral(kind string) (string, bool) {
 	case kind[0] == '\\' && kind[1] >= '0' && kind[1] <= '7':
 		isByte = true
 	}
-	kind = "'" + kind + "'"
-	return jnapi.ToChar(kind), isByte
-}
-
-type valueEvaluator struct {
-	tok   Tok
-	model *exprModel
-	p     *Parser
-}
-
-func (p *valueEvaluator) str() value {
-	var v value
-	v.data.Value = p.tok.Kind
-	v.data.Type.Id = jntype.Str
-	v.data.Type.Kind = tokens.STR
-	if israwstr(p.tok.Kind) {
-		p.model.appendSubNode(exprNode{toRawStrLiteral(p.tok.Kind)})
-	} else {
-		p.model.appendSubNode(exprNode{jnapi.ToStr(p.tok.Kind)})
-	}
-	return v
+	return kind, isByte
 }
 
 func (ve *valueEvaluator) char() value {
 	var v value
 	v.data.Value = ve.tok.Kind
-	literal, _ := toCharLiteral(ve.tok.Kind)
-	v.data.Type.Id = jntype.U8
-	v.data.Type.Kind = tokens.U8
-	ve.model.appendSubNode(exprNode{literal})
+	content, isByte := toCharLiteral(ve.tok.Kind)
+	if isByte {
+		v.data.Type.Id = jntype.U8
+		v.data.Type.Kind = tokens.U8
+		content = jnapi.ToChar(content[0])
+	} else {
+		v.data.Type.Id = jntype.I32
+		v.data.Type.Kind = tokens.I32
+		content = jnapi.ToRune([]byte(content))
+	}
+	ve.model.appendSubNode(exprNode{content})
 	return v
 }
 

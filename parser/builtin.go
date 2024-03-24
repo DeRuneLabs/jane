@@ -235,7 +235,7 @@ var errorStruct = &jnstruct{
 			{
 				Id:      "message",
 				Type:    DataType{Id: jntype.Str, Kind: tokens.STR},
-				Default: Expr{Model: exprNode{jnapi.ToStr(`"error: undefined error"`)}},
+				Default: Expr{Model: exprNode{jnapi.ToStr([]byte(`"error: undefined error"`))}},
 			},
 		},
 	},
