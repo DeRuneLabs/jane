@@ -15,8 +15,8 @@ type[Item_T]
 pub make(const n size) []Item_T {
   buffer:[]Item_T
   if n == 0 {
-    buffer
+    ret buffer
   }
   //cxx: @buffer._buffer = std::vector<@Item_T>(@n, @Item_T{});
-  buffer
+  ret buffer
 }

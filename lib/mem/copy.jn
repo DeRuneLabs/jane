@@ -13,7 +13,7 @@
 // set n value of pointer segment to specified expression
 type[Alloc_T]
 pub memset(ptr *Alloc_T, expr Alloc_T, const n size) {
-  if n == 0 {
+  if n == 0 || !ptr {
     ret
   } else if !ptr {
     ret
@@ -29,7 +29,7 @@ pub memset(ptr *Alloc_T, expr Alloc_T, const n size) {
 // copy n value from souce allocation to destination allocation
 type[Alloc_T]
 pub memcopy(dest, src *Alloc_T, const n size) {
-  if n == 0 {
+  if n == 0 || !dest || !src {
     ret
   } else if !dest {
     ret

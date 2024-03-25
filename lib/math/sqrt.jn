@@ -70,13 +70,13 @@
 // return the square root of x reference from
 // sun microsystem manual
 pub sqrt(const x f64) f64 {
-  if x == 0 || isnan(x) || isinf(x, 1) {
-    ret x
-  } else if x < 0 {
-    ret nan()
+  match {
+    case x == 0 || isnan(x) || isinf(x, 1):
+      ret x
+    case x < 0:
+      ret nan()
   }
   ix: = f64_bits(x)
-  // normalize x
   exp: = int((ix >> shift) & mask)
   if exp == 0 {
     iter ix&(1 << shift) == 0 {
