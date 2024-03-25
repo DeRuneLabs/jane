@@ -275,6 +275,32 @@ func (p *Parser) CxxFuncs() string {
 	return cxx.String()
 }
 
+func (p *Parser) CxxInitalizerCaller() string {
+	var cxx strings.Builder
+	cxx.WriteString("void ")
+	cxx.WriteString(jnapi.InitializerCaller)
+	cxx.WriteString("(void) {")
+	models.AddIndent()
+	indent := models.IndentString()
+	models.DoneIndent()
+	pushInit := func(defs *Defmap) {
+		f, _, _ := defs.funcById(jn.InitializerFunction, nil)
+		if f == nil {
+			return
+		}
+		cxx.WriteByte('\n')
+		cxx.WriteString(indent)
+		cxx.WriteString(f.outId())
+		cxx.WriteString("();")
+	}
+	for _, use := range used {
+		pushInit(use.defs)
+	}
+	pushInit(p.Defs)
+	cxx.WriteString("\n}")
+	return cxx.String()
+}
+
 func (p *Parser) Cxx() string {
 	var cxx strings.Builder
 	cxx.WriteString(p.CxxEmbeds())
@@ -289,6 +315,7 @@ func (p *Parser) Cxx() string {
 	cxx.WriteString("\n\n")
 	cxx.WriteString(p.CxxNamespaces())
 	cxx.WriteString(p.CxxFuncs())
+	cxx.WriteString(p.CxxInitalizerCaller())
 	return cxx.String()
 }
 
@@ -896,6 +923,7 @@ func (p *Parser) Func(fast Func) {
 	p.checkRetVars(f)
 	p.checkFuncAttributes(f)
 	p.parseTypesNonGenerics(f)
+	f.used = f.Ast.Id == jn.InitializerFunction
 	p.Defs.Funcs = append(p.Defs.Funcs, f)
 }
 
@@ -1145,7 +1173,8 @@ func (p *Parser) blockDefById(id string) (def any, tok Tok) {
 func (p *Parser) checkAsync() {
 	defer func() { p.wg.Done() }()
 	if p.main && !p.justDefs {
-		if f, _, _ := p.FuncById(jn.EntryPoint); f == nil {
+		f, _, _ := p.Defs.funcById(jn.EntryPoint, p.File)
+		if f == nil {
 			p.PushErr("no_entry_point")
 		} else {
 			f.used = true
@@ -1246,7 +1275,7 @@ func (p *Parser) checkFuncsAsync() {
 	defer func() { p.wg.Done() }()
 	check := func(f *function) {
 		p.wg.Add(1)
-		go p.checkFuncSpecialCasesAsync(f)
+		go p.checkFuncSpecialCasesAsync(f.Ast)
 		if f.checked || (len(f.Ast.Generics) > 0 && len(f.Ast.Combines) == 0) {
 			return
 		}
@@ -1276,11 +1305,11 @@ func (p *Parser) checkFuncsAsync() {
 	}
 }
 
-func (p *Parser) checkFuncSpecialCasesAsync(fun *function) {
+func (p *Parser) checkFuncSpecialCasesAsync(f *Func) {
 	defer func() { p.wg.Done() }()
-	switch fun.Ast.Id {
-	case jn.EntryPoint:
-		p.checkEntryPointSpecialCases(fun)
+	switch f.Id {
+	case jn.EntryPoint, jn.InitializerFunction:
+		p.checkSolidFuncSpecialCases(f)
 	}
 }
 
@@ -2673,15 +2702,15 @@ func (p *Parser) getRange(open, close string, toks Toks) (_ Toks, ok bool) {
 	return nil, false
 }
 
-func (p *Parser) checkEntryPointSpecialCases(fun *function) {
-	if len(fun.Ast.Params) > 0 {
-		p.pusherrtok(fun.Ast.Tok, "entrypoint_have_parameters")
+func (p *Parser) checkSolidFuncSpecialCases(f *Func) {
+	if len(f.Params) > 0 {
+		p.pusherrtok(f.Tok, "func_have_parameters", f.Id)
 	}
-	if fun.Ast.RetType.Type.Id != jntype.Void {
-		p.pusherrtok(fun.Ast.RetType.Type.Tok, "entrypoint_have_return")
+	if f.RetType.Type.Id != jntype.Void {
+		p.pusherrtok(f.RetType.Type.Tok, "func_have_return", f.Id)
 	}
-	if fun.Ast.Attributes != nil {
-		p.pusherrtok(fun.Ast.Tok, "entrypoint_have_attributes")
+	if f.Attributes != nil {
+		p.pusherrtok(f.Tok, "func_have_attributes", f.Id)
 	}
 }
 

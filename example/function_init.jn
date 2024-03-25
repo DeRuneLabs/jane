@@ -1,0 +1,7 @@
+init() {
+  println("this init function")
+}
+
+main() {
+  println("this main function")
+}

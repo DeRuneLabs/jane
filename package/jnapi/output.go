@@ -8,6 +8,7 @@ int main(void) {
     SetConsoleOutputCP(CP_UTF8);
     _setmode(_fileno(stdin), 0x00020000);
 #endif
+    ` + InitializerCaller + `();
     JNID(main());
     return EXIT_SUCCESS;
 }
