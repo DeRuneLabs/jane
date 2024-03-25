@@ -51,6 +51,7 @@ type Parser struct {
 	attributes     []Attribute
 	docText        strings.Builder
 	iterCount      int
+	caseCount      int
 	wg             sync.WaitGroup
 	justDefs       bool
 	main           bool
@@ -1767,8 +1768,16 @@ func (p *Parser) evalExprSubId(toks Toks, m *exprModel) (v value) {
 	i--
 	valTok := toks[i]
 	toks = toks[:i]
-	if len(toks) == 1 && toks[0].Id == tokens.DataType {
-		return p.evalTypeSubId(toks[0], idTok, m)
+	if len(toks) == 1 {
+		tok := toks[0]
+		if tok.Id == tokens.DataType {
+			return p.evalTypeSubId(tok, idTok, m)
+		} else if tok.Id == tokens.Id {
+			t, _, _ := p.typeById(tok.Kind)
+			if t != nil {
+				return p.evalTypeSubId(t.Type.Tok, idTok, m)
+			}
+		}
 	}
 	val := p.evalExprPart(toks, m)
 	checkType := val.data.Type
@@ -2753,7 +2762,9 @@ func (p *Parser) checkNewBlockCustom(b *models.Block, oldBlockVars []*Var) {
 	p.blockTypes = blockTypes
 }
 
-func (p *Parser) checkNewBlock(b *models.Block) { p.checkNewBlockCustom(b, p.blockVars) }
+func (p *Parser) checkNewBlock(b *models.Block) {
+	p.checkNewBlockCustom(b, p.blockVars)
+}
 
 func (p *Parser) checkStatement(b *models.Block, i *int) {
 	s := &b.Tree[*i]
@@ -2807,6 +2818,9 @@ func (p *Parser) checkStatement(b *models.Block, i *int) {
 		rc := retChecker{p: p, retAST: &t, f: b.Func}
 		rc.check()
 		s.Val = t
+	case models.Match:
+		p.checkMatchCase(&t)
+		s.Val = t
 	case models.Goto:
 		t.Index = *i
 		t.Block = b
@@ -2826,7 +2840,42 @@ func (p *Parser) checkBlock(b *models.Block) {
 	}
 }
 
-func isCxxReturn(s string) bool { return strings.HasPrefix(s, "return") }
+func (p *Parser) parseCase(c *models.Case, t DataType) {
+	for i := range c.Exprs {
+		expr := &c.Exprs[i]
+		value, model := p.evalExpr(*expr)
+		expr.Model = model
+		p.wg.Add(1)
+		go assignChecker{
+			p:      p,
+			t:      t,
+			v:      value,
+			errtok: expr.Toks[0],
+		}.checkAssignTypeAsync()
+	}
+	p.caseCount++
+	defer func() { p.caseCount-- }()
+	p.checkNewBlock(&c.Block)
+}
+
+func (p *Parser) cases(cases []models.Case, t DataType) {
+	for i := range cases {
+		p.parseCase(&cases[i], t)
+	}
+}
+
+func (p *Parser) checkMatchCase(t *models.Match) {
+	value, model := p.evalExpr(t.Expr)
+	t.Expr.Model = model
+	p.cases(t.Cases, value.data.Type)
+	if t.Default != nil {
+		p.parseCase(t.Default, value.data.Type)
+	}
+}
+
+func isCxxReturn(s string) bool {
+	return strings.HasPrefix(s, "return")
+}
 
 func (p *Parser) cxxEmbedStatement(cxx *models.CxxEmbed) {
 	rexpr := regexp.MustCompile(`@[\p{L}|_]([\p{L}0-9_]+)?`)
@@ -3266,7 +3315,6 @@ func (p *Parser) checkIterExpr(iter *models.Iter) {
 			p.checkForeachProfile(iter)
 		}
 	}
-	p.iterCount--
 }
 
 func (p *Parser) checkTry(try *models.Try, i *int, statements []models.Statement) {
@@ -3358,7 +3406,7 @@ func (p *Parser) checkElseBlock(elseast *models.Else) {
 }
 
 func (p *Parser) checkBreakStatement(breakAST *models.Break) {
-	if p.iterCount == 0 {
+	if p.iterCount == 0 && p.caseCount == 0 {
 		p.pusherrtok(breakAST.Tok, "break_at_outiter")
 	}
 }

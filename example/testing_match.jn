@@ -1,0 +1,15 @@
+testing_match_case() {
+  match 12 {
+    case 1:
+    println("execution case 1")
+    case 2:
+    println("execution case 2")
+    default:
+    println("execution default cause the case 12")
+  }
+}
+
+main() {
+  println("testing match case")
+  testing_match_case()
+}
