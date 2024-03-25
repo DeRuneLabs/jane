@@ -15,7 +15,7 @@
 type[Alloc_T]
 pub calloc(const n size) *Alloc_T {
   if n == 0 {
-    nil
+    ret nil
   }
   //cxx: return (@Alloc_T*)(std::calloc(@n, sizeof(@Alloc_T)));
 }
@@ -24,9 +24,18 @@ pub calloc(const n size) *Alloc_T {
 // allocate memory by specified size
 pub malloc(const size size) voidptr {
   if size == 0 {
-    nil
+    ret nil
   }
   //cxx: return std::malloc(@size);
+}
+
+//doc:
+// resize allocation based on given size
+pub realloc(ptr voidptr, const size size) voidptr {
+  if !ptr {
+    ret nil
+  }
+  //cxx: return std::realloc(@ptr, @size);
 }
 
 //doc:
