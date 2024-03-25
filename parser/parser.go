@@ -2865,11 +2865,18 @@ func (p *Parser) cases(cases []models.Case, t DataType) {
 }
 
 func (p *Parser) checkMatchCase(t *models.Match) {
-	value, model := p.evalExpr(t.Expr)
-	t.Expr.Model = model
-	p.cases(t.Cases, value.data.Type)
+	var dt DataType
+	if len(t.Expr.Processes) > 0 {
+		value, model := p.evalExpr(t.Expr)
+		t.Expr.Model = model
+		dt = value.data.Type
+	} else {
+		dt.Id = jntype.Bool
+		dt.Kind = jntype.TypeMap[dt.Id]
+	}
+	p.cases(t.Cases, dt)
 	if t.Default != nil {
-		p.parseCase(t.Default, value.data.Type)
+		p.parseCase(t.Default, dt)
 	}
 }
 
