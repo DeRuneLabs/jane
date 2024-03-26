@@ -56,6 +56,7 @@ type Parser struct {
 	justDefs       bool
 	main           bool
 	isLocalPkg     bool
+	noCheck        bool
 	rootBlock      *models.Block
 	nodeBlock      *models.Block
 	generics       []*GenericType
@@ -477,6 +478,9 @@ func (p *Parser) parseTree(tree []models.Object) (ok bool) {
 }
 
 func (p *Parser) checkParse() {
+	if p.noCheck {
+		return
+	}
 	if p.docText.Len() > 0 {
 		p.pushwarn("exist_undefined_doc")
 	}
@@ -493,6 +497,7 @@ func (p *Parser) useLocalPackage(tree *[]models.Object) (hasErr bool) {
 		p.pusherrmsg(err.Error())
 		return true
 	}
+	var parsers []*Parser
 	for _, info := range infos {
 		name := info.Name()
 		if info.IsDir() ||
@@ -506,19 +511,22 @@ func (p *Parser) useLocalPackage(tree *[]models.Object) (hasErr bool) {
 			p.pusherrmsg(err.Error())
 			return true
 		}
-		lexer := lexer.NewLex(f)
-		toks := lexer.Lex()
-		if lexer.Logs != nil {
-			p.pusherrs(lexer.Logs...)
-			return true
+		fp := New(f)
+		fp.isLocalPkg = true
+		fp.noCheck = true
+		fp.Defs = p.Defs
+		fp.Parsef(false, true)
+		parsers = append(parsers, fp)
+	}
+	for _, fp := range parsers {
+		fp.noCheck = false
+		fp.justDefs = false
+		fp.checkParse()
+		fp.wg.Wait()
+		if len(fp.Errors) > 0 {
+			p.pusherrs(fp.Errors...)
+			hasErr = true
 		}
-		subtree, errors := getTree(toks)
-		p.pusherrs(errors...)
-		preprocessor.Process(&subtree)
-		if p.parseUses(&subtree) {
-			return
-		}
-		*tree = append(*tree, subtree...)
 	}
 	return
 }
@@ -529,13 +537,13 @@ func (p *Parser) Parset(tree []models.Object, main, justDefs bool) {
 	if !main {
 		preprocessor.Process(&tree)
 	}
+	if !p.parseTree(tree) {
+		return
+	}
 	if !p.isLocalPkg {
 		if p.useLocalPackage(&tree) {
 			return
 		}
-	}
-	if !p.parseTree(tree) {
-		return
 	}
 	p.checkParse()
 	p.wg.Wait()
@@ -1207,6 +1215,9 @@ func (p *Parser) checkAsync() {
 func (p *Parser) checkTypesAsync() {
 	defer func() { p.wg.Done() }()
 	for i, t := range p.Defs.Types {
+		if t.Tok.File != p.File {
+			continue
+		}
 		p.Defs.Types[i].Type, _ = p.realType(t.Type, true)
 	}
 }
@@ -1214,6 +1225,9 @@ func (p *Parser) checkTypesAsync() {
 func (p *Parser) WaitingGlobals() {
 	pdefs := p.Defs
 	for _, wg := range p.waitingGlobals {
+		if wg.vast.IdTok.File != p.File {
+			continue
+		}
 		p.Defs = wg.defs
 		*wg.vast = *p.Var(*wg.vast)
 	}
@@ -1300,6 +1314,9 @@ func (p *Parser) checkFuncsAsync() {
 	defer func() { p.wg.Done() }()
 	err := false
 	check := func(f *function) {
+		if f.Ast.Tok.File != p.File {
+			return
+		}
 		p.wg.Add(1)
 		go p.checkFuncSpecialCasesAsync(f.Ast)
 		if err ||
