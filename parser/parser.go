@@ -1845,10 +1845,11 @@ func (p *Parser) evalTryCastExpr(toks Toks, m *exprModel) (v value, _ bool) {
 		} else if i+1 == len(toks) {
 			return
 		}
-		astb := ast.NewBuilder(nil)
+		b := ast.NewBuilder(nil)
 		dtindex := 0
 		typeToks := toks[1:i]
-		dt, ok := astb.DataType(typeToks, &dtindex, false)
+		dt, ok := b.DataType(typeToks, &dtindex, false)
+		b.Wait()
 		if !ok {
 			return
 		}
@@ -2179,6 +2180,7 @@ func (p *Parser) evalBraceRangeExpr(toks Toks, m *exprModel) (v value) {
 			b := ast.NewBuilder(nil)
 			i := new(int)
 			t, ok := b.DataType(exprToks, i, true)
+			b.Wait()
 			if !ok {
 				p.pusherrs(b.Errors...)
 				return
@@ -2199,6 +2201,7 @@ func (p *Parser) evalBraceRangeExpr(toks Toks, m *exprModel) (v value) {
 		case tokens.LPARENTHESES:
 			b := ast.NewBuilder(toks)
 			f := b.Func(b.Toks, true)
+			b.Wait()
 			if len(b.Errors) > 0 {
 				p.pusherrs(b.Errors...)
 				return
@@ -2570,10 +2573,8 @@ func (p *Parser) parseFuncCall(
 			return
 		}
 	}
-	v.data.Type = f.RetType.Type
-	v.data.Type.Original = v.data.Type
-	v.data.Type.DontUseOriginal = true
 	if isConstructor(f) {
+		p.readyConstructor(&f)
 		s := f.RetType.Type.Tag.(*jnstruct)
 		s.SetGenerics(generics)
 		v.data.Type.Kind = s.dataTypeString()
@@ -2583,6 +2584,9 @@ func (p *Parser) parseFuncCall(
 		m.appendSubNode(exprNode{tokens.LPARENTHESES})
 		defer m.appendSubNode(exprNode{tokens.RPARENTHESES})
 	}
+	v.data.Type = f.RetType.Type
+	v.data.Type.Original = v.data.Type
+	v.data.Type.DontUseOriginal = true
 	if args == nil {
 		return
 	}
@@ -3533,9 +3537,6 @@ func (p *Parser) typeSource(dt DataType, err bool) (ret DataType, ok bool) {
 func (p *Parser) realType(dt DataType, err bool) (ret DataType, _ bool) {
 	original := dt.Original
 	defer func() { ret.Original = original }()
-	if dt.Original != nil {
-		dt = dt.Original.(DataType)
-	}
 	return p.typeSource(dt, err)
 }
 

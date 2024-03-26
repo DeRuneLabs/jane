@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/DeRuneLabs/jane/lexer/tokens"
+	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
@@ -33,7 +34,7 @@ func (p *Param) TypeString() string {
 func (p Param) String() string {
 	var cxx strings.Builder
 	cxx.WriteString(p.Prototype())
-	if p.Id != "" {
+	if p.Id != "" && !jnapi.IsIgnoreId(p.Id) && p.Id != jn.Anonymous {
 		cxx.WriteByte(' ')
 		cxx.WriteString(jnapi.OutId(p.Id, p.Tok.File))
 	}

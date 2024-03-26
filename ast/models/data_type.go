@@ -67,7 +67,7 @@ func (dt *DataType) KindId() (id, prefix string) {
 }
 
 func (dt *DataType) setToOriginal() {
-	if dt.Original == nil {
+	if dt.DontUseOriginal || dt.Original == nil {
 		return
 	}
 	val := dt.KindWithOriginalId()
@@ -135,9 +135,13 @@ func (dt *DataType) MapString() string {
 	var cxx strings.Builder
 	types := dt.Tag.([]DataType)
 	cxx.WriteString("map<")
-	cxx.WriteString(types[0].String())
+	key := types[0]
+	key.DontUseOriginal = dt.DontUseOriginal
+	cxx.WriteString(key.String())
 	cxx.WriteByte(',')
-	cxx.WriteString(types[1].String())
+	value := types[1]
+	value.DontUseOriginal = dt.DontUseOriginal
+	cxx.WriteString(value.String())
 	cxx.WriteByte('>')
 	return cxx.String()
 }
@@ -163,11 +167,13 @@ func (dt *DataType) StructString() string {
 func (dt *DataType) FuncString() string {
 	var cxx strings.Builder
 	cxx.WriteString("func<")
-	fun := dt.Tag.(*Func)
-	cxx.WriteString(fun.RetType.String())
+	f := dt.Tag.(*Func)
+	f.RetType.Type.DontUseOriginal = dt.DontUseOriginal
+	cxx.WriteString(f.RetType.String())
 	cxx.WriteByte('(')
-	if len(fun.Params) > 0 {
-		for _, param := range fun.Params {
+	if len(f.Params) > 0 {
+		for _, param := range f.Params {
+			param.Type.DontUseOriginal = dt.DontUseOriginal
 			cxx.WriteString(param.Prototype())
 			cxx.WriteByte(',')
 		}
@@ -186,6 +192,7 @@ func (dt *DataType) MultiTypeString() string {
 	var cxx strings.Builder
 	cxx.WriteString("std::tuple<")
 	for _, t := range types {
+		t.DontUseOriginal = dt.DontUseOriginal
 		cxx.WriteString(t.String())
 		cxx.WriteByte(',')
 	}

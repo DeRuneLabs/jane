@@ -101,6 +101,10 @@ func (b *Builder) Build() {
 		}
 		b.buildNode(toks)
 	}
+	b.Wait()
+}
+
+func (b *Builder) Wait() {
 	b.wg.Wait()
 }
 
@@ -628,21 +632,20 @@ func (b *Builder) GlobalVar(toks Toks) {
 	})
 }
 
-func (b *Builder) Params(fn *models.Func, toks Toks) {
+func (b *Builder) Params(f *models.Func, toks Toks) {
 	parts, errs := Parts(toks, tokens.Comma)
 	b.Errors = append(b.Errors, errs...)
 	for _, part := range parts {
-		if len(parts) > 0 {
-			b.pushParam(fn, part)
-		}
+		b.pushParam(f, part)
 	}
 	b.wg.Add(1)
-	go b.checkParamsAsync(fn)
+	go b.checkParamsAsync(f)
 }
 
 func (b *Builder) checkParamsAsync(f *models.Func) {
 	defer func() { b.wg.Done() }()
-	for i, p := range f.Params {
+	for i := range f.Params {
+		p := &f.Params[i]
 		if p.Type.Tok.Id == tokens.NA {
 			if p.Tok.Id == tokens.NA {
 				b.pusherr(p.Tok, "missing_type")
@@ -650,7 +653,8 @@ func (b *Builder) checkParamsAsync(f *models.Func) {
 				p.Type.Tok = p.Tok
 				p.Type.Id = jntype.Id
 				p.Type.Kind = p.Type.Tok.Kind
-				f.Params[i] = p
+				p.Type.Original = p.Type
+				p.Id = jn.Anonymous
 				p.Tok = lexer.Tok{}
 			}
 		}
