@@ -22,13 +22,17 @@ import (
 
 type Parser = parser.Parser
 
-const commandHelp = "help"
-const commandVersion = "version"
-const commandInit = "init"
-const commandDoc = "doc"
+const (
+	commandHelp    = "help"
+	commandVersion = "version"
+	commandInit    = "init"
+	commandDoc     = "doc"
+)
 
-const localizationErrors = "error.json"
-const localizationWarnings = "warning.json"
+const (
+	localizationErrors   = "error.json"
+	localizationWarnings = "warning.json"
+)
 
 const builtinBaseFile = "lib.xx"
 
@@ -93,7 +97,7 @@ func doc(cmd string) {
 	paths := strings.SplitN(cmd, " ", -1)
 	for _, path := range paths {
 		path = strings.TrimSpace(path)
-		p := compile(path, false, true)
+		p := compile(path, false, true, true)
 		if p == nil {
 			continue
 		}
@@ -106,7 +110,7 @@ func doc(cmd string) {
 			fmt.Println(jn.GetError("error", err.Error()))
 			continue
 		}
-		path = path[len(filepath.Dir(path)):]
+		path = path[:len(path)-len(jn.SrcExt)]
 		path = filepath.Join(jn.Set.CxxOutDir, path+jn.DocExt)
 		writeOutput(path, docjson)
 	}
@@ -303,7 +307,8 @@ func appendStandard(code *string) {
 }
 
 func writeOutput(path, content string) {
-	err := os.MkdirAll(jn.Set.CxxOutDir, 0o777)
+	dir := filepath.Dir(path)
+	err := os.MkdirAll(dir, 0o777)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
@@ -328,7 +333,7 @@ func loadBuiltin() bool {
 	return !printlogs(p)
 }
 
-func compile(path string, main, justDefs bool) *Parser {
+func compile(path string, main, nolocal, justDefs bool) *Parser {
 	loadJnSet()
 	p := parser.New(nil)
 	f, err := jnio.OpenJn(path)
@@ -349,6 +354,7 @@ func compile(path string, main, justDefs bool) *Parser {
 		return nil
 	}
 	p.File = f
+	p.NoLocalPkg = nolocal
 	p.Parsef(main, justDefs)
 	return p
 }
@@ -376,7 +382,7 @@ func doSpell(path, cxx string) {
 
 func main() {
 	fpath := os.Args[0]
-	p := compile(fpath, true, false)
+	p := compile(fpath, true, false, false)
 	if p == nil {
 		return
 	}

@@ -1,6 +1,7 @@
 package models
 
 type Use struct {
-	Tok  Tok
-	Path string
+	Tok        Tok
+	Path       string
+	LinkString string
 }

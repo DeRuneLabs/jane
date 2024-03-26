@@ -27,6 +27,14 @@ func typeIsSinglePtr(t DataType) bool {
 	return t.Id == jntype.Voidptr
 }
 
+func typeIsStruct(dt DataType) bool {
+	return dt.Id == jntype.Struct
+}
+
+func typeIsEnum(dt DataType) bool {
+	return dt.Id == jntype.Enum
+}
+
 func typeIsGeneric(generics []*GenericType, t DataType) bool {
 	if t.Id != jntype.Id {
 		return false

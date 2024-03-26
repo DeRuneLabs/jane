@@ -53,10 +53,6 @@ type Parser struct {
 	iterCount      int
 	caseCount      int
 	wg             sync.WaitGroup
-	justDefs       bool
-	main           bool
-	isLocalPkg     bool
-	noCheck        bool
 	rootBlock      *models.Block
 	nodeBlock      *models.Block
 	generics       []*GenericType
@@ -65,17 +61,20 @@ type Parser struct {
 	embeds         strings.Builder
 	waitingGlobals []globalWaitPair
 
-	Uses     []*use
-	Defs     *Defmap
-	Errors   []jnlog.CompilerLog
-	Warnings []jnlog.CompilerLog
-	File     *File
+	NoLocalPkg bool
+	JustDefs   bool
+	NoCheck    bool
+	IsMain     bool
+	Uses       []*use
+	Defs       *Defmap
+	Errors     []jnlog.CompilerLog
+	Warnings   []jnlog.CompilerLog
+	File       *File
 }
 
 func New(f *File) *Parser {
 	p := new(Parser)
 	p.File = f
-	p.isLocalPkg = false
 	p.Defs = new(Defmap)
 	return p
 }
@@ -364,7 +363,9 @@ func (p *Parser) compileUse(useAST *models.Use) (_ *use, hasErr bool) {
 		psub.Parsef(false, false)
 		use := new(use)
 		use.defs = new(Defmap)
+		use.tok = useAST.Tok
 		use.Path = useAST.Path
+		use.LinkString = useAST.LinkString
 		p.pusherrs(psub.Errors...)
 		p.Warnings = append(p.Warnings, psub.Warnings...)
 		p.embeds.WriteString(psub.embeds.String())
@@ -478,7 +479,7 @@ func (p *Parser) parseTree(tree []models.Object) (ok bool) {
 }
 
 func (p *Parser) checkParse() {
-	if p.noCheck {
+	if p.NoCheck {
 		return
 	}
 	if p.docText.Len() > 0 {
@@ -512,15 +513,15 @@ func (p *Parser) useLocalPackage(tree *[]models.Object) (hasErr bool) {
 			return true
 		}
 		fp := New(f)
-		fp.isLocalPkg = true
-		fp.noCheck = true
+		fp.NoLocalPkg = true
+		fp.NoCheck = true
 		fp.Defs = p.Defs
 		fp.Parsef(false, true)
 		parsers = append(parsers, fp)
 	}
 	for _, fp := range parsers {
-		fp.noCheck = false
-		fp.justDefs = false
+		fp.NoCheck = false
+		fp.JustDefs = false
 		fp.checkParse()
 		fp.wg.Wait()
 		if len(fp.Errors) > 0 {
@@ -532,15 +533,15 @@ func (p *Parser) useLocalPackage(tree *[]models.Object) (hasErr bool) {
 }
 
 func (p *Parser) Parset(tree []models.Object, main, justDefs bool) {
-	p.main = main
-	p.justDefs = justDefs
+	p.IsMain = main
+	p.JustDefs = justDefs
 	if !main {
 		preprocessor.Process(&tree)
 	}
 	if !p.parseTree(tree) {
 		return
 	}
-	if !p.isLocalPkg {
+	if !p.NoLocalPkg {
 		if p.useLocalPackage(&tree) {
 			return
 		}
@@ -1057,6 +1058,7 @@ func (p *Parser) FuncById(id string) (*function, *Defmap, bool) {
 	for _, use := range p.Uses {
 		f, m, _ := use.defs.funcById(id, p.File)
 		if f != nil {
+			use.used = true
 			return f, m, false
 		}
 	}
@@ -1074,6 +1076,7 @@ func (p *Parser) globalById(id string) (*Var, *Defmap) {
 	for _, use := range p.Uses {
 		g, m, _ := use.defs.globalById(id, p.File)
 		if g != nil {
+			use.used = true
 			return g, m
 		}
 	}
@@ -1085,6 +1088,7 @@ func (p *Parser) nsById(id string, parent bool) *namespace {
 	for _, use := range p.Uses {
 		ns := use.defs.nsById(id, parent)
 		if ns != nil {
+			use.used = true
 			return ns
 		}
 	}
@@ -1101,6 +1105,7 @@ func (p *Parser) typeById(id string) (*Type, *Defmap, bool) {
 	for _, use := range p.Uses {
 		t, m, _ := use.defs.typeById(id, p.File)
 		if t != nil {
+			use.used = true
 			return t, m, false
 		}
 	}
@@ -1192,9 +1197,18 @@ func (p *Parser) blockDefById(id string) (def any, tok Tok) {
 	return
 }
 
+func (p *Parser) checkUsesAsync() {
+	defer func() { p.wg.Done() }()
+	for _, use := range p.Uses {
+		if !use.used {
+			p.pusherrtok(use.tok, "declared_but_not_used", use.LinkString)
+		}
+	}
+}
+
 func (p *Parser) checkAsync() {
 	defer func() { p.wg.Done() }()
-	if p.main && !p.justDefs {
+	if p.IsMain && !p.JustDefs {
 		f, _, _ := p.Defs.funcById(jn.EntryPoint, p.File)
 		if f == nil {
 			p.PushErr("no_entry_point")
@@ -1206,9 +1220,10 @@ func (p *Parser) checkAsync() {
 	go p.checkTypesAsync()
 	p.WaitingGlobals()
 	p.waitingGlobals = nil
-	if !p.justDefs {
+	if !p.JustDefs {
+		p.checkFuncs()
 		p.wg.Add(1)
-		go p.checkFuncsAsync()
+		go p.checkUsesAsync()
 	}
 }
 
@@ -1310,7 +1325,7 @@ func (p *Parser) parseFunc(f *Func) (err bool) {
 	return
 }
 
-func (p *Parser) checkFuncsAsync() {
+func (p *Parser) checkFuncs() {
 	defer func() { p.wg.Done() }()
 	err := false
 	check := func(f *function) {
@@ -1833,7 +1848,7 @@ func (p *Parser) evalExprSubId(toks Toks, m *exprModel) (v value) {
 		switch {
 		case checkType.Id == jntype.Str:
 			return p.evalStrObjSubId(val, idTok, m)
-		case valIsEnum(val):
+		case valIsEnumType(val):
 			return p.evalEnumSubId(val, idTok, m)
 		case valIsStructIns(val):
 			return p.evalStructObjSubId(val, idTok, m)
@@ -1865,10 +1880,19 @@ func (p *Parser) evalIdExprPart(toks Toks, m *exprModel) (v value) {
 		return p.evalExprSubId(toks, m)
 	case tokens.DoubleColon:
 		return p.evalNsSubId(toks, m)
-	default:
-		p.pusherrtok(toks[i], "invalid_syntax")
-		return
 	}
+	p.pusherrtok(toks[i], "invalid_syntax")
+	return
+}
+
+func (p *Parser) evalCastExpr(dt DataType, exprToks Toks, m *exprModel, errTok Tok) value {
+	m.appendSubNode(exprNode{tokens.LPARENTHESES + dt.String() + tokens.RPARENTHESES})
+	m.appendSubNode(exprNode{tokens.LPARENTHESES})
+	val, model := p.evalToks(exprToks)
+	m.appendSubNode(model)
+	m.appendSubNode(exprNode{tokens.RPARENTHESES})
+	val = p.evalCast(val, dt, errTok)
+	return val
 }
 
 func (p *Parser) evalTryCastExpr(toks Toks, m *exprModel) (v value, _ bool) {
@@ -1916,12 +1940,7 @@ func (p *Parser) evalTryCastExpr(toks Toks, m *exprModel) (v value, _ bool) {
 		if !ok {
 			return
 		}
-		m.appendSubNode(exprNode{tokens.LPARENTHESES + dt.String() + tokens.RPARENTHESES})
-		m.appendSubNode(exprNode{tokens.LPARENTHESES})
-		val, model := p.evalToks(exprToks)
-		m.appendSubNode(model)
-		m.appendSubNode(exprNode{tokens.RPARENTHESES})
-		val = p.evalCast(val, dt, errTok)
+		val := p.evalCastExpr(dt, exprToks, m, errTok)
 		return val, true
 	}
 	return
@@ -2068,33 +2087,21 @@ func (p *Parser) evalVariadicExprPart(toks Toks, m *exprModel, errtok Tok) (v va
 	return
 }
 
-func valIsStruct(v value) bool {
-	return v.isType && v.data.Type.Id == jntype.Struct
-}
-
-func valIsEnum(v value) bool {
-	return v.isType && v.data.Type.Id == jntype.Enum
-}
-
-func (p *Parser) getDataTypeFunc(expr, callRange Toks, m *exprModel) (v value, isret bool) {
-	tok := expr[0]
-	switch tok.Kind {
+func (p *Parser) getDataTypeFunc(expr Tok, callRange Toks, m *exprModel) (v value, isret bool) {
+	switch expr.Kind {
 	case tokens.STR:
 		m.appendSubNode(exprNode{"tostr"})
 		v.data.Type = DataType{Id: jntype.Func, Kind: "()", Tag: strDefaultFunc}
 	default:
-		toks := append([]lexer.Tok{{
-			Id:   tokens.Brace,
-			Kind: tokens.LPARENTHESES,
-			File: tok.File,
-		}}, expr...)
-		toks = append(toks, Tok{
-			Id:   tokens.Brace,
-			Kind: tokens.RPARENTHESES,
-			File: tok.File,
-		})
-		toks = append(toks, callRange...)
-		v, isret = p.evalTryCastExpr(toks, m)
+		def, _, _, _ := p.defById(expr.Kind)
+		if def == nil {
+			break
+		}
+		switch t := def.(type) {
+		case *Type:
+			isret = true
+			v = p.evalCastExpr(t.Type, callRange, m, expr)
+		}
 	}
 	return
 }
@@ -2125,7 +2132,7 @@ func (p *Parser) evalParenthesesRangeExpr(toks Toks, m *exprModel) (v value) {
 	switch tok := exprToks[0]; tok.Id {
 	case tokens.DataType, tokens.Id:
 		if len(exprToks) == 1 && len(genericsToks) == 0 {
-			v, isret := p.getDataTypeFunc(exprToks, rangeExpr, m)
+			v, isret := p.getDataTypeFunc(exprToks[0], rangeExpr, m)
 			if isret {
 				return v
 			}
@@ -2138,7 +2145,7 @@ func (p *Parser) evalParenthesesRangeExpr(toks Toks, m *exprModel) (v value) {
 	case typeIsFunc(v.data.Type):
 		f := v.data.Type.Tag.(*Func)
 		return p.callFunc(f, genericsToks, rangeExpr, m)
-	case valIsStruct(v):
+	case valIsStructType(v):
 		s := v.data.Type.Tag.(*jnstruct)
 		return p.callStructConstructor(s, genericsToks, rangeExpr, m)
 	}
@@ -3581,6 +3588,7 @@ func (p *Parser) typeSource(dt DataType, err bool) (ret DataType, ok bool) {
 func (p *Parser) realType(dt DataType, err bool) (ret DataType, _ bool) {
 	original := dt.Original
 	defer func() { ret.Original = original }()
+	dt.SetToOriginal()
 	return p.typeSource(dt, err)
 }
 

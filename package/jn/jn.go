@@ -7,7 +7,7 @@ import (
 const (
 	Version       = `@dev_beta 0.0.1`
 	SrcExt        = `.jn`
-	DocExt        = ".jndoc"
+	DocExt        = SrcExt + "doc"
 	SettingsFile  = "jn.set"
 	Stdlib        = "lib"
 	Localizations = "localization"

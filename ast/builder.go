@@ -454,6 +454,14 @@ func (b *Builder) Struct(toks Toks) {
 	})
 }
 
+func tokstoa(toks Toks) string {
+	var str strings.Builder
+	for _, tok := range toks {
+		str.WriteString(tok.Kind)
+	}
+	return str.String()
+}
+
 func (b *Builder) Use(toks Toks) {
 	var use models.Use
 	use.Tok = toks[0]
@@ -461,7 +469,9 @@ func (b *Builder) Use(toks Toks) {
 		b.pusherr(use.Tok, "missing_use_path")
 		return
 	}
-	use.Path = b.usePath(toks[1:])
+	toks = toks[1:]
+	use.LinkString = tokstoa(toks)
+	use.Path = b.usePath(toks)
 	b.Tree = append(b.Tree, models.Object{
 		Tok:   use.Tok,
 		Value: use,

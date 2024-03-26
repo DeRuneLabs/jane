@@ -66,7 +66,7 @@ func (dt *DataType) KindId() (id, prefix string) {
 	return
 }
 
-func (dt *DataType) setToOriginal() {
+func (dt *DataType) SetToOriginal() {
 	if dt.DontUseOriginal || dt.Original == nil {
 		return
 	}
@@ -87,7 +87,7 @@ func (dt *DataType) Pointers() string {
 }
 
 func (dt DataType) String() string {
-	dt.setToOriginal()
+	dt.SetToOriginal()
 	if dt.MultiTyped {
 		return dt.MultiTypeString()
 	}

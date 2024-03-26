@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	"github.com/DeRuneLabs/jane/ast/models"
-	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/parser"
 )
 
@@ -15,8 +14,8 @@ type generic struct {
 }
 
 type use struct {
-	Path         string `json:"path"`
-	StandardPath bool   `json:"standard_path"`
+	Path   string `json:"path"`
+	Stdlib bool   `json:"stdlib"`
 }
 
 type jnstruct struct {
@@ -84,11 +83,9 @@ type document struct {
 func uses(p *parser.Parser) []use {
 	uses := make([]use, len(p.Uses))
 	for i, u := range p.Uses {
-		path := u.Path
-		path = path[len(jn.StdlibPath)+1:]
 		uses[i] = use{
-			Path:         path,
-			StandardPath: true,
+			Path:   u.LinkString,
+			Stdlib: u.LinkString[0] != '"',
 		}
 	}
 	return uses
