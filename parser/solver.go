@@ -113,9 +113,9 @@ func (s *solver) float() (v models.Data) {
 		v.Type.Id = jntype.Bool
 		v.Type.Kind = tokens.BOOL
 	case tokens.PLUS, tokens.MINUS, tokens.STAR, tokens.SLASH:
-		v.Type.Id = jntype.F32
-		if s.leftVal.Type.Id == jntype.F64 || s.rightVal.Type.Id == jntype.F64 {
-			v.Type.Id = jntype.F64
+		v.Type = s.leftVal.Type
+		if jntype.TypeGreaterThan(s.rightVal.Type.Id, v.Type.Id) {
+			v.Type = s.rightVal.Type
 		}
 	default:
 		s.p.pusherrtok(s.operator, "operator_notfor_float", s.operator.Kind)
@@ -175,6 +175,9 @@ func (s *solver) unsigned() (v models.Data) {
 		}
 	case tokens.RSHIFT, tokens.LSHIFT:
 		v.Type = s.leftVal.Type
+		if jntype.TypeGreaterThan(s.rightVal.Type.Id, v.Type.Id) {
+			v.Type = s.rightVal.Type
+		}
 	default:
 		s.p.pusherrtok(s.operator, "operator_notfor_uint", s.operator.Kind)
 	}

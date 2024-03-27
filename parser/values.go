@@ -48,6 +48,9 @@ func isBoolExpr(val value) bool {
 }
 
 func isfloat(s string) bool {
+	if strings.HasPrefix(s, "0x") {
+		return false
+	}
 	return strings.Contains(s, tokens.DOT) || strings.ContainsAny(s, "eE")
 }
 

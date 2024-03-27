@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/DeRuneLabs/jane/lexer/tokens"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 	"github.com/DeRuneLabs/jane/package/jnbits"
@@ -80,7 +82,7 @@ func (ve *valueEvaluator) float() value {
 	var v value
 	v.data.Value = ve.tok.Kind
 	v.data.Type.Id = jntype.F64
-	v.data.Type.Kind = tokens.F64
+	v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
 	return v
 }
 
@@ -89,16 +91,16 @@ func (ve *valueEvaluator) integer() value {
 	v.data.Value = ve.tok.Kind
 	intbit := jnbits.BitsizeType(jntype.Int)
 	switch {
+	case strings.HasPrefix(ve.tok.Kind, "0x"):
+		v.data.Type.Id = jntype.U64
 	case jnbits.CheckBitInt(ve.tok.Kind, intbit):
 		v.data.Type.Id = jntype.Int
-		v.data.Type.Kind = tokens.INT
 	case intbit < jnbits.MaxInt && jnbits.CheckBitInt(ve.tok.Kind, jnbits.MaxInt):
 		v.data.Type.Id = jntype.I64
-		v.data.Type.Kind = tokens.I64
 	default:
 		v.data.Type.Id = jntype.U64
-		v.data.Type.Kind = tokens.U64
 	}
+	v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
 	return v
 }
 

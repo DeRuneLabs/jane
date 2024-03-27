@@ -2088,19 +2088,35 @@ func (p *Parser) evalVariadicExprPart(toks Toks, m *exprModel, errtok Tok) (v va
 }
 
 func (p *Parser) getDataTypeFunc(expr Tok, callRange Toks, m *exprModel) (v value, isret bool) {
-	switch expr.Kind {
-	case tokens.STR:
-		m.appendSubNode(exprNode{"tostr"})
-		v.data.Type = DataType{Id: jntype.Func, Kind: "()", Tag: strDefaultFunc}
-	default:
+	switch expr.Id {
+	case tokens.DataType:
+		switch expr.Kind {
+		case tokens.STR:
+			m.appendSubNode(exprNode{"tostr"})
+			v.data.Type = DataType{Id: jntype.Func, Kind: "()", Tag: strDefaultFunc}
+			isret = true
+		default:
+			dt := DataType{
+				Tok:  expr,
+				Id:   jntype.TypeFromId(expr.Kind),
+				Kind: expr.Kind,
+			}
+			isret = true
+			v = p.evalCastExpr(dt, callRange, m, expr)
+		}
+	case tokens.Id:
 		def, _, _, _ := p.defById(expr.Kind)
 		if def == nil {
 			break
 		}
 		switch t := def.(type) {
 		case *Type:
+			dt, ok := p.realType(t.Type, true)
+			if !ok || typeIsStruct(dt) {
+				return
+			}
 			isret = true
-			v = p.evalCastExpr(t.Type, callRange, m, expr)
+			v = p.evalCastExpr(dt, callRange, m, expr)
 		}
 	}
 	return
@@ -2212,7 +2228,10 @@ func (p *Parser) evalTypeId(toks Toks, m *exprModel) (v value) {
 }
 
 func (p *Parser) buildEnumerable(exprToks Toks, t DataType, m *exprModel) (v value) {
-	t, _ = p.realType(t, true)
+	t, ok := p.realType(t, true)
+	if !ok {
+		return
+	}
 	var model iExpr
 	switch {
 	case typeIsArray(t):
@@ -2221,6 +2240,7 @@ func (p *Parser) buildEnumerable(exprToks Toks, t DataType, m *exprModel) (v val
 		v, model = p.buildMap(p.buildEnumerableParts(exprToks), t, exprToks[0])
 	default:
 		p.pusherrtok(exprToks[0], "invalid_type_source")
+		return
 	}
 	m.appendSubNode(model)
 	return
@@ -2273,8 +2293,7 @@ func (p *Parser) evalBraceRangeExpr(toks Toks, m *exprModel) (v value) {
 				p.pusherrtok(toks[*i+1], "invalid_syntax")
 			}
 			exprToks = toks[len(exprToks):]
-			p.buildEnumerable(exprToks, t, m)
-			return
+			return p.buildEnumerable(exprToks, t, m)
 		case tokens.LPARENTHESES:
 			b := ast.NewBuilder(toks)
 			f := b.Func(b.Toks, true)
@@ -2685,6 +2704,7 @@ func (p *Parser) parseFuncCall(
 		if !p.parseGenerics(f, generics, m, errTok) {
 			return
 		}
+		f.RetType.Type.DontUseOriginal = true
 	}
 	if isConstructor(f) {
 		p.readyConstructor(&f)
@@ -2698,8 +2718,6 @@ func (p *Parser) parseFuncCall(
 		defer m.appendSubNode(exprNode{tokens.RPARENTHESES})
 	}
 	v.data.Type = f.RetType.Type
-	v.data.Type.Original = v.data.Type
-	v.data.Type.DontUseOriginal = true
 	if args == nil {
 		return
 	}

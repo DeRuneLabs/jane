@@ -1,0 +1,46 @@
+// MIT License
+// Copyright (c) 2024 - DeRuneLabs
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+//doc:
+// return binary exponent of x
+pub logb(const x f64) f64 {
+  match {
+    case x == 0:
+      ret inf(-1)
+    case isinf(x, 0):
+      ret inf(1)
+    case isnan(x):
+      ret x
+  }
+  ret f64(_ilogb(x))
+}
+
+//doc:
+// return binary exponent of x as integer
+pub ilogb(const x f64) int {
+  match {
+    case x == 0:
+      ret i32.min
+    case isnan(x):
+      ret i32.max
+    case isinf(x, 0):
+      ret i32.max
+  }
+  ret _ilogb(x)
+}
+
+//doc:
+// return binary exponent of x
+// assume x is finite and non-zero
+_ilogb(x f64) int {
+  x, exp := normalize(x)
+  ret int((f64_bits(x)>>shift)&mask) - bias + exp
+}

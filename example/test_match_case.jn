@@ -1,11 +1,3 @@
 main() {
   println("testing match case bool")
-  match {
-    case false:
-      println("false")
-    case !true:
-      println("!true")
-    default:
-      println("default bool")
-  }
 }

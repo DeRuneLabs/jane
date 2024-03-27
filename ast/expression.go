@@ -11,6 +11,10 @@ func IsFuncCall(toks Toks) Toks {
 			return nil
 		}
 	}
+	tok := toks[len(toks)-1]
+	if tok.Id != tokens.Brace || tok.Kind != tokens.RPARENTHESES {
+		return nil
+	}
 	braceCount := 0
 	for i := len(toks) - 1; i >= 1; i-- {
 		tok := toks[i]
