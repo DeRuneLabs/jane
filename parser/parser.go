@@ -1605,7 +1605,7 @@ func (p *Parser) evalExprPart(toks Toks, m *exprModel) (v value) {
 	return
 }
 
-func (p *Parser) evalXObjSubId(dm *Defmap, val value, idTok Tok, m *exprModel) (v value) {
+func (p *Parser) evalJnObjSubId(dm *Defmap, val value, idTok Tok, m *exprModel) (v value) {
 	i, dm, t := dm.defById(idTok.Kind, idTok.File)
 	if i == -1 {
 		p.pusherrtok(idTok, "obj_have_not_id", idTok.Kind)
@@ -1636,17 +1636,17 @@ func (p *Parser) evalXObjSubId(dm *Defmap, val value, idTok Tok, m *exprModel) (
 }
 
 func (p *Parser) evalStrObjSubId(val value, idTok Tok, m *exprModel) (v value) {
-	return p.evalXObjSubId(strDefs, val, idTok, m)
+	return p.evalJnObjSubId(strDefs, val, idTok, m)
 }
 
 func (p *Parser) evalArrayObjSubId(val value, idTok Tok, m *exprModel) (v value) {
 	readyArrDefs(val.data.Type)
-	return p.evalXObjSubId(arrDefs, val, idTok, m)
+	return p.evalJnObjSubId(arrDefs, val, idTok, m)
 }
 
 func (p *Parser) evalMapObjSubId(val value, idTok Tok, m *exprModel) (v value) {
 	readyMapDefs(val.data.Type)
-	return p.evalXObjSubId(mapDefs, val, idTok, m)
+	return p.evalJnObjSubId(mapDefs, val, idTok, m)
 }
 
 func (p *Parser) evalEnumSubId(val value, idTok Tok, m *exprModel) (v value) {
@@ -1669,7 +1669,7 @@ func (p *Parser) evalStructObjSubId(val value, idTok Tok, m *exprModel) value {
 	val.constant = false
 	val.lvalue = false
 	val.isType = false
-	return p.evalXObjSubId(s.Defs, val, idTok, m)
+	return p.evalJnObjSubId(s.Defs, val, idTok, m)
 }
 
 type nsFind interface{ nsById(string, bool) *namespace }
@@ -2199,6 +2199,33 @@ func (p *Parser) structConstructorInstance(as jnstruct) *jnstruct {
 	return s
 }
 
+func (p *Parser) evalTypeId(toks Toks, m *exprModel) (v value) {
+	tok := toks[0]
+	t, _, _ := p.typeById(tok.Kind)
+	if t == nil {
+		v.data.Type.Id = jntype.Void
+		v.data.Type.Kind = jntype.VoidTypeStr
+		return
+	}
+	toks = toks[1:]
+	return p.buildEnumerable(toks, t.Type, m)
+}
+
+func (p *Parser) buildEnumerable(exprToks Toks, t DataType, m *exprModel) (v value) {
+	t, _ = p.realType(t, true)
+	var model iExpr
+	switch {
+	case typeIsArray(t):
+		v, model = p.buildArray(p.buildEnumerableParts(exprToks), t, exprToks[0])
+	case typeIsMap(t):
+		v, model = p.buildMap(p.buildEnumerableParts(exprToks), t, exprToks[0])
+	default:
+		p.pusherrtok(exprToks[0], "invalid_type_source")
+	}
+	m.appendSubNode(model)
+	return
+}
+
 func (p *Parser) evalBraceRangeExpr(toks Toks, m *exprModel) (v value) {
 	var exprToks Toks
 	braceCount := 0
@@ -2213,7 +2240,7 @@ func (p *Parser) evalBraceRangeExpr(toks Toks, m *exprModel) (v value) {
 		default:
 			braceCount--
 		}
-		if braceCount > 0 {
+		if braceCount != 0 {
 			continue
 		}
 		exprToks = toks[:i]
@@ -2224,7 +2251,14 @@ func (p *Parser) evalBraceRangeExpr(toks Toks, m *exprModel) (v value) {
 		p.pusherrtok(toks[0], "invalid_syntax")
 		return
 	}
+	tok := exprToks[0]
 	switch exprToks[0].Id {
+	case tokens.Id:
+		if len(exprToks) > 1 {
+			p.pusherrtok(tok, "invalid_syntax")
+			return
+		}
+		return p.evalTypeId(toks, m)
 	case tokens.Brace:
 		switch exprToks[0].Kind {
 		case tokens.LBRACKET:
@@ -2238,16 +2272,8 @@ func (p *Parser) evalBraceRangeExpr(toks Toks, m *exprModel) (v value) {
 			} else if *i+1 < len(exprToks) {
 				p.pusherrtok(toks[*i+1], "invalid_syntax")
 			}
-			t, _ = p.typeSource(t, true)
 			exprToks = toks[len(exprToks):]
-			var model iExpr
-			switch {
-			case typeIsArray(t):
-				v, model = p.buildArray(p.buildEnumerableParts(exprToks), t, exprToks[0])
-			case typeIsMap(t):
-				v, model = p.buildMap(p.buildEnumerableParts(exprToks), t, exprToks[0])
-			}
-			m.appendSubNode(model)
+			p.buildEnumerable(exprToks, t, m)
 			return
 		case tokens.LPARENTHESES:
 			b := ast.NewBuilder(toks)
@@ -2286,7 +2312,7 @@ func (p *Parser) evalBracketRangeExpr(toks Toks, m *exprModel) (v value) {
 		default:
 			braceCount--
 		}
-		if braceCount > 0 {
+		if braceCount != 0 {
 			continue
 		}
 		exprToks = toks[:i]
@@ -2297,15 +2323,51 @@ func (p *Parser) evalBracketRangeExpr(toks Toks, m *exprModel) (v value) {
 		p.pusherrtok(toks[0], "invalid_syntax")
 		return
 	}
-	var model iExpr
-	v, model = p.evalToks(exprToks)
-	m.appendSubNode(model)
-	toks = toks[len(exprToks)+1 : len(toks)-1]
-	m.appendSubNode(exprNode{tokens.LBRACKET})
-	selectv, model := p.evalToks(toks)
-	m.appendSubNode(model)
-	m.appendSubNode(exprNode{tokens.RBRACKET})
-	return p.evalEnumerableSelect(v, selectv, toks[0])
+	tok := exprToks[0]
+	switch exprToks[0].Id {
+	case tokens.Id:
+		if len(exprToks) > 1 {
+			p.pusherrtok(tok, "invalid_syntax")
+			return
+		}
+		return p.evalTypeId(toks, m)
+	case tokens.Brace:
+		switch exprToks[0].Kind {
+		case tokens.LBRACKET:
+			b := ast.NewBuilder(nil)
+			i := new(int)
+			t, ok := b.DataType(exprToks, i, true)
+			b.Wait()
+			if !ok {
+				p.pusherrs(b.Errors...)
+				return
+			} else if *i+1 < len(exprToks) {
+				p.pusherrtok(toks[*i+1], "invalid_syntax")
+			}
+			exprToks = toks[len(exprToks):]
+			p.buildEnumerable(exprToks, t, m)
+			return
+		case tokens.LPARENTHESES:
+			b := ast.NewBuilder(toks)
+			f := b.Func(b.Toks, true)
+			b.Wait()
+			if len(b.Errors) > 0 {
+				p.pusherrs(b.Errors...)
+				return
+			}
+			p.checkAnonFunc(&f)
+			v.data.Type.Tag = &f
+			v.data.Type.Id = jntype.Func
+			v.data.Type.Kind = f.DataTypeString()
+			m.appendSubNode(anonFuncExpr{f, jnapi.LambdaByCopy})
+			return
+		default:
+			p.pusherrtok(exprToks[0], "invalid_syntax")
+		}
+	default:
+		p.pusherrtok(exprToks[0], "invalid_syntax")
+	}
+	return
 }
 
 func (p *Parser) evalEnumerableSelect(enumv, selectv value, errtok Tok) (v value) {
