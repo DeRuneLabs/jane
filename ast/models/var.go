@@ -13,46 +13,47 @@ type Var struct {
 	SetterTok Tok
 	Id        string
 	Type      DataType
-	Val       Expr
+	Expr      Expr
 	Const     bool
-	Volatile  bool
 	New       bool
 	Tag       any
+	ExprTag   any
 	Desc      string
 	Used      bool
 }
 
+func (v *Var) OutId() string {
+	return jnapi.OutId(v.Id, v.IdTok.File)
+}
+
 func (v Var) String() string {
-	var cxx strings.Builder
-	if v.Volatile {
-		cxx.WriteString("volatile ")
-	}
 	if v.Const {
-		cxx.WriteString("const ")
+		return ""
 	}
+	var cxx strings.Builder
 	cxx.WriteString(v.Type.String())
 	cxx.WriteByte(' ')
-	cxx.WriteString(jnapi.OutId(v.Id, v.IdTok.File))
-	cxx.WriteByte('{')
-	if v.Val.Processes != nil {
-		cxx.WriteString(v.Val.String())
+	cxx.WriteString(v.OutId())
+	expr := v.Expr.String()
+	if expr != "" {
+		cxx.WriteString(" = ")
+		cxx.WriteString(v.Expr.String())
+	} else {
+		cxx.WriteString(jnapi.DefaultExpr)
 	}
-	cxx.WriteByte('}')
 	cxx.WriteByte(';')
 	return cxx.String()
 }
 
 func (v *Var) FieldString() string {
 	var cxx strings.Builder
-	if v.Volatile {
-		cxx.WriteString("volatile ")
-	}
 	if v.Const {
 		cxx.WriteString("const ")
 	}
 	cxx.WriteString(v.Type.String())
 	cxx.WriteByte(' ')
-	cxx.WriteString(jnapi.OutId(v.Id, v.IdTok.File))
+	cxx.WriteString(v.OutId())
+	cxx.WriteString(jnapi.DefaultExpr)
 	cxx.WriteByte(';')
 	return cxx.String()
 }

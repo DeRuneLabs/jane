@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/DeRuneLabs/jane/ast"
 	"github.com/DeRuneLabs/jane/ast/models"
@@ -42,9 +43,9 @@ type (
 
 var used []*use
 
-type globalWaitPair struct {
-	vast *Var
-	defs *Defmap
+type waitingGlobal struct {
+	Var  *Var
+	Defs *Defmap
 }
 
 type Parser struct {
@@ -59,7 +60,9 @@ type Parser struct {
 	blockTypes     []*Type
 	blockVars      []*Var
 	embeds         strings.Builder
-	waitingGlobals []globalWaitPair
+	waitingGlobals []waitingGlobal
+	eval           *eval
+	allowBuiltin   bool
 
 	NoLocalPkg bool
 	JustDefs   bool
@@ -76,6 +79,9 @@ func New(f *File) *Parser {
 	p := new(Parser)
 	p.File = f
 	p.Defs = new(Defmap)
+	p.eval = new(eval)
+	p.eval.p = p
+	p.allowBuiltin = true
 	return p
 }
 
@@ -99,7 +105,7 @@ func (p *Parser) pushwarntok(tok Tok, key string, args ...any) {
 		Row:     tok.Row,
 		Column:  tok.Column,
 		Path:    tok.File.Path(),
-		Message: jn.GetWarn(key, args...),
+		Message: jn.GetWarning(key, args...),
 	})
 }
 
@@ -121,7 +127,7 @@ func (p *Parser) pusherrmsg(msg string) {
 func (p *Parser) pushwarn(key string, args ...any) {
 	p.Warnings = append(p.Warnings, jnlog.CompilerLog{
 		Type:    jnlog.FlatWarning,
-		Message: jn.GetWarn(key, args...),
+		Message: jn.GetWarning(key, args...),
 	})
 }
 
@@ -131,7 +137,7 @@ func (p *Parser) CxxEmbeds() string {
 	return cxx.String()
 }
 
-func cxxTypes(dm *Defmap) string {
+func cxjntypes(dm *Defmap) string {
 	var cxx strings.Builder
 	for _, t := range dm.Types {
 		if t.Used && t.Tok.Id != tokens.NA {
@@ -142,13 +148,12 @@ func cxxTypes(dm *Defmap) string {
 	return cxx.String()
 }
 
-func (p *Parser) CxxTypes() string {
+func (p *Parser) Cxjntypes() string {
 	var cxx strings.Builder
-	cxx.WriteString(cxxTypes(Builtin))
 	for _, use := range used {
-		cxx.WriteString(cxxTypes(use.defs))
+		cxx.WriteString(cxjntypes(use.defs))
 	}
-	cxx.WriteString(cxxTypes(p.Defs))
+	cxx.WriteString(cxjntypes(p.Defs))
 	return cxx.String()
 }
 
@@ -165,11 +170,30 @@ func cxxEnums(dm *Defmap) string {
 
 func (p *Parser) CxxEnums() string {
 	var cxx strings.Builder
-	cxx.WriteString(cxxEnums(Builtin))
 	for _, use := range used {
 		cxx.WriteString(cxxEnums(use.defs))
 	}
 	cxx.WriteString(cxxEnums(p.Defs))
+	return cxx.String()
+}
+
+func cxxTraits(dm *Defmap) string {
+	var cxx strings.Builder
+	for _, t := range dm.Traits {
+		if t.Used && t.Ast.Tok.Id != tokens.NA {
+			cxx.WriteString(t.String())
+			cxx.WriteString("\n\n")
+		}
+	}
+	return cxx.String()
+}
+
+func (p *Parser) CxxTraits() string {
+	var cxx strings.Builder
+	for _, use := range used {
+		cxx.WriteString(cxxTraits(use.defs))
+	}
+	cxx.WriteString(cxxTraits(p.Defs))
 	return cxx.String()
 }
 
@@ -186,7 +210,6 @@ func cxxStructs(dm *Defmap) string {
 
 func (p *Parser) CxxStructs() string {
 	var cxx strings.Builder
-	cxx.WriteString(cxxStructs(Builtin))
 	for _, use := range used {
 		cxx.WriteString(cxxStructs(use.defs))
 	}
@@ -194,26 +217,18 @@ func (p *Parser) CxxStructs() string {
 	return cxx.String()
 }
 
-func cxxNamespaces(dm *Defmap) string {
+func cxxStructPrototypes(dm *Defmap) string {
 	var cxx strings.Builder
-	for _, ns := range dm.Namespaces {
-		cxx.WriteString(ns.String())
-		cxx.WriteString("\n\n")
+	for _, s := range dm.Structs {
+		if s.Used && s.Ast.Tok.Id != tokens.NA {
+			cxx.WriteString(s.prototype())
+			cxx.WriteByte('\n')
+		}
 	}
 	return cxx.String()
 }
 
-func (p *Parser) CxxNamespaces() string {
-	var cxx strings.Builder
-	cxx.WriteString(cxxNamespaces(Builtin))
-	for _, use := range used {
-		cxx.WriteString(cxxNamespaces(use.defs))
-	}
-	cxx.WriteString(cxxNamespaces(p.Defs))
-	return cxx.String()
-}
-
-func cxxPrototypes(dm *Defmap) string {
+func cxxFuncPrototypes(dm *Defmap) string {
 	var cxx strings.Builder
 	for _, f := range dm.Funcs {
 		if f.used && f.Ast.Tok.Id != tokens.NA {
@@ -226,18 +241,21 @@ func cxxPrototypes(dm *Defmap) string {
 
 func (p *Parser) CxxPrototypes() string {
 	var cxx strings.Builder
-	cxx.WriteString(cxxPrototypes(Builtin))
 	for _, use := range used {
-		cxx.WriteString(cxxPrototypes(use.defs))
+		cxx.WriteString(cxxStructPrototypes(use.defs))
 	}
-	cxx.WriteString(cxxPrototypes(p.Defs))
+	cxx.WriteString(cxxStructPrototypes(p.Defs))
+	for _, use := range used {
+		cxx.WriteString(cxxFuncPrototypes(use.defs))
+	}
+	cxx.WriteString(cxxFuncPrototypes(p.Defs))
 	return cxx.String()
 }
 
 func cxxGlobals(dm *Defmap) string {
 	var cxx strings.Builder
 	for _, g := range dm.Globals {
-		if g.Used && g.IdTok.Id != tokens.NA {
+		if !g.Const && g.Used && g.IdTok.Id != tokens.NA {
 			cxx.WriteString(g.String())
 			cxx.WriteByte('\n')
 		}
@@ -247,7 +265,6 @@ func cxxGlobals(dm *Defmap) string {
 
 func (p *Parser) CxxGlobals() string {
 	var cxx strings.Builder
-	cxx.WriteString(cxxGlobals(Builtin))
 	for _, use := range used {
 		cxx.WriteString(cxxGlobals(use.defs))
 	}
@@ -268,7 +285,6 @@ func cxxFuncs(dm *Defmap) string {
 
 func (p *Parser) CxxFuncs() string {
 	var cxx strings.Builder
-	cxx.WriteString(cxxFuncs(Builtin))
 	for _, use := range used {
 		cxx.WriteString(cxxFuncs(use.defs))
 	}
@@ -276,7 +292,7 @@ func (p *Parser) CxxFuncs() string {
 	return cxx.String()
 }
 
-func (p *Parser) CxxInitalizerCaller() string {
+func (p *Parser) CxxInitializerCaller() string {
 	var cxx strings.Builder
 	cxx.WriteString("void ")
 	cxx.WriteString(jnapi.InitializerCaller)
@@ -306,17 +322,17 @@ func (p *Parser) Cxx() string {
 	var cxx strings.Builder
 	cxx.WriteString(p.CxxEmbeds())
 	cxx.WriteString("\n\n")
-	cxx.WriteString(p.CxxTypes())
+	cxx.WriteString(p.Cxjntypes())
 	cxx.WriteByte('\n')
 	cxx.WriteString(p.CxxEnums())
-	cxx.WriteString(p.CxxStructs())
+	cxx.WriteString(p.CxxTraits())
 	cxx.WriteString(p.CxxPrototypes())
+	cxx.WriteString(p.CxxStructs())
 	cxx.WriteString("\n\n")
 	cxx.WriteString(p.CxxGlobals())
 	cxx.WriteString("\n\n")
-	cxx.WriteString(p.CxxNamespaces())
 	cxx.WriteString(p.CxxFuncs())
-	cxx.WriteString(p.CxxInitalizerCaller())
+	cxx.WriteString(p.CxxInitializerCaller())
 	return cxx.String()
 }
 
@@ -339,6 +355,69 @@ func (p *Parser) checkUsePath(use *models.Use) bool {
 		}
 	}
 	return true
+}
+
+func (p *Parser) pushSelects(use *use, selectors []Tok) (addNs bool) {
+	if len(selectors) > 0 {
+		p.Defs.side = new(Defmap)
+	}
+	for i, id := range selectors {
+		for j, jid := range selectors {
+			if j >= i {
+				break
+			} else if jid.Kind == id.Kind {
+				p.pusherrtok(id, "exist_id", id.Kind)
+				i = -1
+				break
+			}
+		}
+		if i == -1 {
+			break
+		}
+		if id.Id == tokens.Self {
+			addNs = true
+			continue
+		}
+		i, m, t := use.defs.findById(id.Kind, p.File)
+		if i == -1 {
+			p.pusherrtok(id, "id_noexist", id.Kind)
+			continue
+		}
+		switch t {
+		case 'i':
+			p.Defs.side.Traits = append(p.Defs.side.Traits, m.Traits[i])
+		case 'f':
+			p.Defs.side.Funcs = append(p.Defs.side.Funcs, m.Funcs[i])
+		case 'e':
+			p.Defs.side.Enums = append(p.Defs.side.Enums, m.Enums[i])
+		case 'g':
+			p.Defs.side.Globals = append(p.Defs.side.Globals, m.Globals[i])
+		case 't':
+			p.Defs.side.Types = append(p.Defs.side.Types, m.Types[i])
+		case 's':
+			p.Defs.side.Structs = append(p.Defs.side.Structs, m.Structs[i])
+		}
+	}
+	return
+}
+
+func (p *Parser) pushUse(use *use, selectors []Tok) {
+	if len(selectors) > 0 {
+		if !p.pushSelects(use, selectors) {
+			return
+		}
+	} else if selectors != nil {
+		return
+	} else if use.fullUse {
+		if p.Defs.side == nil {
+			p.Defs.side = new(Defmap)
+		}
+		p.pushDefs(p.Defs.side, use.defs)
+	}
+	ns := new(models.Namespace)
+	ns.Ids = strings.SplitN(use.LinkString, tokens.DOUBLE_COLON, -1)
+	src := p.pushNs(ns)
+	src.defs = use.defs
 }
 
 func (p *Parser) compileUse(useAST *models.Use) (_ *use, hasErr bool) {
@@ -366,10 +445,12 @@ func (p *Parser) compileUse(useAST *models.Use) (_ *use, hasErr bool) {
 		use.tok = useAST.Tok
 		use.Path = useAST.Path
 		use.LinkString = useAST.LinkString
+		use.fullUse = useAST.FullUse
 		p.pusherrs(psub.Errors...)
 		p.Warnings = append(p.Warnings, psub.Warnings...)
 		p.embeds.WriteString(psub.embeds.String())
-		p.pushUseDefs(use, psub.Defs)
+		p.pushDefs(use.defs, psub.Defs)
+		p.pushUse(use, useAST.Selectors)
 		if psub.Errors != nil {
 			p.pusherrtok(useAST.Tok, "use_has_errors")
 			return use, true
@@ -379,23 +460,13 @@ func (p *Parser) compileUse(useAST *models.Use) (_ *use, hasErr bool) {
 	return nil, false
 }
 
-func (p *Parser) pushUseNamespaces(use, dm *Defmap) {
-	for _, ns := range dm.Namespaces {
-		def := p.nsById(ns.Id, false)
-		if def == nil {
-			use.Namespaces = append(use.Namespaces, ns)
-			continue
-		}
-	}
-}
-
-func (p *Parser) pushUseDefs(use *use, dm *Defmap) {
-	p.pushUseNamespaces(use.defs, dm)
-	use.defs.Types = append(use.defs.Types, dm.Types...)
-	use.defs.Structs = append(use.defs.Structs, dm.Structs...)
-	use.defs.Enums = append(use.defs.Enums, dm.Enums...)
-	use.defs.Globals = append(use.defs.Globals, dm.Globals...)
-	use.defs.Funcs = append(use.defs.Funcs, dm.Funcs...)
+func (p *Parser) pushDefs(dest, src *Defmap) {
+	dest.Types = append(dest.Types, src.Types...)
+	dest.Traits = append(dest.Traits, src.Traits...)
+	dest.Structs = append(dest.Structs, src.Structs...)
+	dest.Enums = append(dest.Enums, src.Enums...)
+	dest.Globals = append(dest.Globals, src.Globals...)
+	dest.Funcs = append(dest.Funcs, src.Funcs...)
 }
 
 func (p *Parser) use(useAST *models.Use) (err bool) {
@@ -404,6 +475,7 @@ func (p *Parser) use(useAST *models.Use) (err bool) {
 	}
 	for _, use := range used {
 		if useAST.Path == use.Path {
+			p.pushUse(use, nil)
 			p.Uses = append(p.Uses, use)
 			return
 		}
@@ -419,7 +491,7 @@ func (p *Parser) use(useAST *models.Use) (err bool) {
 
 func (p *Parser) parseUses(tree *[]models.Object) (err bool) {
 	for i, obj := range *tree {
-		switch t := obj.Value.(type) {
+		switch t := obj.Data.(type) {
 		case models.Use:
 			err = err || p.use(&t)
 		case models.Comment:
@@ -433,7 +505,7 @@ func (p *Parser) parseUses(tree *[]models.Object) (err bool) {
 }
 
 func (p *Parser) parseSrcTreeObj(obj models.Object) {
-	switch t := obj.Value.(type) {
+	switch t := obj.Data.(type) {
 	case Attribute:
 		p.PushAttribute(t)
 	case models.Statement:
@@ -446,13 +518,14 @@ func (p *Parser) parseSrcTreeObj(obj models.Object) {
 		p.Enum(t)
 	case Struct:
 		p.Struct(t)
+	case models.Trait:
+		p.Trait(t)
+	case models.Impl:
 	case models.CxxEmbed:
 		p.embeds.WriteString(t.String())
 		p.embeds.WriteByte('\n')
 	case models.Comment:
 		p.Comment(t)
-	case models.Namespace:
-		p.Namespace(t)
 	case models.Use:
 		p.pusherrtok(obj.Tok, "use_at_content")
 	case models.Preprocessor:
@@ -461,9 +534,16 @@ func (p *Parser) parseSrcTreeObj(obj models.Object) {
 	}
 }
 
-func (p *Parser) parseSrcTree(tree []models.Object) {
+func (p *Parser) parseSrcTreeEndObj(obj models.Object) {
+	switch t := obj.Data.(type) {
+	case models.Impl:
+		p.Impl(t)
+	}
+}
+
+func (p *Parser) parseSrcTree(tree []models.Object, parser func(models.Object)) {
 	for _, obj := range tree {
-		p.parseSrcTreeObj(obj)
+		parser(obj)
 		p.checkDoc(obj)
 		p.checkAttribute(obj)
 		p.checkGenerics(obj)
@@ -474,7 +554,8 @@ func (p *Parser) parseTree(tree []models.Object) (ok bool) {
 	if p.parseUses(&tree) {
 		return false
 	}
-	p.parseSrcTree(tree)
+	p.parseSrcTree(tree, p.parseSrcTreeObj)
+	p.parseSrcTree(tree, p.parseSrcTreeEndObj)
 	return true
 }
 
@@ -486,7 +567,7 @@ func (p *Parser) checkParse() {
 		p.pushwarn("exist_undefined_doc")
 	}
 	p.wg.Add(1)
-	go p.checkAsync()
+	go p.check()
 }
 
 func (p *Parser) useLocalPackage(tree *[]models.Object) (hasErr bool) {
@@ -498,7 +579,6 @@ func (p *Parser) useLocalPackage(tree *[]models.Object) (hasErr bool) {
 		p.pusherrmsg(err.Error())
 		return true
 	}
-	var parsers []*Parser
 	for _, info := range infos {
 		name := info.Name()
 		if info.IsDir() ||
@@ -517,17 +597,12 @@ func (p *Parser) useLocalPackage(tree *[]models.Object) (hasErr bool) {
 		fp.NoCheck = true
 		fp.Defs = p.Defs
 		fp.Parsef(false, true)
-		parsers = append(parsers, fp)
-	}
-	for _, fp := range parsers {
-		fp.NoCheck = false
-		fp.JustDefs = false
-		fp.checkParse()
 		fp.wg.Wait()
 		if len(fp.Errors) > 0 {
 			p.pusherrs(fp.Errors...)
-			hasErr = true
+			return true
 		}
+		p.waitingGlobals = append(p.waitingGlobals, fp.waitingGlobals...)
 	}
 	return
 }
@@ -535,9 +610,7 @@ func (p *Parser) useLocalPackage(tree *[]models.Object) (hasErr bool) {
 func (p *Parser) Parset(tree []models.Object, main, justDefs bool) {
 	p.IsMain = main
 	p.JustDefs = justDefs
-	if !main {
-		preprocessor.Process(&tree)
-	}
+	preprocessor.Process(&tree, !main)
 	if !p.parseTree(tree) {
 		return
 	}
@@ -573,7 +646,7 @@ func (p *Parser) checkDoc(obj models.Object) {
 	if p.docText.Len() == 0 {
 		return
 	}
-	switch obj.Value.(type) {
+	switch obj.Data.(type) {
 	case models.Comment, Attribute, []GenericType:
 		return
 	}
@@ -585,7 +658,7 @@ func (p *Parser) checkAttribute(obj models.Object) {
 	if p.attributes == nil {
 		return
 	}
-	switch obj.Value.(type) {
+	switch obj.Data.(type) {
 	case Attribute, models.Comment, []GenericType:
 		return
 	}
@@ -597,7 +670,7 @@ func (p *Parser) checkGenerics(obj models.Object) {
 	if p.generics == nil {
 		return
 	}
-	switch obj.Value.(type) {
+	switch obj.Data.(type) {
 	case Attribute, models.Comment, []GenericType:
 		return
 	}
@@ -626,7 +699,7 @@ func (p *Parser) Generics(generics []GenericType) {
 }
 
 func (p *Parser) Type(t Type) {
-	if _, tok, _, canshadow := p.defById(t.Id); tok.Id != tokens.NA && !canshadow {
+	if _, tok, canshadow := p.defById(t.Id); tok.Id != tokens.NA && !canshadow {
 		p.pusherrtok(t.Tok, "exist_id", t.Id)
 		return
 	} else if jnapi.IsIgnoreId(t.Id) {
@@ -642,14 +715,14 @@ func (p *Parser) Enum(e Enum) {
 	if jnapi.IsIgnoreId(e.Id) {
 		p.pusherrtok(e.Tok, "ignore_id")
 		return
-	} else if _, tok, _, _ := p.defById(e.Id); tok.Id != tokens.NA {
+	} else if _, tok, _ := p.defById(e.Id); tok.Id != tokens.NA {
 		p.pusherrtok(e.Tok, "exist_id", e.Id)
 		return
 	}
 	e.Desc = p.docText.String()
 	p.docText.Reset()
 	e.Type, _ = p.realType(e.Type, true)
-	if !typeIsPure(e.Type) || !jntype.IsIntegerType(e.Type.Id) {
+	if !typeIsPure(e.Type) || !jntype.IsInteger(e.Type.Id) {
 		p.pusherrtok(e.Type.Tok, "invalid_type_source")
 		return
 	}
@@ -667,7 +740,7 @@ func (p *Parser) Enum(e Enum) {
 	max := jntype.MaxOfType(e.Type.Id)
 	for i, item := range e.Items {
 		if max == 0 {
-			p.pusherrtok(item.Tok, "enum_overflow_limits")
+			p.pusherrtok(item.Tok, "overflow_limits")
 		} else {
 			max--
 		}
@@ -694,7 +767,7 @@ func (p *Parser) Enum(e Enum) {
 				v:         val,
 				ignoreAny: true,
 				errtok:    item.Tok,
-			}.checkAssignTypeAsync()
+			}.checkAssignType()
 		} else {
 			item.Expr.Model = exprNode{strconv.Itoa(i)}
 		}
@@ -707,7 +780,6 @@ func (p *Parser) Enum(e Enum) {
 }
 
 func (p *Parser) pushField(s *jnstruct, f *Var, i int) {
-	p.parseNonGenericType(s.Ast.Generics, &f.Type)
 	for _, cf := range s.Ast.Fields {
 		if f == cf {
 			break
@@ -717,14 +789,20 @@ func (p *Parser) pushField(s *jnstruct, f *Var, i int) {
 			break
 		}
 	}
-	param := models.Param{Id: f.Id, Type: f.Type}
-	param.Default.Model = exprNode{jnapi.DefaultExpr}
-	s.constructor.Params[i] = param
+	if len(s.Ast.Generics) == 0 {
+		p.parseField(s, &f, i)
+	} else {
+		p.parseNonGenericType(s.Ast.Generics, &f.Type)
+		param := models.Param{Id: f.Id, Type: f.Type}
+		param.Default.Model = exprNode{jnapi.DefaultExpr}
+		s.constructor.Params[i] = param
+	}
 }
 
-func (p *Parser) processFields(s *jnstruct) {
+func (p *Parser) parseFields(s *jnstruct) {
 	s.constructor = new(Func)
 	s.constructor.Id = s.Ast.Id
+	s.constructor.Tok = s.Ast.Tok
 	s.constructor.Params = make([]models.Param, len(s.Ast.Fields))
 	s.constructor.RetType.Type = DataType{
 		Id:   jntype.Struct,
@@ -732,11 +810,10 @@ func (p *Parser) processFields(s *jnstruct) {
 		Tok:  s.Ast.Tok,
 		Tag:  s,
 	}
-	s.constructor.Generics = make([]*models.GenericType, len(s.Ast.Generics))
-	for i, generic := range s.Ast.Generics {
-		ng := new(models.GenericType)
-		*ng = *generic
-		s.constructor.Generics[i] = ng
+	if len(s.Ast.Generics) > 0 {
+		s.constructor.Generics = make([]*models.GenericType, len(s.Ast.Generics))
+		copy(s.constructor.Generics, s.Ast.Generics)
+		s.constructor.Combines = new([][]models.DataType)
 	}
 	s.Defs.Globals = make([]*models.Var, len(s.Ast.Fields))
 	for i, f := range s.Ast.Fields {
@@ -749,7 +826,7 @@ func (p *Parser) Struct(s Struct) {
 	if jnapi.IsIgnoreId(s.Id) {
 		p.pusherrtok(s.Tok, "ignore_id")
 		return
-	} else if _, tok, _, _ := p.defById(s.Id); tok.Id != tokens.NA {
+	} else if _, tok, _ := p.defById(s.Id); tok.Id != tokens.NA {
 		p.pusherrtok(s.Tok, "exist_id", s.Id)
 		return
 	}
@@ -758,36 +835,178 @@ func (p *Parser) Struct(s Struct) {
 	xs.Desc = p.docText.String()
 	p.docText.Reset()
 	xs.Ast = s
+	xs.Ast.Owner = p
 	xs.Ast.Generics = p.generics
 	p.generics = nil
 	xs.Defs = new(Defmap)
-	p.processFields(xs)
+	p.parseFields(xs)
+}
+
+func (p *Parser) Trait(t models.Trait) {
+	if jnapi.IsIgnoreId(t.Id) {
+		p.pusherrtok(t.Tok, "ignore_id")
+		return
+	} else if _, tok, _ := p.defById(t.Id); tok.Id != tokens.NA {
+		p.pusherrtok(t.Tok, "exist_id", t.Id)
+		return
+	}
+	trait := new(trait)
+	trait.Desc = p.docText.String()
+	p.docText.Reset()
+	trait.Ast = &t
+	trait.Defs = new(Defmap)
+	trait.Defs.Funcs = make([]*function, len(t.Funcs))
+	for i, f := range trait.Ast.Funcs {
+		if jnapi.IsIgnoreId(f.Id) {
+			p.pusherrtok(f.Tok, "ignore_id")
+		}
+		for j, jf := range trait.Ast.Funcs {
+			if j >= i {
+				break
+			} else if f.Id == jf.Id {
+				p.pusherrtok(f.Tok, "exist_id", f.Id)
+			}
+		}
+		p.parseTypesNonGenerics(f)
+		tf := new(function)
+		tf.Ast = f
+		trait.Defs.Funcs[i] = tf
+	}
+	p.Defs.Traits = append(p.Defs.Traits, trait)
+}
+
+func (p *Parser) implTrait(impl models.Impl) {
+	trait, _, _ := p.traitById(impl.Trait.Kind)
+	if trait == nil {
+		p.pusherrtok(impl.Trait, "id_noexist", impl.Trait.Kind)
+		return
+	}
+	trait.Used = true
+	sid, _ := impl.Target.KindId()
+	xs, _, _ := p.Defs.structById(sid, nil)
+	if xs == nil {
+		p.pusherrtok(impl.Target.Tok, "id_noexist", sid)
+		return
+	}
+	impl.Target.Tag = xs
+	xs.traits = append(xs.traits, trait)
+	for _, tf := range trait.Defs.Funcs {
+		ok := false
+		ds := tf.Ast.DefString()
+		for _, obj := range impl.Tree {
+			switch t := obj.Data.(type) {
+			case *Func:
+				if tf.Ast.Pub == t.Pub && ds == t.DefString() {
+					ok = true
+					break
+				}
+			}
+		}
+		if !ok {
+			p.pusherrtok(impl.Target.Tok, "notimpl_trait_def", trait.Ast.Id, ds)
+		}
+	}
+	for _, obj := range impl.Tree {
+		switch t := obj.Data.(type) {
+		case models.Attribute:
+			p.PushAttribute(t)
+		case models.Comment:
+			p.Comment(t)
+		case *Func:
+			if trait.FindFunc(t.Id) == nil {
+				p.pusherrtok(impl.Target.Tok, "trait_hasnt_id", trait.Ast.Id, t.Id)
+				break
+			}
+			i, _, _ := xs.Defs.findById(t.Id, nil)
+			if i != -1 {
+				p.pusherrtok(t.Tok, "exist_id", t.Id)
+				continue
+			}
+			sf := new(function)
+			sf.Ast = t
+			sf.Ast.Receiver.Tok = xs.Ast.Tok
+			sf.Ast.Receiver.Tag = xs
+			sf.Ast.Attributes = p.attributes
+			sf.Ast.Owner = p
+			p.attributes = nil
+			sf.Desc = p.docText.String()
+			p.docText.Reset()
+			sf.used = true
+			if len(xs.Ast.Generics) == 0 {
+				p.parseTypesNonGenerics(sf.Ast)
+			}
+			xs.Defs.Funcs = append(xs.Defs.Funcs, sf)
+		}
+	}
+}
+
+func (p *Parser) implStruct(impl models.Impl) {
+	xs, _, _ := p.Defs.structById(impl.Trait.Kind, nil)
+	if xs == nil {
+		p.pusherrtok(impl.Trait, "id_noexist", impl.Trait.Kind)
+		return
+	}
+	for _, obj := range impl.Tree {
+		switch t := obj.Data.(type) {
+		case models.Attribute:
+			p.PushAttribute(t)
+		case []GenericType:
+			p.Generics(t)
+		case models.Comment:
+			p.Comment(t)
+		case *Func:
+			i, _, _ := xs.Defs.findById(t.Id, nil)
+			if i != -1 {
+				p.pusherrtok(t.Tok, "exist_id", t.Id)
+				continue
+			}
+			sf := new(function)
+			sf.Ast = t
+			sf.Ast.Receiver.Tok = xs.Ast.Tok
+			sf.Ast.Receiver.Tag = xs
+			sf.Ast.Attributes = p.attributes
+			sf.Desc = p.docText.String()
+			sf.Ast.Owner = p
+			p.docText.Reset()
+			p.attributes = nil
+			setGenerics(sf.Ast, p.generics)
+			p.generics = nil
+			for _, generic := range t.Generics {
+				if findGeneric(generic.Id, xs.Ast.Generics) != nil {
+					p.pusherrtok(generic.Tok, "exist_id", generic.Id)
+				}
+			}
+			if len(xs.Ast.Generics) == 0 {
+				p.parseTypesNonGenerics(sf.Ast)
+			}
+			xs.Defs.Funcs = append(xs.Defs.Funcs, sf)
+		}
+	}
+}
+
+func (p *Parser) Impl(impl models.Impl) {
+	if !typeIsVoid(impl.Target) {
+		p.implTrait(impl)
+		return
+	}
+	p.implStruct(impl)
 }
 
 func (p *Parser) pushNs(ns *models.Namespace) *namespace {
 	var src *namespace
 	prev := p.Defs
 	for _, id := range ns.Ids {
-		src = p.nsById(id, false)
+		src = prev.nsById(id)
 		if src == nil {
 			src = new(namespace)
 			src.Id = id
 			src.Tok = ns.Tok
-			src.Defs = new(Defmap)
-			src.Defs.parent = prev
+			src.defs = new(Defmap)
 			prev.Namespaces = append(prev.Namespaces, src)
 		}
-		prev = src.Defs
+		prev = src.defs
 	}
 	return src
-}
-
-func (p *Parser) Namespace(ns models.Namespace) {
-	src := p.pushNs(&ns)
-	pdefs := p.Defs
-	p.Defs = src.Defs
-	p.parseSrcTree(ns.Tree)
-	p.Defs = pdefs
 }
 
 func (p *Parser) Comment(c models.Comment) {
@@ -841,7 +1060,7 @@ func genericsToCxx(generics []*GenericType) string {
 }
 
 func (p *Parser) Statement(s models.Statement) {
-	switch t := s.Val.(type) {
+	switch t := s.Data.(type) {
 	case Func:
 		p.Func(t)
 	case Var:
@@ -872,9 +1091,44 @@ func (p *Parser) parseMapNonGenericType(generics []*GenericType, t *DataType) {
 }
 
 func (p *Parser) parseCommonNonGenericType(generics []*GenericType, t *DataType) {
-	if !typeIsGeneric(generics, *t) {
-		*t, _ = p.realType(*t, true)
+	if t.Id == jntype.Id {
+		id, _ := t.KindId()
+		def, _, _ := p.defById(id)
+		switch deft := def.(type) {
+		case *jnstruct:
+			deft = p.structConstructorInstance(deft)
+			if t.Tag != nil {
+				deft.SetGenerics(t.Tag.([]DataType))
+			}
+			t.Kind = deft.dataTypeString()
+			t.Id = jntype.Struct
+			t.Tag = deft
+			t.DontUseOriginal = true
+			t.Original = nil
+			goto tagcheck
+		}
 	}
+	if typeIsGeneric(generics, *t) {
+		return
+	}
+tagcheck:
+	if t.Tag != nil {
+		switch t := t.Tag.(type) {
+		case *jnstruct:
+			for _, ct := range t.Generics() {
+				if typeIsGeneric(generics, ct) {
+					return
+				}
+			}
+		case []DataType:
+			for _, ct := range t {
+				if typeIsGeneric(generics, ct) {
+					return
+				}
+			}
+		}
+	}
+	*t, _ = p.realType(*t, true)
 }
 
 func (p *Parser) parseNonGenericType(generics []*GenericType, t *DataType) {
@@ -887,15 +1141,79 @@ func (p *Parser) parseNonGenericType(generics []*GenericType, t *DataType) {
 		p.parseMapNonGenericType(generics, t)
 	default:
 		p.parseCommonNonGenericType(generics, t)
-
 	}
 }
 
-func (p *Parser) parseTypesNonGenerics(f *function) {
-	for i := range f.Ast.Params {
-		p.parseNonGenericType(f.Ast.Generics, &f.Ast.Params[i].Type)
+func (p *Parser) parseTypesNonGenerics(f *Func) {
+	for i := range f.Params {
+		p.parseNonGenericType(f.Generics, &f.Params[i].Type)
 	}
-	p.parseNonGenericType(f.Ast.Generics, &f.Ast.RetType.Type)
+	p.parseNonGenericType(f.Generics, &f.RetType.Type)
+}
+
+func (p *Parser) parseFuncGenericType(generics []*GenericType, t *DataType) {
+	f := t.Tag.(*Func)
+	for i := range f.Params {
+		p.parseGenericType(generics, &f.Params[i].Type)
+	}
+	p.parseGenericType(generics, &f.RetType.Type)
+}
+
+func (p *Parser) parseMultiGenericType(generics []*GenericType, t *DataType) {
+	types := t.Tag.([]DataType)
+	for i := range types {
+		mt := &types[i]
+		p.parseGenericType(generics, mt)
+	}
+}
+
+func (p *Parser) parseMapGenericType(generics []*GenericType, t *DataType) {
+	p.parseMultiGenericType(generics, t)
+}
+
+func (p *Parser) parseCommonGenericType(generics []*GenericType, t *DataType) {
+	if !typeIsGeneric(generics, *t) {
+		if t.Tag != nil {
+			switch t := t.Tag.(type) {
+			case *jnstruct:
+				sgenerics := t.Generics()
+				for _, ct := range sgenerics {
+					if typeIsGeneric(generics, ct) {
+						goto parse
+					}
+				}
+			case []DataType:
+				for _, ct := range t {
+					if typeIsGeneric(generics, ct) {
+						goto parse
+					}
+				}
+			}
+		}
+		return
+	}
+parse:
+	*t, _ = p.realType(*t, true)
+}
+
+func (p *Parser) parseGenericType(generics []*GenericType, t *DataType) {
+	switch {
+	case t.MultiTyped:
+		p.parseMultiGenericType(generics, t)
+	case typeIsFunc(*t):
+		p.parseFuncGenericType(generics, t)
+	case typeIsMap(*t):
+		p.parseMapGenericType(generics, t)
+	default:
+		p.parseCommonGenericType(generics, t)
+	}
+}
+
+func (p *Parser) parseTypesGenerics(f *Func) {
+	for i := range f.Params {
+		p.parseGenericType(f.Generics, &f.Params[i].Type)
+	}
+	p.parseGenericType(f.Generics, &f.RetType.Type)
 }
 
 func (p *Parser) checkRetVars(f *function) {
@@ -928,8 +1246,16 @@ func (p *Parser) checkRetVars(f *function) {
 	}
 }
 
+func setGenerics(f *Func, generics []*models.GenericType) {
+	f.Generics = generics
+	if len(f.Generics) > 0 {
+		f.Combines = new([][]models.DataType)
+	}
+}
+
 func (p *Parser) Func(fast Func) {
-	if _, tok, _, canshadow := p.defById(fast.Id); tok.Id != tokens.NA && !canshadow {
+	_, tok, canshadow := p.defById(fast.Id)
+	if tok.Id != tokens.NA && !canshadow {
 		p.pusherrtok(fast.Tok, "exist_id", fast.Id)
 	} else if jnapi.IsIgnoreId(fast.Id) {
 		p.pusherrtok(fast.Tok, "ignore_id")
@@ -939,28 +1265,67 @@ func (p *Parser) Func(fast Func) {
 	*f.Ast = fast
 	f.Ast.Attributes = p.attributes
 	p.attributes = nil
+	f.Ast.Owner = p
 	f.Desc = p.docText.String()
 	p.docText.Reset()
-	f.Ast.Generics = p.generics
+	setGenerics(f.Ast, p.generics)
 	p.generics = nil
 	p.checkRetVars(f)
 	p.checkFuncAttributes(f)
-	p.parseTypesNonGenerics(f)
 	f.used = f.Ast.Id == jn.InitializerFunction
+	p.parseTypesNonGenerics(f.Ast)
 	p.Defs.Funcs = append(p.Defs.Funcs, f)
 }
 
 func (p *Parser) Global(vast Var) {
-	if _, tok, m, _ := p.defById(vast.Id); tok.Id != tokens.NA && m == p.Defs {
+	def, _, _ := p.defById(vast.Id)
+	if def != nil {
 		p.pusherrtok(vast.IdTok, "exist_id", vast.Id)
 		return
+	} else {
+		for _, g := range p.waitingGlobals {
+			if vast.Id == g.Var.Id {
+				p.pusherrtok(vast.IdTok, "exist_id", vast.Id)
+				return
+			}
+		}
 	}
 	vast.Desc = p.docText.String()
 	p.docText.Reset()
 	v := new(Var)
 	*v = vast
-	p.waitingGlobals = append(p.waitingGlobals, globalWaitPair{v, p.Defs})
+	wg := waitingGlobal{Var: v, Defs: p.Defs}
+	p.waitingGlobals = append(p.waitingGlobals, wg)
 	p.Defs.Globals = append(p.Defs.Globals, v)
+}
+
+func (p *Parser) checkArrayType(t *DataType) {
+	exprs := t.Tag.([][]any)
+	for i := range exprs {
+		exprSlice := exprs[i]
+		expr := exprSlice[1].(models.Expr)
+		if expr.Model != nil {
+			continue
+		}
+		if arrayExprIsAutoSized(expr) {
+			continue
+		}
+		val, model := p.evalExpr(expr)
+		expr.Model = model
+		exprSlice[1] = expr
+		if val.constExpr {
+			exprSlice[0] = tonumu(val.expr)
+		} else {
+			p.eval.pusherrtok(t.Tok, "expr_not_const")
+		}
+		p.wg.Add(1)
+		go assignChecker{
+			p:      p,
+			t:      DataType{Id: jntype.UInt, Kind: jntype.TypeMap[jntype.UInt]},
+			v:      val,
+			errtok: expr.Toks[0],
+		}.checkAssignType()
+	}
 }
 
 func (p *Parser) Var(v Var) *Var {
@@ -973,37 +1338,63 @@ func (p *Parser) Var(v Var) *Var {
 		val = t
 	default:
 		if v.SetterTok.Id != tokens.NA {
-			val, v.Val.Model = p.evalExpr(v.Val)
+			val, v.Expr.Model = p.evalExpr(v.Expr)
 		}
 	}
 	if v.Type.Id != jntype.Void {
-		v.Type, _ = p.realType(v.Type, true)
-		if v.SetterTok.Id != tokens.NA {
-			p.wg.Add(1)
-			go assignChecker{
-				p,
-				v.Const,
-				v.Type,
-				val,
-				false,
-				v.IdTok,
-			}.checkAssignTypeAsync()
+		t, ok := p.realType(v.Type, true)
+		if ok {
+			v.Type = t
+			if v.SetterTok.Id != tokens.NA {
+				p.wg.Add(1)
+				go assignChecker{
+					p:      p,
+					t:      v.Type,
+					v:      val,
+					errtok: v.IdTok,
+				}.checkAssignType()
+			}
 		}
 	} else {
 		if v.SetterTok.Id == tokens.NA {
 			p.pusherrtok(v.IdTok, "missing_autotype_value")
 		} else {
+			p.eval.hasError = p.eval.hasError || val.data.Value == ""
 			v.Type = val.data.Type
+			if val.constExpr && typeIsPure(v.Type) {
+				switch val.expr.(type) {
+				case int64:
+					dt := DataType{
+						Id:   jntype.Int,
+						Kind: jntype.TypeMap[jntype.Int],
+					}
+					if integerAssignable(dt, val) {
+						v.Type = dt
+					}
+				case uint64:
+					dt := DataType{
+						Id:   jntype.UInt,
+						Kind: jntype.TypeMap[jntype.UInt],
+					}
+					if integerAssignable(dt, val) {
+						v.Type = dt
+					}
+				}
+			}
 			p.checkValidityForAutoType(v.Type, v.SetterTok)
-			p.checkAssignConst(v.Const, v.Type, val, v.SetterTok)
 		}
 	}
 	if v.Const {
+		v.ExprTag = val.expr
 		if !typeIsAllowForConst(v.Type) {
 			p.pusherrtok(v.IdTok, "invalid_type_for_const", v.Type.Kind)
 		}
 		if v.SetterTok.Id == tokens.NA {
 			p.pusherrtok(v.IdTok, "missing_const_value")
+		} else {
+			if !validExprForConst(val) {
+				p.eval.pusherrtok(v.IdTok, "expr_not_const")
+			}
 		}
 	}
 	return &v
@@ -1011,10 +1402,10 @@ func (p *Parser) Var(v Var) *Var {
 
 func (p *Parser) checkTypeParam(f *function) {
 	if len(f.Ast.Generics) == 0 {
-		p.pusherrtok(f.Ast.Tok, "func_must_have_generics_if_has_attribute", jn.Attribute_TypeParam)
+		p.pusherrtok(f.Ast.Tok, "func_must_have_generics_if_has_attribute", jn.Attribute_TypeArg)
 	}
 	if len(f.Ast.Params) != 0 {
-		p.pusherrtok(f.Ast.Tok, "func_cant_have_params_if_has_attribute", jn.Attribute_TypeParam)
+		p.pusherrtok(f.Ast.Tok, "func_cant_have_params_if_has_attribute", jn.Attribute_TypeArg)
 	}
 }
 
@@ -1022,7 +1413,7 @@ func (p *Parser) checkFuncAttributes(f *function) {
 	for _, attribute := range f.Ast.Attributes {
 		switch attribute.Tag.Kind {
 		case jn.Attribute_Inline:
-		case jn.Attribute_TypeParam:
+		case jn.Attribute_TypeArg:
 			p.checkTypeParam(f)
 		default:
 			p.pusherrtok(attribute.Tok, "invalid_attribute")
@@ -1038,13 +1429,11 @@ func (p *Parser) varsFromParams(params []Param) []*Var {
 		v.Id = param.Id
 		v.IdTok = param.Tok
 		v.Type = param.Type
-		v.Const = param.Const
-		v.Volatile = param.Volatile
 		if param.Variadic {
 			if length-i > 1 {
 				p.pusherrtok(param.Tok, "variadic_parameter_notlast")
 			}
-			v.Type.Kind = "[]" + v.Type.Kind
+			v.Type.Kind = jn.Prefix_Slice + v.Type.Kind
 		}
 		vars[i] = v
 	}
@@ -1052,93 +1441,77 @@ func (p *Parser) varsFromParams(params []Param) []*Var {
 }
 
 func (p *Parser) FuncById(id string) (*function, *Defmap, bool) {
-	if f, _, _ := Builtin.funcById(id, nil); f != nil {
-		return f, nil, false
-	}
-	for _, use := range p.Uses {
-		f, m, _ := use.defs.funcById(id, p.File)
+	if p.allowBuiltin {
+		f, _, _ := Builtin.funcById(id, nil)
 		if f != nil {
-			use.used = true
-			return f, m, false
+			return f, nil, false
 		}
 	}
 	return p.Defs.funcById(id, p.File)
 }
 
-func (p *Parser) varById(id string) (*Var, *Defmap) {
-	if bv := p.blockVarById(id); bv != nil {
-		return bv, p.Defs
+func (p *Parser) varById(id string) (*Var, *Defmap, bool) {
+	bv := p.blockVarById(id)
+	if bv != nil {
+		return bv, nil, false
 	}
 	return p.globalById(id)
 }
 
-func (p *Parser) globalById(id string) (*Var, *Defmap) {
-	for _, use := range p.Uses {
-		g, m, _ := use.defs.globalById(id, p.File)
-		if g != nil {
-			use.used = true
-			return g, m
-		}
-	}
+func (p *Parser) globalById(id string) (*Var, *Defmap, bool) {
 	g, m, _ := p.Defs.globalById(id, p.File)
-	return g, m
+	return g, m, true
 }
 
-func (p *Parser) nsById(id string, parent bool) *namespace {
-	for _, use := range p.Uses {
-		ns := use.defs.nsById(id, parent)
-		if ns != nil {
-			use.used = true
-			return ns
-		}
-	}
-	return p.Defs.nsById(id, parent)
+func (p *Parser) nsById(id string) *namespace {
+	return p.Defs.nsById(id)
 }
 
 func (p *Parser) typeById(id string) (*Type, *Defmap, bool) {
-	if t := p.blockTypesById(id); t != nil {
-		return t, p.Defs, false
-	}
-	if t, _, _ := Builtin.typeById(id, nil); t != nil {
+	t := p.blockTypeById(id)
+	if t != nil {
 		return t, nil, false
 	}
-	for _, use := range p.Uses {
-		t, m, _ := use.defs.typeById(id, p.File)
+	if p.allowBuiltin {
+		t, _, _ = Builtin.typeById(id, nil)
 		if t != nil {
-			use.used = true
-			return t, m, false
+			return t, nil, false
 		}
 	}
 	return p.Defs.typeById(id, p.File)
 }
 
 func (p *Parser) enumById(id string) (*Enum, *Defmap, bool) {
-	if s, _, _ := Builtin.enumById(id, nil); s != nil {
-		return s, nil, false
-	}
-	for _, use := range p.Uses {
-		t, m, _ := use.defs.enumById(id, p.File)
-		if t != nil {
-			return t, m, false
+	if p.allowBuiltin {
+		s, _, _ := Builtin.enumById(id, nil)
+		if s != nil {
+			return s, nil, false
 		}
 	}
 	return p.Defs.enumById(id, p.File)
 }
 
 func (p *Parser) structById(id string) (*jnstruct, *Defmap, bool) {
-	if s, _, _ := Builtin.structById(id, nil); s != nil {
-		return s, nil, false
-	}
-	for _, use := range p.Uses {
-		s, m, _ := use.defs.structById(id, p.File)
+	if p.allowBuiltin {
+		s, _, _ := Builtin.structById(id, nil)
 		if s != nil {
-			return s, m, false
+			return s, nil, false
 		}
 	}
 	return p.Defs.structById(id, p.File)
 }
 
-func (p *Parser) blockTypesById(id string) *Type {
+func (p *Parser) traitById(id string) (*trait, *Defmap, bool) {
+	if p.allowBuiltin {
+		t, _, _ := Builtin.traitById(id, nil)
+		if t != nil {
+			return t, nil, false
+		}
+	}
+	return p.Defs.traitById(id, p.File)
+}
+
+func (p *Parser) blockTypeById(id string) *Type {
 	for _, t := range p.blockTypes {
 		if t != nil && t.Id == id {
 			return t
@@ -1156,134 +1529,121 @@ func (p *Parser) blockVarById(id string) *Var {
 	return nil
 }
 
-func (p *Parser) defById(id string) (def any, tok Tok, m *Defmap, canshadow bool) {
+func (p *Parser) defById(id string) (def any, tok Tok, canshadow bool) {
 	var t *Type
-	t, m, canshadow = p.typeById(id)
+	t, _, canshadow = p.typeById(id)
 	if t != nil {
-		return t, t.Tok, m, canshadow
+		return t, t.Tok, canshadow
 	}
 	var e *Enum
-	e, m, canshadow = p.enumById(id)
+	e, _, canshadow = p.enumById(id)
 	if e != nil {
-		return e, e.Tok, m, canshadow
+		return e, e.Tok, canshadow
 	}
 	var s *jnstruct
-	s, m, canshadow = p.structById(id)
+	s, _, canshadow = p.structById(id)
 	if s != nil {
-		return s, s.Ast.Tok, m, canshadow
+		return s, s.Ast.Tok, canshadow
+	}
+	var trait *trait
+	trait, _, canshadow = p.traitById(id)
+	if trait != nil {
+		return trait, trait.Ast.Tok, canshadow
 	}
 	var f *function
-	f, m, canshadow = p.FuncById(id)
+	f, _, canshadow = p.FuncById(id)
 	if f != nil {
-		return f, f.Ast.Tok, m, canshadow
+		return f, f.Ast.Tok, canshadow
 	}
 	if bv := p.blockVarById(id); bv != nil {
-		return bv, bv.IdTok, p.Defs, false
+		return bv, bv.IdTok, false
 	}
-	g, m := p.globalById(id)
+	g, _, canshadow := p.globalById(id)
 	if g != nil {
-		return g, g.IdTok, m, true
+		return g, g.IdTok, canshadow
 	}
 	return
 }
 
 func (p *Parser) blockDefById(id string) (def any, tok Tok) {
-	if bv := p.blockVarById(id); bv != nil {
+	bv := p.blockVarById(id)
+	if bv != nil {
 		return bv, bv.IdTok
 	}
-	if t := p.blockTypesById(id); t != nil {
+	t := p.blockTypeById(id)
+	if t != nil {
 		return t, t.Tok
 	}
 	return
 }
 
-func (p *Parser) checkUsesAsync() {
-	defer func() { p.wg.Done() }()
-	for _, use := range p.Uses {
-		if !use.used {
-			p.pusherrtok(use.tok, "declared_but_not_used", use.LinkString)
-		}
-	}
-}
-
-func (p *Parser) checkAsync() {
-	defer func() { p.wg.Done() }()
+func (p *Parser) check() {
+	defer p.wg.Done()
 	if p.IsMain && !p.JustDefs {
-		f, _, _ := p.Defs.funcById(jn.EntryPoint, p.File)
+		f, _, _ := p.Defs.funcById(jn.EntryPoint, nil)
 		if f == nil {
 			p.PushErr("no_entry_point")
 		} else {
+			f.isEntryPoint = true
 			f.used = true
 		}
 	}
-	p.wg.Add(1)
-	go p.checkTypesAsync()
+	p.checkTypes()
 	p.WaitingGlobals()
 	p.waitingGlobals = nil
 	if !p.JustDefs {
 		p.checkFuncs()
-		p.wg.Add(1)
-		go p.checkUsesAsync()
+		p.checkStructs()
 	}
 }
 
-func (p *Parser) checkTypesAsync() {
-	defer func() { p.wg.Done() }()
+func (p *Parser) checkTypes() {
 	for i, t := range p.Defs.Types {
-		if t.Tok.File != p.File {
-			continue
-		}
 		p.Defs.Types[i].Type, _ = p.realType(t.Type, true)
 	}
 }
 
 func (p *Parser) WaitingGlobals() {
 	pdefs := p.Defs
-	for _, wg := range p.waitingGlobals {
-		if wg.vast.IdTok.File != p.File {
-			continue
-		}
-		p.Defs = wg.defs
-		*wg.vast = *p.Var(*wg.vast)
+	for _, g := range p.waitingGlobals {
+		p.Defs = g.Defs
+		*g.Var = *p.Var(*g.Var)
 	}
 	p.Defs = pdefs
 }
 
+func (p *Parser) checkParamDefaultExprWithDefault(param *Param) {
+	if typeIsFunc(param.Type) {
+		p.pusherrtok(param.Tok, "invalid_type_for_default_arg", param.Type.Kind)
+	}
+}
+
 func (p *Parser) checkParamDefaultExpr(f *Func, param *Param) {
-	if (!paramHasDefaultArg(param)) || param.Tok.Id == tokens.NA {
+	if !paramHasDefaultArg(param) || param.Tok.Id == tokens.NA {
 		return
 	}
-	if param.Default.Model != nil && param.Default.Model.String() == jnapi.DefaultExpr {
-		return
+	if param.Default.Model != nil {
+		if param.Default.Model.String() == jnapi.DefaultExpr {
+			p.checkParamDefaultExprWithDefault(param)
+			return
+		}
 	}
 	dt := param.Type
 	if param.Variadic {
-		dt.Kind = "[]" + dt.Kind
+		dt.Kind = jn.Prefix_Array + dt.Kind
 	}
 	v, model := p.evalExpr(param.Default)
 	param.Default.Model = model
 	p.wg.Add(1)
-	go p.checkArgTypeAsync(*param, v, false, param.Tok)
-}
-
-func paramIsAllowForConst(param *Param) bool {
-	return !param.Variadic && typeIsAllowForConst(param.Type)
+	go p.checkArgType(param, v, param.Tok)
 }
 
 func (p *Parser) param(f *Func, param *Param) (err bool) {
-	param.Type, _ = p.realType(param.Type, true)
+	param.Type, err = p.realType(param.Type, true)
 	err = !err
-	if param.Const && !paramIsAllowForConst(param) {
-		p.pusherrtok(param.Tok, "invalid_type_for_const", param.TypeString())
-		err = true
-	}
 	if param.Reference {
 		if param.Variadic {
 			p.pusherrtok(param.Tok, "variadic_reference_param")
-			err = true
-		}
-		if typeIsPtr(param.Type) {
-			p.pusherrtok(param.Tok, "pointer_reference")
 			err = true
 		}
 	}
@@ -1310,863 +1670,103 @@ func (p *Parser) params(f *Func) (err bool) {
 func (p *Parser) blockVarsOfFunc(f *Func) []*Var {
 	vars := p.varsFromParams(f.Params)
 	vars = append(vars, f.RetType.Vars()...)
+	if f.Receiver != nil {
+		s := f.Receiver.Tag.(*jnstruct)
+		vars = append(vars, s.selfVar(*f.Receiver))
+	}
 	return vars
 }
 
-func (p *Parser) parseFunc(f *Func) (err bool) {
-	p.params(f)
+func (p *Parser) parsePureFunc(f *Func) (err bool) {
+	hasError := p.eval.hasError
+	defer func() { p.eval.hasError = hasError }()
+	err = p.params(f)
 	if err {
 		return
 	}
-	p.blockVars = p.blockVarsOfFunc(f)
-	p.checkFunc(f)
-	p.blockTypes = nil
-	p.blockVars = nil
+	owner := f.Owner.(*Parser)
+	owner.blockVars = owner.blockVarsOfFunc(f)
+	owner.checkFunc(f)
+	if owner != p {
+		owner.wg.Wait()
+		p.pusherrs(owner.Errors...)
+		owner.Errors = nil
+	}
+	owner.blockTypes = nil
+	owner.blockVars = nil
 	return
 }
 
+func (p *Parser) parseFunc(f *function) (err bool) {
+	if f.checked || len(f.Ast.Generics) > 0 {
+		return false
+	}
+	return p.parsePureFunc(f.Ast)
+}
+
 func (p *Parser) checkFuncs() {
-	defer func() { p.wg.Done() }()
 	err := false
 	check := func(f *function) {
-		if f.Ast.Tok.File != p.File {
-			return
-		}
+		p.parseTypesNonGenerics(f.Ast)
 		p.wg.Add(1)
-		go p.checkFuncSpecialCasesAsync(f.Ast)
-		if err ||
-			f.checked ||
-			(len(f.Ast.Generics) > 0 && len(f.Ast.Combines) == 0) {
+		go p.checkFuncSpecialCases(f.Ast)
+		if err {
 			return
 		}
 		p.blockTypes = nil
+		err = p.parseFunc(f)
 		f.checked = true
-		err = p.parseFunc(f.Ast)
-	}
-	for _, use := range p.Uses {
-		for _, ns := range use.defs.Namespaces {
-			pdefs := p.Defs
-			p.Defs = ns.Defs
-			for _, f := range ns.Defs.Funcs {
-				check(f)
-			}
-			p.Defs = pdefs
-		}
-	}
-	for _, ns := range p.Defs.Namespaces {
-		p.Defs = ns.Defs
-		for _, f := range ns.Defs.Funcs {
-			check(f)
-		}
-		p.Defs = p.Defs.parent
 	}
 	for _, f := range p.Defs.Funcs {
 		check(f)
 	}
 }
 
-func (p *Parser) checkFuncSpecialCasesAsync(f *Func) {
-	defer func() { p.wg.Done() }()
+func (p *Parser) parseStructFunc(s *jnstruct, f *function) (err bool) {
+	if len(f.Ast.Generics) > 0 {
+		return
+	}
+	if len(s.Ast.Generics) == 0 {
+		p.parseTypesNonGenerics(f.Ast)
+		return p.parseFunc(f)
+	}
+	return
+}
+
+func (p *Parser) checkStruct(s *jnstruct) (err bool) {
+	for _, f := range s.Defs.Funcs {
+		if f.checked {
+			continue
+		}
+		p.blockTypes = nil
+		err = p.parseStructFunc(s, f)
+		if err {
+			break
+		}
+		f.checked = true
+	}
+	return
+}
+
+func (p *Parser) checkStructs() {
+	err := false
+	check := func(xs *jnstruct) {
+		if err {
+			return
+		}
+		p.checkStruct(xs)
+	}
+	for _, s := range p.Defs.Structs {
+		check(s)
+	}
+}
+
+func (p *Parser) checkFuncSpecialCases(f *Func) {
+	defer p.wg.Done()
 	switch f.Id {
 	case jn.EntryPoint, jn.InitializerFunction:
 		p.checkSolidFuncSpecialCases(f)
 	}
-}
-
-func (p *Parser) evalValProcesses(exprs []any, processes []Toks) (v value, e iExpr) {
-	switch len(exprs) {
-	case 0:
-		v.data.Type.Id = jntype.Void
-		v.data.Type.Kind = jntype.VoidTypeStr
-		return
-	case 1:
-		expr := exprs[0].([]any)
-		v.data, e = expr[0].(models.Data), expr[1].(iExpr)
-		v.lvalue = typeIsLvalue(v.data.Type)
-		return
-	}
-	i := p.nextOperator(processes)
-	process := solver{p: p}
-	process.operator = processes[i][0]
-	left := exprs[i-1].([]any)
-	leftV, leftExpr := left[0].(models.Data), left[1].(iExpr)
-	right := exprs[i+1].([]any)
-	rightV, rightExpr := right[0].(models.Data), right[1].(iExpr)
-	process.left = processes[i-1]
-	process.leftVal = leftV
-	process.right = processes[i+1]
-	process.rightVal = rightV
-	val := process.solve()
-	expr := serieExpr{}
-	expr.exprs = make([]any, 5)
-	expr.exprs[0] = exprNode{tokens.LPARENTHESES}
-	expr.exprs[1] = leftExpr
-	expr.exprs[2] = exprNode{process.operator.Kind}
-	expr.exprs[3] = rightExpr
-	expr.exprs[4] = exprNode{tokens.RPARENTHESES}
-	processes = append(processes[:i-1], append([]Toks{{}}, processes[i+2:]...)...)
-	exprs = append(exprs[:i-1], append([]any{[]any{val, expr}}, exprs[i+2:]...)...)
-	return p.evalValProcesses(exprs, processes)
-}
-
-func (p *Parser) evalProcesses(processes []Toks) (v value, e iExpr) {
-	if processes == nil {
-		return
-	}
-	if len(processes) == 1 {
-		m := newExprModel(processes)
-		e = m
-		v = p.evalExprPart(processes[0], m)
-		return
-	}
-	valProcesses := make([]any, len(processes))
-	for i, process := range processes {
-		if isOperator(process) {
-			valProcesses[i] = nil
-			continue
-		}
-		val, model := p.evalToks(process)
-		valProcesses[i] = []any{val.data, model}
-	}
-	return p.evalValProcesses(valProcesses, processes)
-}
-
-func isOperator(process Toks) bool {
-	return len(process) == 1 && process[0].Id == tokens.Operator
-}
-
-func (p *Parser) nextOperator(processes []Toks) int {
-	prec := precedencer{}
-	for i, process := range processes {
-		switch {
-		case !isOperator(process),
-			processes[i-1] == nil && processes[i+1] == nil:
-			continue
-		}
-		switch process[0].Kind {
-		case tokens.LSHIFT, tokens.RSHIFT:
-			prec.set(1, i)
-		case tokens.STAR, tokens.SLASH, tokens.PERCENT:
-			prec.set(2, i)
-		case tokens.AMPER:
-			prec.set(3, i)
-		case tokens.CARET:
-			prec.set(4, i)
-		case tokens.VLINE:
-			prec.set(5, i)
-		case tokens.PLUS, tokens.MINUS:
-			prec.set(6, i)
-		case tokens.LESS, tokens.LESS_EQUAL,
-			tokens.GREAT, tokens.GREAT_EQUAL:
-			prec.set(7, i)
-		case tokens.EQUALS, tokens.NOT_EQUALS:
-			prec.set(8, i)
-		case tokens.AND:
-			prec.set(9, i)
-		case tokens.OR:
-			prec.set(10, i)
-		default:
-			p.pusherrtok(process[0], "invalid_operator")
-		}
-	}
-	data := prec.get()
-	if data == nil {
-		return -1
-	}
-	return data.(int)
-}
-
-func (p *Parser) evalToks(toks Toks) (value, iExpr) {
-	return p.evalExpr(new(ast.Builder).Expr(toks))
-}
-
-func (p *Parser) evalExpr(expr Expr) (value, iExpr) {
-	processes := make([]Toks, len(expr.Processes))
-	copy(processes, expr.Processes)
-	return p.evalProcesses(expr.Processes)
-}
-
-func (p *Parser) evalSingleExpr(tok Tok, m *exprModel) (v value, ok bool) {
-	eval := valueEvaluator{tok, m, p}
-	v.data.Type.Id = jntype.Void
-	v.data.Type.Kind = jntype.VoidTypeStr
-	v.data.Tok = tok
-	switch tok.Id {
-	case tokens.Value:
-		ok = true
-		switch {
-		case isstr(tok.Kind):
-			v = eval.str()
-		case ischar(tok.Kind):
-			v = eval.char()
-		case isbool(tok.Kind):
-			v = eval.bool()
-		case isnil(tok.Kind):
-			v = eval.nil()
-		default:
-			v = eval.numeric()
-		}
-	case tokens.Id:
-		v, ok = eval.id()
-	default:
-		p.pusherrtok(tok, "invalid_syntax")
-	}
-	return
-}
-
-func (p *Parser) evalUnaryExprPart(toks Toks, m *exprModel) value {
-	var v value
-	exprToks := toks[1:]
-	processor := unary{toks[0], exprToks, m, p}
-	m.appendSubNode(exprNode{processor.tok.Kind})
-	if processor.toks == nil {
-		p.pusherrtok(processor.tok, "invalid_syntax")
-		return v
-	}
-	switch processor.tok.Kind {
-	case tokens.MINUS:
-		v = processor.minus()
-	case tokens.PLUS:
-		v = processor.plus()
-	case tokens.TILDE:
-		v = processor.tilde()
-	case tokens.EXCLAMATION:
-		v = processor.logicalNot()
-	case tokens.STAR:
-		v = processor.star()
-	case tokens.AMPER:
-		v = processor.amper()
-	default:
-		p.pusherrtok(processor.tok, "invalid_syntax")
-	}
-	v.data.Tok = processor.tok
-	return v
-}
-
-func canGetPtr(v value) bool {
-	if !v.lvalue {
-		return false
-	}
-	switch v.data.Type.Id {
-	case jntype.Func, jntype.Enum:
-		return false
-	default:
-		return v.data.Tok.Id == tokens.Id
-	}
-}
-
-func (p *Parser) evalExprPart(toks Toks, m *exprModel) (v value) {
-	defer func() {
-		if v.data.Type.Id == jntype.Void {
-			v.data.Type.Kind = jntype.VoidTypeStr
-		}
-	}()
-	if len(toks) == 1 {
-		v, _ = p.evalSingleExpr(toks[0], m)
-		return
-	}
-	tok := toks[0]
-	switch tok.Id {
-	case tokens.Operator:
-		return p.evalUnaryExprPart(toks, m)
-	case tokens.Brace:
-		switch tok.Kind {
-		case tokens.LPARENTHESES:
-			val, ok := p.evalTryCastExpr(toks, m)
-			if ok {
-				v = val
-				return
-			}
-			val, ok = p.evalTryAssignExpr(toks, m)
-			if ok {
-				v = val
-				return
-			}
-		}
-	}
-	tok = toks[len(toks)-1]
-	switch tok.Id {
-	case tokens.Id:
-		return p.evalIdExprPart(toks, m)
-	case tokens.Operator:
-		return p.evalOperatorExprPartRight(toks, m)
-	case tokens.Brace:
-		switch tok.Kind {
-		case tokens.RPARENTHESES:
-			return p.evalParenthesesRangeExpr(toks, m)
-		case tokens.RBRACE:
-			return p.evalBraceRangeExpr(toks, m)
-		case tokens.RBRACKET:
-			return p.evalBracketRangeExpr(toks, m)
-		}
-	default:
-		p.pusherrtok(toks[0], "invalid_syntax")
-	}
-	return
-}
-
-func (p *Parser) evalJnObjSubId(dm *Defmap, val value, idTok Tok, m *exprModel) (v value) {
-	i, dm, t := dm.defById(idTok.Kind, idTok.File)
-	if i == -1 {
-		p.pusherrtok(idTok, "obj_have_not_id", idTok.Kind)
-		return
-	}
-	v = val
-	m.appendSubNode(exprNode{subIdAccessorOfType(val.data.Type)})
-	switch t {
-	case 'g':
-		g := dm.Globals[i]
-		if g.Tag == nil {
-			m.appendSubNode(exprNode{jnapi.OutId(g.Id, g.DefTok.File)})
-		} else {
-			m.appendSubNode(exprNode{g.Tag.(string)})
-		}
-		v.data.Type = g.Type
-		v.lvalue = true
-		v.constant = g.Const
-	case 'f':
-		f := dm.Funcs[i]
-		v.data.Type.Id = jntype.Func
-		v.data.Type.Tag = f.Ast
-		v.data.Type.Kind = f.Ast.DataTypeString()
-		v.data.Tok = f.Ast.Tok
-		m.appendSubNode(exprNode{f.Ast.Id})
-	}
-	return
-}
-
-func (p *Parser) evalStrObjSubId(val value, idTok Tok, m *exprModel) (v value) {
-	return p.evalJnObjSubId(strDefs, val, idTok, m)
-}
-
-func (p *Parser) evalArrayObjSubId(val value, idTok Tok, m *exprModel) (v value) {
-	readyArrDefs(val.data.Type)
-	return p.evalJnObjSubId(arrDefs, val, idTok, m)
-}
-
-func (p *Parser) evalMapObjSubId(val value, idTok Tok, m *exprModel) (v value) {
-	readyMapDefs(val.data.Type)
-	return p.evalJnObjSubId(mapDefs, val, idTok, m)
-}
-
-func (p *Parser) evalEnumSubId(val value, idTok Tok, m *exprModel) (v value) {
-	enum := val.data.Type.Tag.(*Enum)
-	v = val
-	v.data.Type.Tok = enum.Tok
-	v.constant = true
-	v.lvalue = false
-	v.isType = false
-	m.appendSubNode(exprNode{"::"})
-	m.appendSubNode(exprNode{jnapi.OutId(idTok.Kind, enum.Tok.File)})
-	if enum.ItemById(idTok.Kind) == nil {
-		p.pusherrtok(idTok, "obj_have_not_id", idTok.Kind)
-	}
-	return
-}
-
-func (p *Parser) evalStructObjSubId(val value, idTok Tok, m *exprModel) value {
-	s := val.data.Type.Tag.(*jnstruct)
-	val.constant = false
-	val.lvalue = false
-	val.isType = false
-	return p.evalJnObjSubId(s.Defs, val, idTok, m)
-}
-
-type nsFind interface{ nsById(string, bool) *namespace }
-
-func (p *Parser) evalNsSubId(toks Toks, m *exprModel) (v value) {
-	var prev nsFind = p
-	for i, tok := range toks {
-		if (i+1)%2 != 0 {
-			if tok.Id != tokens.Id {
-				p.pusherrtok(tok, "invalid_syntax")
-				continue
-			}
-			src := prev.nsById(tok.Kind, false)
-			if src == nil {
-				if i > 0 {
-					toks = toks[i:]
-					goto eval
-				}
-				p.pusherrtok(tok, "namespace_not_exist", tok.Kind)
-				return
-			}
-			prev = src.Defs
-			m.appendSubNode(exprNode{jnapi.OutId(src.Id, src.Tok.File)})
-			continue
-		}
-		switch tok.Id {
-		case tokens.DoubleColon:
-			m.appendSubNode(exprNode{tokens.DOUBLE_COLON})
-		default:
-			goto eval
-		}
-	}
-eval:
-	pdefs := p.Defs
-	p.Defs = prev.(*Defmap)
-	parent := p.Defs.parent
-	p.Defs.parent = nil
-	defer func() {
-		p.Defs.parent = parent
-		p.Defs = pdefs
-	}()
-	return p.evalExprPart(toks, m)
-}
-
-func (p *Parser) evalJnTypeSubId(dm *Defmap, idTok Tok, m *exprModel) (v value) {
-	i, dm, t := dm.defById(idTok.Kind, nil)
-	if i == -1 {
-		p.pusherrtok(idTok, "obj_have_not_id", idTok.Kind)
-		return
-	}
-	v.lvalue = false
-	v.data.Value = idTok.Kind
-	switch t {
-	case 'g':
-		g := dm.Globals[i]
-		m.appendSubNode(exprNode{g.Tag.(string)})
-		v.data.Type = g.Type
-		v.constant = g.Const
-	}
-	return
-}
-
-func (p *Parser) evalI8SubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(i8statics, idTok, m)
-}
-
-func (p *Parser) evalI16SubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(i16statics, idTok, m)
-}
-
-func (p *Parser) evalI32SubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(i32statics, idTok, m)
-}
-
-func (p *Parser) evalI64SubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(i64statics, idTok, m)
-}
-
-func (p *Parser) evalU8SubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(u8statics, idTok, m)
-}
-
-func (p *Parser) evalU16SubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(u16statics, idTok, m)
-}
-
-func (p *Parser) evalU32SubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(u32statics, idTok, m)
-}
-
-func (p *Parser) evalU64SubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(u64statics, idTok, m)
-}
-
-func (p *Parser) evalUIntSubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(uintStatics, idTok, m)
-}
-
-func (p *Parser) evalIntSubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(intStatics, idTok, m)
-}
-
-func (p *Parser) evalF32SubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(f32statics, idTok, m)
-}
-
-func (p *Parser) evalF64SubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(f64statics, idTok, m)
-}
-
-func (p *Parser) evalStrSubId(idTok Tok, m *exprModel) (v value) {
-	return p.evalJnTypeSubId(strStatics, idTok, m)
-}
-
-func (p *Parser) evalTypeSubId(typeTok, idTok Tok, m *exprModel) (v value) {
-	switch typeTok.Kind {
-	case tokens.I8:
-		return p.evalI8SubId(idTok, m)
-	case tokens.I16:
-		return p.evalI16SubId(idTok, m)
-	case tokens.I32:
-		return p.evalI32SubId(idTok, m)
-	case tokens.I64:
-		return p.evalI64SubId(idTok, m)
-	case tokens.U8:
-		return p.evalU8SubId(idTok, m)
-	case tokens.U16:
-		return p.evalU16SubId(idTok, m)
-	case tokens.U32:
-		return p.evalU32SubId(idTok, m)
-	case tokens.U64:
-		return p.evalU64SubId(idTok, m)
-	case tokens.UINT:
-		return p.evalUIntSubId(idTok, m)
-	case tokens.INT:
-		return p.evalIntSubId(idTok, m)
-	case tokens.F32:
-		return p.evalF32SubId(idTok, m)
-	case tokens.F64:
-		return p.evalF64SubId(idTok, m)
-	case tokens.STR:
-		return p.evalStrSubId(idTok, m)
-	}
-	p.pusherrtok(typeTok, "obj_not_support_sub_fields", typeTok.Kind)
-	return
-}
-
-func valIsStructIns(val value) bool {
-	return !val.isType && val.data.Type.Id == jntype.Struct
-}
-
-func (p *Parser) evalExprSubId(toks Toks, m *exprModel) (v value) {
-	i := len(toks) - 1
-	idTok := toks[i]
-	i--
-	valTok := toks[i]
-	toks = toks[:i]
-	if len(toks) == 1 {
-		tok := toks[0]
-		if tok.Id == tokens.DataType {
-			return p.evalTypeSubId(tok, idTok, m)
-		} else if tok.Id == tokens.Id {
-			t, _, _ := p.typeById(tok.Kind)
-			if t != nil {
-				return p.evalTypeSubId(t.Type.Tok, idTok, m)
-			}
-		}
-	}
-	val := p.evalExprPart(toks, m)
-	checkType := val.data.Type
-	if typeIsExplicitPtr(checkType) {
-		checkType.Kind = checkType.Kind[1:]
-	}
-	switch {
-	case typeIsPure(checkType):
-		switch {
-		case checkType.Id == jntype.Str:
-			return p.evalStrObjSubId(val, idTok, m)
-		case valIsEnumType(val):
-			return p.evalEnumSubId(val, idTok, m)
-		case valIsStructIns(val):
-			return p.evalStructObjSubId(val, idTok, m)
-		}
-	case typeIsArray(checkType):
-		return p.evalArrayObjSubId(val, idTok, m)
-	case typeIsMap(checkType):
-		return p.evalMapObjSubId(val, idTok, m)
-	}
-	p.pusherrtok(valTok, "obj_not_support_sub_fields", val.data.Type.Kind)
-	return
-}
-
-func (p *Parser) evalIdExprPart(toks Toks, m *exprModel) (v value) {
-	i := len(toks) - 1
-	tok := toks[i]
-	if i <= 0 {
-		v, _ = p.evalSingleExpr(tok, m)
-		return
-	}
-	i--
-	if i == 0 {
-		p.pusherrtok(toks[i], "invalid_syntax")
-		return
-	}
-	tok = toks[i]
-	switch tok.Id {
-	case tokens.Dot:
-		return p.evalExprSubId(toks, m)
-	case tokens.DoubleColon:
-		return p.evalNsSubId(toks, m)
-	}
-	p.pusherrtok(toks[i], "invalid_syntax")
-	return
-}
-
-func (p *Parser) evalCastExpr(dt DataType, exprToks Toks, m *exprModel, errTok Tok) value {
-	m.appendSubNode(exprNode{tokens.LPARENTHESES + dt.String() + tokens.RPARENTHESES})
-	m.appendSubNode(exprNode{tokens.LPARENTHESES})
-	val, model := p.evalToks(exprToks)
-	m.appendSubNode(model)
-	m.appendSubNode(exprNode{tokens.RPARENTHESES})
-	val = p.evalCast(val, dt, errTok)
-	return val
-}
-
-func (p *Parser) evalTryCastExpr(toks Toks, m *exprModel) (v value, _ bool) {
-	braceCount := 0
-	errTok := toks[0]
-	for i, tok := range toks {
-		if tok.Id == tokens.Brace {
-			switch tok.Kind {
-			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
-				braceCount++
-				continue
-			default:
-				braceCount--
-			}
-		}
-		if braceCount > 0 {
-			continue
-		} else if i+1 == len(toks) {
-			return
-		}
-		b := ast.NewBuilder(nil)
-		dtindex := 0
-		typeToks := toks[1:i]
-		dt, ok := b.DataType(typeToks, &dtindex, false)
-		b.Wait()
-		if !ok {
-			return
-		}
-		dt, ok = p.realType(dt, false)
-		if !ok {
-			return
-		}
-		if dtindex+1 < len(typeToks) {
-			return
-		}
-		exprToks := toks[i+1:]
-		if len(exprToks) == 0 {
-			return
-		}
-		tok = exprToks[0]
-		if tok.Id != tokens.Brace || tok.Kind != tokens.LPARENTHESES {
-			return
-		}
-		exprToks, ok = p.getRange(tokens.LPARENTHESES, tokens.RPARENTHESES, exprToks)
-		if !ok {
-			return
-		}
-		val := p.evalCastExpr(dt, exprToks, m, errTok)
-		return val, true
-	}
-	return
-}
-
-func (p *Parser) evalTryAssignExpr(toks Toks, m *exprModel) (v value, ok bool) {
-	b := ast.NewBuilder(nil)
-	toks = toks[1 : len(toks)-1]
-	assign, ok := b.AssignExpr(toks, true)
-	if !ok {
-		return
-	}
-	ok = true
-	if len(b.Errors) > 0 {
-		p.pusherrs(b.Errors...)
-		return
-	}
-	v, _ = p.evalExpr(assign.Left[0].Expr)
-	if v.lvalue && ast.IsSuffixOperator(assign.Setter.Kind) {
-		v.lvalue = false
-	}
-	p.checkAssign(&assign)
-	m.appendSubNode(assignExpr{assign})
-	return
-}
-
-func (p *Parser) evalCast(v value, t DataType, errtok Tok) value {
-	switch {
-	case typeIsPure(v.data.Type) && v.data.Type.Id == jntype.Any:
-	case typeIsPtr(t):
-		p.checkCastPtr(v.data.Type, errtok)
-	case typeIsArray(t):
-		p.checkCastArray(t, v.data.Type, errtok)
-	case typeIsPure(t):
-		v.lvalue = false
-		p.checkCastSingle(t, v.data.Type, errtok)
-	default:
-		p.pusherrtok(errtok, "type_notsupports_casting", t.Kind)
-	}
-	v.data.Value = ""
-	v.data.Type = t
-	v.constant = false
-	v.volatile = false
-	return v
-}
-
-func (p *Parser) checkCastSingle(t, vt DataType, errtok Tok) {
-	switch t.Id {
-	case jntype.Str:
-		p.checkCastStr(vt, errtok)
-		return
-	case jntype.Enum:
-		p.checkCastEnum(t, vt, errtok)
-		return
-	}
-	switch {
-	case jntype.IsIntegerType(t.Id):
-		p.checkCastInteger(t, vt, errtok)
-	case jntype.IsNumericType(t.Id):
-		p.checkCastNumeric(t, vt, errtok)
-	default:
-		p.pusherrtok(errtok, "type_notsupports_casting", t.Kind)
-	}
-}
-
-func (p *Parser) checkCastStr(vt DataType, errtok Tok) {
-	if !typeIsArray(vt) {
-		p.pusherrtok(errtok, "type_notsupports_casting", vt.Kind)
-		return
-	}
-	vt.Kind = vt.Kind[2:]
-	if !typeIsPure(vt) || vt.Id != jntype.U8 {
-		p.pusherrtok(errtok, "type_notsupports_casting", vt.Kind)
-	}
-}
-
-func (p *Parser) checkCastEnum(t, vt DataType, errtok Tok) {
-	e := t.Tag.(*Enum)
-	t = e.Type
-	t.Kind = e.Id
-	p.checkCastNumeric(t, vt, errtok)
-}
-
-func (p *Parser) checkCastInteger(t, vt DataType, errtok Tok) {
-	if typeIsPtr(vt) &&
-		(t.Id == jntype.I64 || t.Id == jntype.U64 ||
-			t.Id == jntype.Intptr || t.Id == jntype.UIntptr) {
-		return
-	}
-	if typeIsPure(vt) && jntype.IsNumericType(vt.Id) {
-		return
-	}
-	p.pusherrtok(errtok, "type_notsupports_casting_to", vt.Kind, t.Kind)
-}
-
-func (p *Parser) checkCastNumeric(t, vt DataType, errtok Tok) {
-	if typeIsPure(vt) && jntype.IsNumericType(vt.Id) {
-		return
-	}
-	p.pusherrtok(errtok, "type_notsupports_casting_to", vt.Kind, t.Kind)
-}
-
-func (p *Parser) checkCastPtr(vt DataType, errtok Tok) {
-	if typeIsPtr(vt) {
-		return
-	}
-	if typeIsPure(vt) && jntype.IsIntegerType(vt.Id) {
-		return
-	}
-	p.pusherrtok(errtok, "type_notsupports_casting", vt.Kind)
-}
-
-func (p *Parser) checkCastArray(t, vt DataType, errtok Tok) {
-	if !typeIsPure(vt) || vt.Id != jntype.Str {
-		p.pusherrtok(errtok, "type_notsupports_casting", vt.Kind)
-		return
-	}
-	t.Kind = t.Kind[2:]
-	if !typeIsPure(vt) || vt.Id != jntype.U8 {
-		p.pusherrtok(errtok, "type_notsupports_casting", vt.Kind)
-	}
-}
-
-func (p *Parser) evalOperatorExprPartRight(toks Toks, m *exprModel) (v value) {
-	tok := toks[len(toks)-1]
-	switch tok.Kind {
-	case tokens.TRIPLE_DOT:
-		toks = toks[:len(toks)-1]
-		return p.evalVariadicExprPart(toks, m, tok)
-	default:
-		p.pusherrtok(tok, "invalid_syntax")
-	}
-	return
-}
-
-func (p *Parser) evalVariadicExprPart(toks Toks, m *exprModel, errtok Tok) (v value) {
-	v = p.evalExprPart(toks, m)
-	if !typeIsVariadicable(v.data.Type) {
-		p.pusherrtok(errtok, "variadic_with_nonvariadicable", v.data.Type.Kind)
-		return
-	}
-	v.data.Type.Kind = v.data.Type.Kind[2:]
-	v.variadic = true
-	return
-}
-
-func (p *Parser) getDataTypeFunc(expr Tok, callRange Toks, m *exprModel) (v value, isret bool) {
-	switch expr.Id {
-	case tokens.DataType:
-		switch expr.Kind {
-		case tokens.STR:
-			m.appendSubNode(exprNode{"tostr"})
-			v.data.Type = DataType{Id: jntype.Func, Kind: "()", Tag: strDefaultFunc}
-			isret = true
-		default:
-			dt := DataType{
-				Tok:  expr,
-				Id:   jntype.TypeFromId(expr.Kind),
-				Kind: expr.Kind,
-			}
-			isret = true
-			v = p.evalCastExpr(dt, callRange, m, expr)
-		}
-	case tokens.Id:
-		def, _, _, _ := p.defById(expr.Kind)
-		if def == nil {
-			break
-		}
-		switch t := def.(type) {
-		case *Type:
-			dt, ok := p.realType(t.Type, true)
-			if !ok || typeIsStruct(dt) {
-				return
-			}
-			isret = true
-			v = p.evalCastExpr(dt, callRange, m, expr)
-		}
-	}
-	return
-}
-
-func (p *Parser) evalBetweenParenthesesExpr(toks Toks, m *exprModel) value {
-	m.appendSubNode(exprNode{tokens.LPARENTHESES})
-	defer m.appendSubNode(exprNode{tokens.RPARENTHESES})
-
-	tk := toks[0]
-	toks = toks[1 : len(toks)-1]
-	if len(toks) == 0 {
-		p.pusherrtok(tk, "invalid_syntax")
-	}
-	val, model := p.evalToks(toks)
-	m.appendSubNode(model)
-	return val
-}
-
-func (p *Parser) evalParenthesesRangeExpr(toks Toks, m *exprModel) (v value) {
-	exprToks, rangeExpr := ast.RangeLast(toks)
-	if len(exprToks) == 0 {
-		return p.evalBetweenParenthesesExpr(rangeExpr, m)
-	}
-	var genericsToks Toks
-	if tok := exprToks[len(exprToks)-1]; tok.Id == tokens.Brace && tok.Kind == tokens.RBRACKET {
-		exprToks, genericsToks = ast.RangeLast(exprToks)
-	}
-	switch tok := exprToks[0]; tok.Id {
-	case tokens.DataType, tokens.Id:
-		if len(exprToks) == 1 && len(genericsToks) == 0 {
-			v, isret := p.getDataTypeFunc(exprToks[0], rangeExpr, m)
-			if isret {
-				return v
-			}
-		}
-		fallthrough
-	default:
-		v = p.evalExprPart(exprToks, m)
-	}
-	switch {
-	case typeIsFunc(v.data.Type):
-		f := v.data.Type.Tag.(*Func)
-		return p.callFunc(f, genericsToks, rangeExpr, m)
-	case valIsStructType(v):
-		s := v.data.Type.Tag.(*jnstruct)
-		return p.callStructConstructor(s, genericsToks, rangeExpr, m)
-	}
-	p.pusherrtok(exprToks[len(exprToks)-1], "invalid_syntax")
-	return
 }
 
 func (p *Parser) callFunc(f *Func, genericsToks, argsToks Toks, m *exprModel) value {
@@ -2175,14 +1775,25 @@ func (p *Parser) callFunc(f *Func, genericsToks, argsToks Toks, m *exprModel) va
 	return v
 }
 
-func (p *Parser) callStructConstructor(
-	s *jnstruct,
-	genericsToks, argsToks Toks,
-	m *exprModel,
-) value {
-	v := p.parseFuncCallToks(s.constructor, genericsToks, argsToks, m)
+func (p *Parser) callStructConstructor(s *jnstruct, argsToks Toks, m *exprModel) (v value) {
+	f := s.constructor
+	s = f.RetType.Type.Tag.(*jnstruct)
+	v.data.Type = f.RetType.Type
+	v.data.Type.Kind = s.dataTypeString()
 	v.isType = false
 	v.lvalue = false
+	v.constExpr = false
+	v.data.Value = s.Ast.Id
+	argsToks[0].Kind = tokens.LPARENTHESES
+	argsToks[len(argsToks)-1].Kind = tokens.RPARENTHESES
+	args := p.getArgs(argsToks, true)
+	m.appendSubNode(exprNode{f.RetType.String()})
+	m.appendSubNode(exprNode{tokens.LPARENTHESES})
+	p.parseArgs(f, args, m, f.Tok)
+	if m != nil {
+		m.appendSubNode(argsExpr{args.Src})
+	}
+	m.appendSubNode(exprNode{tokens.RPARENTHESES})
 	return v
 }
 
@@ -2193,352 +1804,30 @@ func (p *Parser) parseField(s *jnstruct, f **Var, i int) {
 	if v.Type.Id == jntype.Struct && v.Type.Tag == s && typeIsPure(v.Type) {
 		p.pusherrtok(v.Type.Tok, "invalid_type_source")
 	}
-	if len(v.Val.Toks) > 0 {
-		param.Default = v.Val
+	if hasExpr(v.Expr) {
+		param.Default = v.Expr
 	} else {
-		param.Default.Model = exprNode{defaultValueOfType(param.Type)}
+		param.Default.Model = exprNode{jnapi.DefaultExpr}
 	}
 	s.constructor.Params[i] = param
 }
 
-func (p *Parser) structConstructorInstance(as jnstruct) *jnstruct {
+func (p *Parser) structConstructorInstance(as *jnstruct) *jnstruct {
 	s := new(jnstruct)
 	s.Ast = as.Ast
+	s.traits = as.traits
 	s.constructor = new(Func)
 	*s.constructor = *as.constructor
 	s.constructor.RetType.Type.Tag = s
-	s.Defs = new(Defmap)
-	*s.Defs = *as.Defs
-	for i := range s.Ast.Fields {
-		p.parseField(s, &s.Defs.Globals[i], i)
+	s.Defs = as.Defs
+	for i := range s.Defs.Funcs {
+		f := &s.Defs.Funcs[i]
+		nf := new(function)
+		*nf = **f
+		nf.Ast.Receiver.Tag = s
+		*f = nf
 	}
 	return s
-}
-
-func (p *Parser) evalTypeId(toks Toks, m *exprModel) (v value) {
-	tok := toks[0]
-	t, _, _ := p.typeById(tok.Kind)
-	if t == nil {
-		v.data.Type.Id = jntype.Void
-		v.data.Type.Kind = jntype.VoidTypeStr
-		return
-	}
-	toks = toks[1:]
-	return p.buildEnumerable(toks, t.Type, m)
-}
-
-func (p *Parser) buildEnumerable(exprToks Toks, t DataType, m *exprModel) (v value) {
-	t, ok := p.realType(t, true)
-	if !ok {
-		return
-	}
-	var model iExpr
-	switch {
-	case typeIsArray(t):
-		v, model = p.buildArray(p.buildEnumerableParts(exprToks), t, exprToks[0])
-	case typeIsMap(t):
-		v, model = p.buildMap(p.buildEnumerableParts(exprToks), t, exprToks[0])
-	default:
-		p.pusherrtok(exprToks[0], "invalid_type_source")
-		return
-	}
-	m.appendSubNode(model)
-	return
-}
-
-func (p *Parser) evalBraceRangeExpr(toks Toks, m *exprModel) (v value) {
-	var exprToks Toks
-	braceCount := 0
-	for i := len(toks) - 1; i >= 0; i-- {
-		tok := toks[i]
-		if tok.Id != tokens.Brace {
-			continue
-		}
-		switch tok.Kind {
-		case tokens.RBRACE, tokens.RBRACKET, tokens.RPARENTHESES:
-			braceCount++
-		default:
-			braceCount--
-		}
-		if braceCount != 0 {
-			continue
-		}
-		exprToks = toks[:i]
-		break
-	}
-	valToksLen := len(exprToks)
-	if valToksLen == 0 || braceCount > 0 {
-		p.pusherrtok(toks[0], "invalid_syntax")
-		return
-	}
-	tok := exprToks[0]
-	switch exprToks[0].Id {
-	case tokens.Id:
-		if len(exprToks) > 1 {
-			p.pusherrtok(tok, "invalid_syntax")
-			return
-		}
-		return p.evalTypeId(toks, m)
-	case tokens.Brace:
-		switch exprToks[0].Kind {
-		case tokens.LBRACKET:
-			b := ast.NewBuilder(nil)
-			i := new(int)
-			t, ok := b.DataType(exprToks, i, true)
-			b.Wait()
-			if !ok {
-				p.pusherrs(b.Errors...)
-				return
-			} else if *i+1 < len(exprToks) {
-				p.pusherrtok(toks[*i+1], "invalid_syntax")
-			}
-			exprToks = toks[len(exprToks):]
-			return p.buildEnumerable(exprToks, t, m)
-		case tokens.LPARENTHESES:
-			b := ast.NewBuilder(toks)
-			f := b.Func(b.Toks, true)
-			b.Wait()
-			if len(b.Errors) > 0 {
-				p.pusherrs(b.Errors...)
-				return
-			}
-			p.checkAnonFunc(&f)
-			v.data.Type.Tag = &f
-			v.data.Type.Id = jntype.Func
-			v.data.Type.Kind = f.DataTypeString()
-			m.appendSubNode(anonFuncExpr{f, jnapi.LambdaByCopy})
-			return
-		default:
-			p.pusherrtok(exprToks[0], "invalid_syntax")
-		}
-	default:
-		p.pusherrtok(exprToks[0], "invalid_syntax")
-	}
-	return
-}
-
-func (p *Parser) evalBracketRangeExpr(toks Toks, m *exprModel) (v value) {
-	var exprToks Toks
-	braceCount := 0
-	for i := len(toks) - 1; i >= 0; i-- {
-		tok := toks[i]
-		if tok.Id != tokens.Brace {
-			continue
-		}
-		switch tok.Kind {
-		case tokens.RBRACE, tokens.RBRACKET, tokens.RPARENTHESES:
-			braceCount++
-		default:
-			braceCount--
-		}
-		if braceCount != 0 {
-			continue
-		}
-		exprToks = toks[:i]
-		break
-	}
-	valToksLen := len(exprToks)
-	if valToksLen == 0 || braceCount > 0 {
-		p.pusherrtok(toks[0], "invalid_syntax")
-		return
-	}
-	tok := exprToks[0]
-	switch exprToks[0].Id {
-	case tokens.Id:
-		if len(exprToks) > 1 {
-			p.pusherrtok(tok, "invalid_syntax")
-			return
-		}
-		return p.evalTypeId(toks, m)
-	case tokens.Brace:
-		switch exprToks[0].Kind {
-		case tokens.LBRACKET:
-			b := ast.NewBuilder(nil)
-			i := new(int)
-			t, ok := b.DataType(exprToks, i, true)
-			b.Wait()
-			if !ok {
-				p.pusherrs(b.Errors...)
-				return
-			} else if *i+1 < len(exprToks) {
-				p.pusherrtok(toks[*i+1], "invalid_syntax")
-			}
-			exprToks = toks[len(exprToks):]
-			p.buildEnumerable(exprToks, t, m)
-			return
-		case tokens.LPARENTHESES:
-			b := ast.NewBuilder(toks)
-			f := b.Func(b.Toks, true)
-			b.Wait()
-			if len(b.Errors) > 0 {
-				p.pusherrs(b.Errors...)
-				return
-			}
-			p.checkAnonFunc(&f)
-			v.data.Type.Tag = &f
-			v.data.Type.Id = jntype.Func
-			v.data.Type.Kind = f.DataTypeString()
-			m.appendSubNode(anonFuncExpr{f, jnapi.LambdaByCopy})
-			return
-		default:
-			p.pusherrtok(exprToks[0], "invalid_syntax")
-		}
-	default:
-		p.pusherrtok(exprToks[0], "invalid_syntax")
-	}
-	return
-}
-
-func (p *Parser) evalEnumerableSelect(enumv, selectv value, errtok Tok) (v value) {
-	switch {
-	case typeIsArray(enumv.data.Type):
-		return p.evalArraySelect(enumv, selectv, errtok)
-	case typeIsMap(enumv.data.Type):
-		return p.evalMapSelect(enumv, selectv, errtok)
-	case typeIsPure(enumv.data.Type):
-		return p.evalStrSelect(enumv, selectv, errtok)
-	case typeIsExplicitPtr(enumv.data.Type):
-		return p.evalPtrSelect(enumv, selectv, errtok)
-	}
-	p.pusherrtok(errtok, "not_enumerable")
-	return
-}
-
-func (p *Parser) evalArraySelect(arrv, selectv value, errtok Tok) value {
-	arrv.lvalue = true
-	arrv.data.Type = typeOfArrayComponents(arrv.data.Type)
-	p.wg.Add(1)
-	go assignChecker{
-		p:      p,
-		t:      DataType{Id: jntype.UInt, Kind: tokens.UINT},
-		v:      selectv,
-		errtok: errtok,
-	}.checkAssignTypeAsync()
-	return arrv
-}
-
-func (p *Parser) evalMapSelect(mapv, selectv value, errtok Tok) value {
-	mapv.lvalue = true
-	types := mapv.data.Type.Tag.([]DataType)
-	keyType := types[0]
-	valType := types[1]
-	mapv.data.Type = valType
-	p.wg.Add(1)
-	go p.checkTypeAsync(keyType, selectv.data.Type, false, errtok)
-	return mapv
-}
-
-func (p *Parser) evalStrSelect(strv, selectv value, errtok Tok) value {
-	strv.lvalue = true
-	strv.data.Type.Id = jntype.U8
-	strv.data.Type.Kind = jntype.TypeMap[strv.data.Type.Id]
-	p.wg.Add(1)
-	go assignChecker{
-		p:      p,
-		t:      DataType{Id: jntype.UInt, Kind: tokens.UINT},
-		v:      selectv,
-		errtok: errtok,
-	}.checkAssignTypeAsync()
-	return strv
-}
-
-func (p *Parser) evalPtrSelect(ptrv, selectv value, errtok Tok) value {
-	ptrv.lvalue = true
-	ptrv.data.Type.Kind = ptrv.data.Type.Kind[1:]
-	p.wg.Add(1)
-	go assignChecker{
-		p:      p,
-		t:      DataType{Id: jntype.UInt, Kind: tokens.UINT},
-		v:      selectv,
-		errtok: errtok,
-	}.checkAssignTypeAsync()
-	return ptrv
-}
-
-func (p *Parser) buildEnumerableParts(toks Toks) []Toks {
-	toks = toks[1 : len(toks)-1]
-	parts, errs := ast.Parts(toks, tokens.Comma)
-	p.pusherrs(errs...)
-	return parts
-}
-
-func (p *Parser) buildArray(parts []Toks, t DataType, errtok Tok) (value, iExpr) {
-	var v value
-	v.data.Type = t
-	model := arrayExpr{dataType: t}
-	elemType := typeOfArrayComponents(t)
-	for _, part := range parts {
-		partVal, expModel := p.evalToks(part)
-		model.expr = append(model.expr, expModel)
-		p.wg.Add(1)
-		go assignChecker{
-			p:      p,
-			t:      elemType,
-			v:      partVal,
-			errtok: part[0],
-		}.checkAssignTypeAsync()
-	}
-	return v, model
-}
-
-func (p *Parser) buildMap(parts []Toks, t DataType, errtok Tok) (value, iExpr) {
-	var v value
-	v.data.Type = t
-	model := mapExpr{dataType: t}
-	types := t.Tag.([]DataType)
-	keyType := types[0]
-	valType := types[1]
-	for _, part := range parts {
-		braceCount := 0
-		colon := -1
-		for i, tok := range part {
-			if tok.Id == tokens.Brace {
-				switch tok.Kind {
-				case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
-					braceCount++
-				default:
-					braceCount--
-				}
-			}
-			if braceCount != 0 {
-				continue
-			}
-			if tok.Id == tokens.Colon {
-				colon = i
-				break
-			}
-		}
-		if colon < 1 || colon+1 >= len(part) {
-			p.pusherrtok(errtok, "missing_expr")
-			continue
-		}
-		colonTok := part[colon]
-		keyToks := part[:colon]
-		valToks := part[colon+1:]
-		key, keyModel := p.evalToks(keyToks)
-		model.keyExprs = append(model.keyExprs, keyModel)
-		val, valModel := p.evalToks(valToks)
-		model.valExprs = append(model.valExprs, valModel)
-		p.wg.Add(1)
-		go assignChecker{
-			p,
-			false,
-			keyType,
-			key,
-			false,
-			colonTok,
-		}.checkAssignTypeAsync()
-		p.wg.Add(1)
-		go assignChecker{
-			p,
-			false,
-			valType,
-			val,
-			false,
-			colonTok,
-		}.checkAssignTypeAsync()
-	}
-	return v, model
 }
 
 func (p *Parser) checkAnonFunc(f *Func) {
@@ -2548,20 +1837,21 @@ func (p *Parser) checkAnonFunc(f *Func) {
 	p.Defs.Globals = append(blockVariables, p.Defs.Globals...)
 	p.blockVars = p.varsFromParams(f.Params)
 	rootBlock := p.rootBlock
-	p.rootBlock = nil
+	nodeBlock := p.nodeBlock
 	p.checkFunc(f)
 	p.rootBlock = rootBlock
+	p.nodeBlock = nodeBlock
 	p.Defs.Globals = globals
 	p.blockVars = blockVariables
 }
 
-func (p *Parser) getArgs(toks Toks) *models.Args {
+func (p *Parser) getArgs(toks Toks, targeting bool) *models.Args {
 	toks, _ = p.getRange(tokens.LPARENTHESES, tokens.RPARENTHESES, toks)
 	if toks == nil {
 		toks = make(Toks, 0)
 	}
 	b := new(ast.Builder)
-	args := b.Args(toks)
+	args := b.Args(toks, targeting)
 	if len(b.Errors) > 0 {
 		p.pusherrs(b.Errors...)
 		args = nil
@@ -2569,12 +1859,12 @@ func (p *Parser) getArgs(toks Toks) *models.Args {
 	return args
 }
 
-func (p *Parser) getGenerics(toks Toks) []DataType {
+func (p *Parser) getGenerics(toks Toks) (_ []DataType, err bool) {
 	if len(toks) == 0 {
-		return nil
+		return nil, false
 	}
 	toks = toks[1 : len(toks)-1]
-	parts, errs := ast.Parts(toks, tokens.Comma)
+	parts, errs := ast.Parts(toks, tokens.Comma, true)
 	generics := make([]DataType, len(parts))
 	p.pusherrs(errs...)
 	for i, part := range parts {
@@ -2582,15 +1872,20 @@ func (p *Parser) getGenerics(toks Toks) []DataType {
 			continue
 		}
 		b := ast.NewBuilder(nil)
-		index := 0
-		generic, _ := b.DataType(part, &index, true)
-		if index+1 < len(part) {
-			p.pusherrtok(part[index+1], "invalid_syntax")
+		j := 0
+		generic, _ := b.DataType(part, &j, false, true)
+		b.Wait()
+		if j+1 < len(part) {
+			p.pusherrtok(part[j+1], "invalid_syntax")
 		}
 		p.pusherrs(b.Errors...)
-		generics[i], _ = p.realType(generic, true)
+		var ok bool
+		generics[i], ok = p.realType(generic, true)
+		if !ok {
+			err = true
+		}
 	}
-	return generics
+	return generics, err
 }
 
 func (p *Parser) checkGenericsQuantity(n int, generics []DataType, errTok Tok) bool {
@@ -2598,7 +1893,7 @@ func (p *Parser) checkGenericsQuantity(n int, generics []DataType, errTok Tok) b
 	case n == 0 && len(generics) > 0:
 		p.pusherrtok(errTok, "not_has_generics")
 		return false
-	case len(generics) == 0:
+	case n > 0 && len(generics) == 0:
 		p.pusherrtok(errTok, "has_generics")
 		return false
 	case n < len(generics):
@@ -2612,13 +1907,19 @@ func (p *Parser) checkGenericsQuantity(n int, generics []DataType, errTok Tok) b
 	}
 }
 
+func (p *Parser) pushGeneric(generic *GenericType, source DataType) {
+	t := &Type{
+		Id:   generic.Id,
+		Tok:  generic.Tok,
+		Type: source,
+		Used: true,
+	}
+	p.blockTypes = append(p.blockTypes, t)
+}
+
 func (p *Parser) pushGenerics(generics []*GenericType, sources []DataType) {
 	for i, generic := range generics {
-		p.blockTypes = append(p.blockTypes, &Type{
-			Id:   generic.Id,
-			Tok:  generic.Tok,
-			Type: sources[i],
-		})
+		p.pushGeneric(generic, sources[i])
 	}
 }
 
@@ -2630,7 +1931,10 @@ func (p *Parser) reloadFuncTypes(f *Func) {
 }
 
 func itsCombined(f *Func, generics []DataType) bool {
-	for _, combine := range f.Combines {
+	if f.Combines == nil {
+		return true
+	}
+	for _, combine := range *f.Combines {
 		for i, gt := range generics {
 			ct := combine[i]
 			if typesEquals(gt, ct) {
@@ -2641,89 +1945,111 @@ func itsCombined(f *Func, generics []DataType) bool {
 	return false
 }
 
-func (p *Parser) parseGenerics(f *Func, generics []DataType, m *exprModel, errTok Tok) bool {
-	if !p.checkGenericsQuantity(len(f.Generics), generics, errTok) {
-		return false
+func (p *Parser) parseGenericFunc(f *Func, generics []DataType, errtok Tok) {
+	owner := f.Owner.(*Parser)
+	if owner == p {
+		rootBlock := p.rootBlock
+		nodeBlock := p.nodeBlock
+		blockVars := p.blockVars
+		blockTypes := p.blockTypes
+		defer func() {
+			p.rootBlock = rootBlock
+			p.nodeBlock = nodeBlock
+			p.blockVars = blockVars
+			p.blockTypes = blockTypes
+		}()
 	}
-	var cxx strings.Builder
-	cxx.WriteByte('<')
-	for _, generic := range generics {
-		cxx.WriteString(generic.String())
-		cxx.WriteByte(',')
-	}
-	m.appendSubNode(exprNode{cxx.String()[:cxx.Len()-1] + ">"})
-	blockTypes := p.blockTypes
-	blockVars := p.blockVars
-	p.blockTypes = nil
-	defer func() { p.blockTypes, p.blockVars = blockTypes, blockVars }()
-	p.pushGenerics(f.Generics, generics)
-	p.reloadFuncTypes(f)
-	if isConstructor(f) {
-		p.readyConstructor(&f)
-		return true
+	owner.pushGenerics(f.Generics, generics)
+	if f.Receiver != nil {
+		s := f.Receiver.Tag.(*jnstruct)
+		owner.pushGenerics(s.Ast.Generics, s.Generics())
 	}
 	if itsCombined(f, generics) {
-		return true
+		return
 	}
-	f.Combines = append(f.Combines, generics)
-	rootBlock := p.rootBlock
-	nodeBlock := p.nodeBlock
-	defer func() { p.rootBlock, p.nodeBlock = rootBlock, nodeBlock }()
-	p.rootBlock = nil
-	p.nodeBlock = nil
-	p.parseFunc(f)
+	*f.Combines = append(*f.Combines, generics)
+	owner.parseTypesGenerics(f)
+	p.parsePureFunc(f)
+	owner.blockTypes = nil
+	owner.blockVars = nil
+	owner.rootBlock = nil
+	owner.nodeBlock = nil
+}
+
+func (p *Parser) parseGenerics(f *Func, args *models.Args, errTok Tok) bool {
+	if len(f.Generics) > 0 && len(args.Generics) == 0 {
+		for _, generic := range f.Generics {
+			ok := false
+			for _, param := range f.Params {
+				if typeHasThisGeneric(generic, param.Type) {
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				goto check
+			}
+		}
+		args.DynamicGenericAnnotation = true
+		goto ok
+	}
+check:
+	if !p.checkGenericsQuantity(len(f.Generics), args.Generics, errTok) {
+		return false
+	}
+	p.pushGenerics(f.Generics, args.Generics)
+	p.parseTypesGenerics(f)
+ok:
 	return true
 }
 
-func isConstructor(f *Func) bool {
-	if f.RetType.Type.Id != jntype.Struct {
-		return false
-	}
-	s := f.RetType.Type.Tag.(*jnstruct)
-	return f.Id == s.Ast.Id
-}
-
-func (p *Parser) readyConstructor(f **Func) {
-	s := (*f).RetType.Type.Tag.(*jnstruct)
-	s = p.structConstructorInstance(*s)
-	*f = s.constructor
-}
-
-func (p *Parser) parseFuncCall(
-	f *Func,
-	generics []DataType,
-	args *models.Args,
-	m *exprModel,
-	errTok Tok,
-) (v value) {
+func (p *Parser) parseFuncCall(f *Func, args *models.Args, m *exprModel, errTok Tok) (v value) {
+	args.NeedsPureType = len(p.rootBlock.Func.Generics) == 0
 	if len(f.Generics) > 0 {
+		blockTypes := p.blockTypes
 		params := make([]Param, len(f.Params))
 		copy(params, f.Params)
+		f.RetType.Type.DontUseOriginal = false
 		retType := f.RetType
-		defer func() { f.Params, f.RetType = params, retType }()
-		if !p.parseGenerics(f, generics, m, errTok) {
+		defer func() {
+			f.Params, f.RetType = params, retType
+			p.blockTypes = blockTypes
+		}()
+		if !p.parseGenerics(f, args, errTok) {
 			return
 		}
-		f.RetType.Type.DontUseOriginal = true
-	}
-	if isConstructor(f) {
-		p.readyConstructor(&f)
-		s := f.RetType.Type.Tag.(*jnstruct)
-		s.SetGenerics(generics)
-		v.data.Type.Kind = s.dataTypeString()
-		m.appendSubNode(exprNode{tokens.LBRACE})
-		defer m.appendSubNode(exprNode{tokens.RBRACE})
 	} else {
-		m.appendSubNode(exprNode{tokens.LPARENTHESES})
-		defer m.appendSubNode(exprNode{tokens.RPARENTHESES})
+		_ = p.checkGenericsQuantity(len(f.Generics), args.Generics, errTok)
+		if f.Receiver != nil {
+			owner := f.Owner.(*Parser)
+			s := f.Receiver.Tag.(*jnstruct)
+			generics := s.Generics()
+			if len(generics) > 0 {
+				owner.pushGenerics(s.Ast.Generics, generics)
+				owner.parseTypesGenerics(f)
+			}
+		}
 	}
 	v.data.Type = f.RetType.Type
+	v.data.Value = f.Id
 	if args == nil {
 		return
 	}
 	p.parseArgs(f, args, m, errTok)
+	callExpr := callExpr{
+		generics: genericsExpr{args.Generics[:len(f.Generics)]},
+		args:     argsExpr{args.Src},
+	}
+	if len(args.Generics) > 0 {
+		p.parseGenericFunc(f, args.Generics, errTok)
+	}
+	v.data.Type = f.RetType.Type
+	if args.NeedsPureType {
+		v.data.Type.DontUseOriginal = true
+		v.data.Type.Original = nil
+	}
 	if m != nil {
-		m.appendSubNode(argsExpr{args.Src})
+		m.appendSubNode(callExpr)
 	}
 	return
 }
@@ -2731,27 +2057,40 @@ func (p *Parser) parseFuncCall(
 func (p *Parser) parseFuncCallToks(f *Func, genericsToks, argsToks Toks, m *exprModel) (v value) {
 	var generics []DataType
 	var args *models.Args
-	if f.FindAttribute(jn.Attribute_TypeParam) != nil {
+	if f.FindAttribute(jn.Attribute_TypeArg) != nil {
 		if len(genericsToks) > 0 {
 			p.pusherrtok(genericsToks[0], "invalid_syntax")
 			return
 		}
-		generics = p.getGenerics(argsToks)
+		var err bool
+		generics, err = p.getGenerics(argsToks)
+		if err {
+			p.eval.hasError = true
+			return
+		}
+		args = new(models.Args)
+		args.Generics = generics
 	} else {
-		generics = p.getGenerics(genericsToks)
-		args = p.getArgs(argsToks)
+		var err bool
+		generics, err = p.getGenerics(genericsToks)
+		if err {
+			p.eval.hasError = true
+			return
+		}
+		args = p.getArgs(argsToks, false)
+		args.Generics = generics
 	}
-	return p.parseFuncCall(f, generics, args, m, argsToks[0])
+	return p.parseFuncCall(f, args, m, argsToks[0])
 }
 
-func (p *Parser) parseTargetedArgs(f *Func, args *models.Args, errTok Tok) {
-	tap := targetedArgParser{
+func (p *Parser) parseStructArgs(f *Func, args *models.Args, errTok Tok) {
+	sap := structArgParser{
 		p:      p,
 		f:      f,
 		args:   args,
 		errTok: errTok,
 	}
-	tap.parse()
+	sap.parse()
 }
 
 func (p *Parser) parsePureArgs(f *Func, args *models.Args, m *exprModel, errTok Tok) {
@@ -2767,7 +2106,7 @@ func (p *Parser) parsePureArgs(f *Func, args *models.Args, m *exprModel, errTok 
 
 func (p *Parser) parseArgs(f *Func, args *models.Args, m *exprModel, errTok Tok) {
 	if args.Targeted {
-		p.parseTargetedArgs(f, args, errTok)
+		p.parseStructArgs(f, args, errTok)
 		return
 	}
 	p.parsePureArgs(f, args, m, errTok)
@@ -2781,46 +2120,134 @@ func paramHasDefaultArg(param *Param) bool {
 	return hasExpr(param.Default)
 }
 
-type paramMap map[string]*paramMapPair
-
-type paramMapPair struct {
-	param *Param
-	arg   *Arg
-}
-
-func getParamMap(params []Param) *paramMap {
-	pmap := new(paramMap)
-	*pmap = make(paramMap, len(params))
-	for i := range params {
-		p := &params[i]
-		(*pmap)[p.Id] = &paramMapPair{p, nil}
+type (
+	paramMap     map[string]*paramMapPair
+	paramMapPair struct {
+		param *Param
+		arg   *Arg
 	}
-	return pmap
+)
+
+func (p *Parser) pushGenericByFunc(
+	f *Func,
+	pair *paramMapPair,
+	args *models.Args,
+	t DataType,
+) bool {
+	tf := t.Tag.(*Func)
+	cf := pair.param.Type.Tag.(*Func)
+	if len(tf.Params) != len(cf.Params) {
+		return false
+	}
+	for i, param := range tf.Params {
+		pair := *pair
+		pair.param = &cf.Params[i]
+		ok := p.pushGenericByArg(f, &pair, args, param.Type)
+		if !ok {
+			return ok
+		}
+	}
+	{
+		pair := *pair
+		pair.param = &models.Param{
+			Type: cf.RetType.Type,
+		}
+		return p.pushGenericByArg(f, &pair, args, tf.RetType.Type)
+	}
 }
 
-func (p *Parser) parseArg(param Param, arg *Arg, variadiced *bool) {
-	value, model := p.evalExpr(arg.Expr)
-	arg.Expr.Model = model
+func (p *Parser) pushGenericByMultiTyped(
+	f *Func,
+	pair *paramMapPair,
+	args *models.Args,
+	t DataType,
+) bool {
+	types := t.Tag.([]DataType)
+	for _, t := range types {
+		for _, generic := range f.Generics {
+			if typeHasThisGeneric(generic, pair.param.Type) {
+				p.pushGenericByType(generic, args, t)
+				break
+			}
+		}
+	}
+	return true
+}
+
+func (p *Parser) pushGenericByCommonArg(
+	f *Func,
+	pair *paramMapPair,
+	args *models.Args,
+	t DataType,
+) bool {
+	for _, generic := range f.Generics {
+		if typeIsThisGeneric(generic, pair.param.Type) {
+			p.pushGenericByType(generic, args, t)
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Parser) pushGenericByType(generic *GenericType, args *models.Args, t DataType) {
+	id, _ := t.KindId()
+	t.Kind = id
+	p.pushGeneric(generic, t)
+	args.Generics = append(args.Generics, t)
+}
+
+func (p *Parser) pushGenericByArg(
+	f *Func,
+	pair *paramMapPair,
+	args *models.Args,
+	argType DataType,
+) bool {
+	_, prefix := pair.param.Type.KindId()
+	_, tprefix := argType.KindId()
+	if prefix != tprefix {
+		return false
+	}
+	switch {
+	case typeIsFunc(argType):
+		return p.pushGenericByFunc(f, pair, args, argType)
+	case argType.MultiTyped, typeIsMap(argType):
+		return p.pushGenericByMultiTyped(f, pair, args, argType)
+	default:
+		return p.pushGenericByCommonArg(f, pair, args, argType)
+	}
+}
+
+func (p *Parser) parseArg(f *Func, pair *paramMapPair, args *models.Args, variadiced *bool) {
+	value, model := p.evalExpr(pair.arg.Expr)
+	pair.arg.Expr.Model = model
 	if variadiced != nil && !*variadiced {
 		*variadiced = value.variadic
 	}
+	if args.DynamicGenericAnnotation && typeHasGenerics(f.Generics, pair.param.Type) {
+		ok := p.pushGenericByArg(f, pair, args, value.data.Type)
+		if ok {
+			p.parseGenericType(f.Generics, &pair.param.Type)
+		} else {
+			p.pusherrtok(pair.arg.Tok, "dynamic_generic_annotation_failed")
+		}
+		return
+	}
 	p.wg.Add(1)
-	go p.checkArgTypeAsync(param, value, false, arg.Tok)
+	go p.checkArgType(pair.param, value, pair.arg.Tok)
 }
 
-func (p *Parser) checkArgTypeAsync(param Param, val value, ignoreAny bool, errTok Tok) {
-	defer func() { p.wg.Done() }()
-	if !param.Const && param.Reference && !val.lvalue {
+func (p *Parser) checkArgType(param *Param, val value, errTok Tok) {
+	defer p.wg.Done()
+	if param.Reference && !val.lvalue {
 		p.pusherrtok(errTok, "not_lvalue_for_reference_param")
 	}
 	p.wg.Add(1)
 	go assignChecker{
-		p:        p,
-		constant: param.Const,
-		t:        param.Type,
-		v:        val,
-		errtok:   errTok,
-	}.checkAssignTypeAsync()
+		p:      p,
+		t:      param.Type,
+		v:      val,
+		errtok: errTok,
+	}.checkAssignType()
 }
 
 func (p *Parser) getRange(open, close string, toks Toks) (_ Toks, ok bool) {
@@ -2892,7 +2319,6 @@ func (p *Parser) checkNewBlockCustom(b *models.Block, oldBlockVars []*Var) {
 			p.pusherrtok(t.Tok, "declared_but_not_used", t.Id)
 		}
 	}
-
 	p.blockVars = oldBlockVars
 	p.blockTypes = blockTypes
 }
@@ -2901,31 +2327,24 @@ func (p *Parser) checkNewBlock(b *models.Block) {
 	p.checkNewBlockCustom(b, p.blockVars)
 }
 
-func (p *Parser) checkStatement(b *models.Block, i *int) {
-	s := &b.Tree[*i]
-	switch t := s.Val.(type) {
+func (p *Parser) statement(s *models.Statement, recover bool) bool {
+	switch t := s.Data.(type) {
 	case models.ExprStatement:
-		_, t.Expr.Model = p.evalExpr(t.Expr)
-		s.Val = t
+		p.exprStatement(&t, recover)
+		s.Data = t
 	case Var:
-		p.checkVarStatement(&t, false)
-		s.Val = t
+		p.varStatement(&t, false)
+		s.Data = t
 	case models.Assign:
-		p.checkAssign(&t)
-		s.Val = t
+		p.assign(&t)
+		s.Data = t
 	case models.Iter:
-		p.checkIterExpr(&t)
-		s.Val = t
+		p.iter(&t)
+		s.Data = t
 	case models.Break:
-		p.checkBreakStatement(&t)
+		p.breakStatement(&t)
 	case models.Continue:
-		p.checkContinueStatement(&t)
-	case models.If:
-		p.checkIfExpr(&t, i, b.Tree)
-		s.Val = t
-	case models.Try:
-		p.checkTry(&t, i, b.Tree)
-		s.Val = t
+		p.continueStatement(&t)
 	case Type:
 		if def, _ := p.blockDefById(t.Id); def != nil {
 			p.pusherrtok(t.Tok, "exist_id", t.Id)
@@ -2936,34 +2355,50 @@ func (p *Parser) checkStatement(b *models.Block, i *int) {
 		}
 		t.Type, _ = p.realType(t.Type, true)
 		p.blockTypes = append(p.blockTypes, &t)
-	case models.Block:
-		p.checkNewBlock(&t)
-		s.Val = t
+	case *models.Block:
+		p.checkNewBlock(t)
+		s.Data = t
 	case models.Defer:
-		p.checkDeferStatement(&t)
-		s.Val = t
+		p.deferredCall(&t)
+		s.Data = t
 	case models.ConcurrentCall:
-		p.checkConcurrentCallStatement(&t)
-		s.Val = t
-	case models.Label:
-		t.Index = *i
-		t.Block = b
-		*p.rootBlock.Labels = append(*p.rootBlock.Labels, &t)
-	case models.Ret:
-		rc := retChecker{p: p, retAST: &t, f: b.Func}
-		rc.check()
-		s.Val = t
+		p.concurrentCall(&t)
+		s.Data = t
 	case models.Match:
-		p.checkMatchCase(&t)
-		s.Val = t
+		p.matchcase(&t)
+		s.Data = t
+	case models.CxxEmbed:
+		p.cxxEmbed(&t)
+		s.Data = t
+	case models.Comment:
+	default:
+		return false
+	}
+	return true
+}
+
+func (p *Parser) checkStatement(b *models.Block, i *int) {
+	s := b.Tree[*i]
+	defer func(i int) { b.Tree[i] = s }(*i)
+	if p.statement(&s, true) {
+		return
+	}
+	switch t := s.Data.(type) {
+	case models.If:
+		p.ifExpr(&t, i, b.Tree)
+		s.Data = t
 	case models.Goto:
 		t.Index = *i
 		t.Block = b
 		*p.rootBlock.Gotos = append(*p.rootBlock.Gotos, &t)
-	case models.CxxEmbed:
-		p.cxxEmbedStatement(&t)
-		s.Val = t
-	case models.Comment:
+	case models.Ret:
+		rc := retChecker{p: p, retAST: &t, f: b.Func}
+		rc.check()
+		s.Data = t
+	case models.Label:
+		t.Block = b
+		t.Index = *i
+		*p.rootBlock.Labels = append(*b.Labels, &t)
 	default:
 		p.pusherrtok(s.Tok, "invalid_syntax")
 	}
@@ -2972,6 +2407,68 @@ func (p *Parser) checkStatement(b *models.Block, i *int) {
 func (p *Parser) checkBlock(b *models.Block) {
 	for i := 0; i < len(b.Tree); i++ {
 		p.checkStatement(b, &i)
+	}
+}
+
+func (p *Parser) recoverFuncExprStatement(s *models.ExprStatement) {
+	errtok := s.Expr.Processes[0][0]
+	callToks := s.Expr.Processes[0][1:]
+	args := p.getArgs(callToks, false)
+	handleParam := recoverFunc.Ast.Params[0]
+	if len(args.Src) == 0 {
+		p.pusherrtok(errtok, "missing_expr_for", handleParam.Id)
+		return
+	} else if len(args.Src) > 1 {
+		p.pusherrtok(errtok, "argument_overflow")
+	}
+	v, _ := p.evalExpr(args.Src[0].Expr)
+	if v.data.Type.Kind != handleParam.Type.Kind {
+		p.eval.pusherrtok(errtok, "incompatible_datatype", handleParam.Type.Kind, v.data.Type.Kind)
+		return
+	}
+	handler := v.data.Type.Tag.(*Func)
+	s.Expr.Model = exprNode{"try{\n"}
+	var catcher serieExpr
+	catcher.exprs = append(catcher.exprs, "} catch(trait<XID(Error)> ")
+	catcher.exprs = append(catcher.exprs, handler.Params[0].OutId())
+	catcher.exprs = append(catcher.exprs, ") ")
+	r, _ := utf8.DecodeRuneInString(v.data.Value)
+	if r == '_' || unicode.IsLetter(r) {
+		catcher.exprs = append(catcher.exprs, "{")
+		catcher.exprs = append(catcher.exprs, handler.OutId())
+		catcher.exprs = append(catcher.exprs, "(")
+		catcher.exprs = append(catcher.exprs, handler.Params[0].OutId())
+		catcher.exprs = append(catcher.exprs, "); }")
+	} else {
+		catcher.exprs = append(catcher.exprs, handler.Block)
+	}
+	catchExpr := models.Statement{
+		Data: models.ExprStatement{
+			Expr: models.Expr{Model: catcher},
+		},
+	}
+	p.nodeBlock.Tree = append(p.nodeBlock.Tree, catchExpr)
+}
+
+func (p *Parser) exprStatement(s *models.ExprStatement, recover bool) {
+	if s.Expr.Processes != nil && !isOperator(s.Expr.Processes[0]) {
+		process := s.Expr.Processes[0]
+		tok := process[0]
+		if tok.Id == tokens.Id && tok.Kind == recoverFunc.Ast.Id {
+			if ast.IsFuncCall(s.Expr.Toks) != nil {
+				if !recover {
+					p.pusherrtok(tok, "invalid_syntax")
+				}
+				def, _, _ := p.defById(tok.Kind)
+				if def == recoverFunc {
+					p.recoverFuncExprStatement(s)
+					return
+				}
+			}
+		}
+	}
+	if s.Expr.Model == nil {
+		_, s.Expr.Model = p.evalExpr(s.Expr)
 	}
 }
 
@@ -2986,11 +2483,11 @@ func (p *Parser) parseCase(c *models.Case, t DataType) {
 			t:      t,
 			v:      value,
 			errtok: expr.Toks[0],
-		}.checkAssignTypeAsync()
+		}.checkAssignType()
 	}
 	p.caseCount++
 	defer func() { p.caseCount-- }()
-	p.checkNewBlock(&c.Block)
+	p.checkNewBlock(c.Block)
 }
 
 func (p *Parser) cases(cases []models.Case, t DataType) {
@@ -2999,19 +2496,18 @@ func (p *Parser) cases(cases []models.Case, t DataType) {
 	}
 }
 
-func (p *Parser) checkMatchCase(t *models.Match) {
-	var dt DataType
+func (p *Parser) matchcase(t *models.Match) {
 	if len(t.Expr.Processes) > 0 {
 		value, model := p.evalExpr(t.Expr)
 		t.Expr.Model = model
-		dt = value.data.Type
+		t.ExprType = value.data.Type
 	} else {
-		dt.Id = jntype.Bool
-		dt.Kind = jntype.TypeMap[dt.Id]
+		t.ExprType.Id = jntype.Bool
+		t.ExprType.Kind = jntype.TypeMap[t.ExprType.Id]
 	}
-	p.cases(t.Cases, dt)
+	p.cases(t.Cases, t.ExprType)
 	if t.Default != nil {
-		p.parseCase(t.Default, dt)
+		p.parseCase(t.Default, t.ExprType)
 	}
 }
 
@@ -3019,7 +2515,7 @@ func isCxxReturn(s string) bool {
 	return strings.HasPrefix(s, "return")
 }
 
-func (p *Parser) cxxEmbedStatement(cxx *models.CxxEmbed) {
+func (p *Parser) cxxEmbed(cxx *models.CxxEmbed) {
 	rexpr := regexp.MustCompile(`@[\p{L}|_]([\p{L}0-9_]+)?`)
 	match := rexpr.FindStringIndex(cxx.Content)
 	for match != nil {
@@ -3040,11 +2536,11 @@ func (p *Parser) cxxEmbedStatement(cxx *models.CxxEmbed) {
 	}
 	cxxcode := strings.TrimLeftFunc(cxx.Content, unicode.IsSpace)
 	if isCxxReturn(cxxcode) {
-		p.checkEmbedReturn(cxxcode, cxx.Tok)
+		p.embedReturn(cxxcode, cxx.Tok)
 	}
 }
 
-func (p *Parser) checkEmbedReturn(cxx string, errTok Tok) {
+func (p *Parser) embedReturn(cxx string, errTok Tok) {
 	returnKwLen := 6
 	cxx = cxx[returnKwLen:]
 	cxx = strings.TrimLeftFunc(cxx, unicode.IsSpace)
@@ -3085,7 +2581,7 @@ func (p *Parser) checkLabels() {
 }
 
 func statementIsDef(s *models.Statement) bool {
-	switch t := s.Val.(type) {
+	switch t := s.Data.(type) {
 	case Var:
 		return true
 	case models.Assign:
@@ -3156,7 +2652,7 @@ func (p *Parser) checkDiffScopeGoto(gt *models.Goto, label *models.Label) {
 	block := label.Block
 	for i := label.Index - 1; i >= 0; i-- {
 		s := &block.Tree[i]
-		switch s.Val.(type) {
+		switch s.Data.(type) {
 		case models.Block:
 			if s.Tok.Row <= gt.Tok.Row {
 				return
@@ -3201,14 +2697,16 @@ func (p *Parser) checkLabelNGoto() {
 }
 
 func (p *Parser) checkRets(f *Func) {
-	for _, s := range f.Block.Tree {
-		switch t := s.Val.(type) {
-		case models.Ret:
-			return
-		case models.CxxEmbed:
-			cxx := strings.TrimLeftFunc(t.Content, unicode.IsSpace)
-			if isCxxReturn(cxx) {
+	if f.Block != nil {
+		for _, s := range f.Block.Tree {
+			switch t := s.Data.(type) {
+			case models.Ret:
 				return
+			case models.CxxEmbed:
+				cxx := strings.TrimLeftFunc(t.Content, unicode.IsSpace)
+				if isCxxReturn(cxx) {
+					return
+				}
 			}
 		}
 	}
@@ -3218,16 +2716,23 @@ func (p *Parser) checkRets(f *Func) {
 }
 
 func (p *Parser) checkFunc(f *Func) {
-	if f.Block.Tree == nil {
+	if f.Block == nil || f.Block.Tree == nil {
 		goto always
+	} else {
+		rootBlock := p.rootBlock
+		nodeBlock := p.nodeBlock
+		p.rootBlock = nil
+		p.nodeBlock = nil
+		f.Block.Func = f
+		p.checkNewBlock(f.Block)
+		p.rootBlock = rootBlock
+		p.nodeBlock = nodeBlock
 	}
-	f.Block.Func = f
-	p.checkNewBlock(&f.Block)
 always:
 	p.checkRets(f)
 }
 
-func (p *Parser) checkVarStatement(v *Var, noParse bool) {
+func (p *Parser) varStatement(v *Var, noParse bool) {
 	if _, tok := p.blockDefById(v.Id); tok.Id != tokens.NA {
 		p.pusherrtok(v.IdTok, "exist_id", v.Id)
 	}
@@ -3237,31 +2742,32 @@ func (p *Parser) checkVarStatement(v *Var, noParse bool) {
 	p.blockVars = append(p.blockVars, v)
 }
 
-func (p *Parser) checkDeferStatement(d *models.Defer) {
+func (p *Parser) deferredCall(d *models.Defer) {
 	m := new(exprModel)
 	m.nodes = make([]exprBuildNode, 1)
 	_, d.Expr.Model = p.evalExpr(d.Expr)
 }
 
-func (p *Parser) checkConcurrentCallStatement(cc *models.ConcurrentCall) {
+func (p *Parser) concurrentCall(cc *models.ConcurrentCall) {
 	m := new(exprModel)
 	m.nodes = make([]exprBuildNode, 1)
 	_, cc.Expr.Model = p.evalExpr(cc.Expr)
 }
 
-func (p *Parser) checkAssignment(selected value, errtok Tok) bool {
+func (p *Parser) assignment(selected value, errtok Tok) bool {
 	state := true
 	if !selected.lvalue {
-		p.pusherrtok(errtok, "assign_nonlvalue")
+		p.eval.pusherrtok(errtok, "assign_nonlvalue")
 		state = false
 	}
-	if selected.constant {
+	if selected.constExpr {
 		p.pusherrtok(errtok, "assign_const")
 		state = false
 	}
 	switch selected.data.Type.Tag.(type) {
 	case Func:
-		if f, _, _ := p.FuncById(selected.data.Tok.Kind); f != nil {
+		f, _, _ := p.FuncById(selected.data.Tok.Kind)
+		if f != nil {
 			p.pusherrtok(errtok, "assign_type_not_support_value")
 			state = false
 		}
@@ -3269,17 +2775,16 @@ func (p *Parser) checkAssignment(selected value, errtok Tok) bool {
 	return state
 }
 
-func (p *Parser) checkSingleAssign(assign *models.Assign) {
+func (p *Parser) singleAssign(assign *models.Assign, exprs []value) {
 	right := &assign.Right[0]
-	val, model := p.evalExpr(*right)
-	right.Model = model
+	val := exprs[0]
 	left := &assign.Left[0].Expr
 	if len(left.Toks) == 1 && jnapi.IsIgnoreId(left.Toks[0].Kind) {
 		return
 	}
 	leftExpr, model := p.evalExpr(*left)
 	left.Model = model
-	if !p.checkAssignment(leftExpr, assign.Setter) {
+	if !p.assignment(leftExpr, assign.Setter) {
 		return
 	}
 	if assign.Setter.Kind != tokens.EQUAL && !isConstExpression(val.data.Value) {
@@ -3287,22 +2792,21 @@ func (p *Parser) checkSingleAssign(assign *models.Assign) {
 		solver := solver{
 			p:        p,
 			left:     left.Toks,
-			leftVal:  leftExpr.data,
+			leftVal:  leftExpr,
 			right:    right.Toks,
-			rightVal: val.data,
+			rightVal: val,
 			operator: assign.Setter,
 		}
-		val.data = solver.solve()
+		val = solver.solve()
 		assign.Setter.Kind += tokens.EQUAL
 	}
 	p.wg.Add(1)
 	go assignChecker{
-		p:        p,
-		constant: leftExpr.constant,
-		t:        leftExpr.data.Type,
-		v:        val,
-		errtok:   assign.Setter,
-	}.checkAssignTypeAsync()
+		p:      p,
+		t:      leftExpr.data.Type,
+		v:      val,
+		errtok: assign.Setter,
+	}.checkAssignType()
 }
 
 func (p *Parser) assignExprs(vsAST *models.Assign) []value {
@@ -3315,7 +2819,7 @@ func (p *Parser) assignExprs(vsAST *models.Assign) []value {
 	return vals
 }
 
-func (p *Parser) processFuncMultiAssign(vsAST *models.Assign, funcVal value) {
+func (p *Parser) funcMultiAssign(vsAST *models.Assign, funcVal value) {
 	types := funcVal.data.Type.Tag.([]DataType)
 	if len(types) != len(vsAST.Left) {
 		p.pusherrtok(vsAST.Setter, "missing_multiassign_identifiers")
@@ -3325,10 +2829,10 @@ func (p *Parser) processFuncMultiAssign(vsAST *models.Assign, funcVal value) {
 	for i, t := range types {
 		vals[i] = value{data: models.Data{Tok: t.Tok, Type: t}}
 	}
-	p.processMultiAssign(vsAST, vals)
+	p.multiAssign(vsAST, vals)
 }
 
-func (p *Parser) processMultiAssign(assign *models.Assign, right []value) {
+func (p *Parser) multiAssign(assign *models.Assign, right []value) {
 	for i := range assign.Left {
 		left := &assign.Left[i]
 		left.Ignore = jnapi.IsIgnoreId(left.Var.Id)
@@ -3339,61 +2843,59 @@ func (p *Parser) processMultiAssign(assign *models.Assign, right []value) {
 			}
 			leftExpr, model := p.evalExpr(left.Expr)
 			left.Expr.Model = model
-			if !p.checkAssignment(leftExpr, assign.Setter) {
+			if !p.assignment(leftExpr, assign.Setter) {
 				return
 			}
 			p.wg.Add(1)
 			go assignChecker{
-				p:        p,
-				constant: leftExpr.constant,
-				t:        leftExpr.data.Type,
-				v:        right,
-				errtok:   assign.Setter,
-			}.checkAssignTypeAsync()
+				p:      p,
+				t:      leftExpr.data.Type,
+				v:      right,
+				errtok: assign.Setter,
+			}.checkAssignType()
 			continue
 		}
 		left.Var.Tag = right
-		p.checkVarStatement(&left.Var, false)
+		p.varStatement(&left.Var, false)
 	}
 }
 
-func (p *Parser) checkSuffix(assign *models.Assign) {
-	if len(assign.Right) > 0 {
+func (p *Parser) suffix(assign *models.Assign, exprs []value) {
+	if len(exprs) > 0 {
 		p.pusherrtok(assign.Setter, "invalid_syntax")
 		return
 	}
 	left := &assign.Left[0]
-	value, model := p.evalExpr(left.Expr)
+	val, model := p.evalExpr(left.Expr)
 	left.Expr.Model = model
-	_ = p.checkAssignment(value, assign.Setter)
-	if typeIsPtr(value.data.Type) {
+	_ = p.assignment(val, assign.Setter)
+	if typeIsExplicitPtr(val.data.Type) {
 		return
 	}
-	if typeIsPure(value.data.Type) && jntype.IsNumericType(value.data.Type.Id) {
+	if typeIsPure(val.data.Type) && jntype.IsNumeric(val.data.Type.Id) {
 		return
 	}
-	p.pusherrtok(assign.Setter, "operator_notfor_xtype", assign.Setter.Kind, value.data.Type.Kind)
+	p.pusherrtok(assign.Setter, "operator_notfor_jntype", assign.Setter.Kind, val.data.Type.Kind)
 }
 
-func (p *Parser) checkAssign(assign *models.Assign) {
+func (p *Parser) assign(assign *models.Assign) {
 	leftLength := len(assign.Left)
 	rightLength := len(assign.Right)
+	exprs := p.assignExprs(assign)
 	if rightLength == 0 && ast.IsSuffixOperator(assign.Setter.Kind) {
-		p.checkSuffix(assign)
+		p.suffix(assign, exprs)
 		return
 	} else if leftLength == 1 && !assign.Left[0].Var.New {
-		p.checkSingleAssign(assign)
+		p.singleAssign(assign, exprs)
 		return
 	} else if assign.Setter.Kind != tokens.EQUAL {
 		p.pusherrtok(assign.Setter, "invalid_syntax")
 		return
 	} else if rightLength == 1 {
-		expr := &assign.Right[0]
-		firstVal, model := p.evalExpr(*expr)
-		expr.Model = model
-		if firstVal.data.Type.MultiTyped {
+		expr := exprs[0]
+		if expr.data.Type.MultiTyped {
 			assign.MultipleRet = true
-			p.processFuncMultiAssign(assign, firstVal)
+			p.funcMultiAssign(assign, expr)
 			return
 		}
 	}
@@ -3405,10 +2907,10 @@ func (p *Parser) checkAssign(assign *models.Assign) {
 		p.pusherrtok(assign.Setter, "missing_multiassign_identifiers")
 		return
 	}
-	p.processMultiAssign(assign, p.assignExprs(assign))
+	p.multiAssign(assign, exprs)
 }
 
-func (p *Parser) checkWhileProfile(iter *models.Iter) {
+func (p *Parser) whileProfile(iter *models.Iter) {
 	profile := iter.Profile.(models.IterWhile)
 	val, model := p.evalExpr(profile.Expr)
 	profile.Expr.Model = model
@@ -3416,10 +2918,10 @@ func (p *Parser) checkWhileProfile(iter *models.Iter) {
 	if !isBoolExpr(val) {
 		p.pusherrtok(iter.Tok, "iter_while_notbool_expr")
 	}
-	p.checkNewBlock(&iter.Block)
+	p.checkNewBlock(iter.Block)
 }
 
-func (p *Parser) checkForeachProfile(iter *models.Iter) {
+func (p *Parser) foreachProfile(iter *models.Iter) {
 	profile := iter.Profile.(models.IterForeach)
 	val, model := p.evalExpr(profile.Expr)
 	profile.Expr.Model = model
@@ -3436,85 +2938,65 @@ func (p *Parser) checkForeachProfile(iter *models.Iter) {
 		if jnapi.IsIgnoreId(profile.KeyA.Id) {
 			p.pusherrtok(profile.KeyA.IdTok, "ignore_id")
 		}
-		p.checkVarStatement(&profile.KeyA, true)
+		p.varStatement(&profile.KeyA, true)
 	}
 	if profile.KeyB.New {
 		if jnapi.IsIgnoreId(profile.KeyB.Id) {
 			p.pusherrtok(profile.KeyB.IdTok, "ignore_id")
 		}
-		p.checkVarStatement(&profile.KeyB, true)
+		p.varStatement(&profile.KeyB, true)
 	}
-	p.checkNewBlockCustom(&iter.Block, blockVars)
+	p.checkNewBlockCustom(iter.Block, blockVars)
 }
 
-func (p *Parser) checkIterExpr(iter *models.Iter) {
+func (p *Parser) forProfile(iter *models.Iter) {
+	profile := iter.Profile.(models.IterFor)
+	blockVars := p.blockVars
+	if profile.Once.Data != nil {
+		_ = p.statement(&profile.Once, false)
+	}
+	if len(profile.Condition.Processes) > 0 {
+		val, model := p.evalExpr(profile.Condition)
+		profile.Condition.Model = model
+		p.wg.Add(1)
+		go assignChecker{
+			p:      p,
+			t:      DataType{Id: jntype.Bool, Kind: jntype.TypeMap[jntype.Bool]},
+			v:      val,
+			errtok: profile.Condition.Toks[0],
+		}.checkAssignType()
+	}
+	if profile.Next.Data != nil {
+		_ = p.statement(&profile.Next, false)
+	}
+	iter.Profile = profile
+	p.checkNewBlock(iter.Block)
+	p.blockVars = blockVars
+}
+
+func (p *Parser) iter(iter *models.Iter) {
 	p.iterCount++
+	defer func() { p.iterCount-- }()
 	if iter.Profile != nil {
 		switch iter.Profile.(type) {
 		case models.IterWhile:
-			p.checkWhileProfile(iter)
+			p.whileProfile(iter)
 		case models.IterForeach:
-			p.checkForeachProfile(iter)
+			p.foreachProfile(iter)
+		case models.IterFor:
+			p.forProfile(iter)
 		}
 	}
 }
 
-func (p *Parser) checkTry(try *models.Try, i *int, statements []models.Statement) {
-	p.checkNewBlock(&try.Block)
-	statement := statements[*i]
-	if statement.WithTerminator {
-		return
-	}
-	*i++
-	if *i >= len(statements) {
-		*i--
-		return
-	}
-	statement = statements[*i]
-	switch t := statement.Val.(type) {
-	case models.Catch:
-		p.checkCatch(try, &t)
-		try.Catch = t
-		statements[*i].Val = nil
-	default:
-		*i--
-	}
-}
-
-func (p *Parser) checkCatch(try *models.Try, catch *models.Catch) {
-	if catch.Var.Id == "" {
-		p.checkNewBlock(&catch.Block)
-		return
-	}
-	_, defTok := p.blockDefById(catch.Var.Id)
-	if defTok.Id != tokens.NA {
-		p.pusherrtok(catch.Var.IdTok, "exist_id", catch.Var.Id)
-	}
-	if catch.Var.Type.Tok.Id != tokens.NA {
-		catch.Var.Type, _ = p.realType(catch.Var.Type, true)
-		if catch.Var.Type.Kind != errorType.Kind {
-			p.pusherrtok(catch.Var.Type.Tok, "invalid_type_source")
-		}
-	} else {
-		catch.Var.Type = errorType
-	}
-	if jnapi.IsIgnoreId(catch.Var.Id) {
-		p.checkNewBlock(&catch.Block)
-		return
-	}
-	blockVars := p.blockVars
-	p.blockVars = append(p.blockVars, &catch.Var)
-	p.checkNewBlockCustom(&catch.Block, blockVars)
-}
-
-func (p *Parser) checkIfExpr(ifast *models.If, i *int, statements []models.Statement) {
+func (p *Parser) ifExpr(ifast *models.If, i *int, statements []models.Statement) {
 	val, model := p.evalExpr(ifast.Expr)
 	ifast.Expr.Model = model
 	statement := statements[*i]
 	if !isBoolExpr(val) {
 		p.pusherrtok(ifast.Tok, "if_notbool_expr")
 	}
-	p.checkNewBlock(&ifast.Block)
+	p.checkNewBlock(ifast.Block)
 node:
 	if statement.WithTerminator {
 		return
@@ -3525,41 +3007,44 @@ node:
 		return
 	}
 	statement = statements[*i]
-	switch t := statement.Val.(type) {
+	switch t := statement.Data.(type) {
 	case models.ElseIf:
 		val, model := p.evalExpr(t.Expr)
 		t.Expr.Model = model
 		if !isBoolExpr(val) {
 			p.pusherrtok(t.Tok, "if_notbool_expr")
 		}
-		p.checkNewBlock(&t.Block)
-		statements[*i].Val = t
+		p.checkNewBlock(t.Block)
+		statements[*i].Data = t
 		goto node
 	case models.Else:
-		p.checkElseBlock(&t)
-		statement.Val = t
+		p.elseBlock(&t)
+		statement.Data = t
 	default:
 		*i--
 	}
 }
 
-func (p *Parser) checkElseBlock(elseast *models.Else) {
-	p.checkNewBlock(&elseast.Block)
+func (p *Parser) elseBlock(elseast *models.Else) {
+	p.checkNewBlock(elseast.Block)
 }
 
-func (p *Parser) checkBreakStatement(breakAST *models.Break) {
+func (p *Parser) breakStatement(breakAST *models.Break) {
 	if p.iterCount == 0 && p.caseCount == 0 {
 		p.pusherrtok(breakAST.Tok, "break_at_outiter")
 	}
 }
 
-func (p *Parser) checkContinueStatement(continueAST *models.Continue) {
+func (p *Parser) continueStatement(continueAST *models.Continue) {
 	if p.iterCount == 0 {
 		p.pusherrtok(continueAST.Tok, "continue_at_outiter")
 	}
 }
 
 func (p *Parser) checkValidityForAutoType(t DataType, errtok Tok) {
+	if p.eval.hasError {
+		return
+	}
 	switch t.Id {
 	case jntype.Nil:
 		p.pusherrtok(errtok, "nil_for_autotype")
@@ -3572,11 +3057,8 @@ func (p *Parser) typeSourceOfMultiTyped(dt DataType, err bool) (DataType, bool) 
 	types := dt.Tag.([]DataType)
 	ok := false
 	for i, t := range types {
-		t, okr := p.typeSource(t, err)
+		t, ok = p.typeSource(t, err)
 		types[i] = t
-		if ok {
-			ok = okr
-		}
 	}
 	dt.Tag = types
 	return dt, ok
@@ -3584,18 +3066,27 @@ func (p *Parser) typeSourceOfMultiTyped(dt DataType, err bool) (DataType, bool) 
 
 func (p *Parser) typeSourceIsType(dt DataType, t *Type, err bool) (DataType, bool) {
 	original := dt.Original
+	old := dt
 	dt = t.Type
 	dt.Tok = t.Tok
 	dt.Original = original
 	dt.Kind = t.Type.Kind
-	return p.typeSource(dt, err)
+	dt, ok := p.typeSource(dt, err)
+	dt.DontUseOriginal = false
+	if ok && typeIsArray(t.Type) && typeIsSlice(old) {
+		p.pusherrtok(dt.Tok, "invalid_type_source")
+	}
+	return dt, ok
 }
 
-func (p *Parser) typeSourceIsEnum(e *Enum) (dt DataType, _ bool) {
+func (p *Parser) typeSourceIsEnum(e *Enum, tag any) (dt DataType, _ bool) {
 	dt.Id = jntype.Enum
 	dt.Kind = e.Id
 	dt.Tag = e
 	dt.Tok = e.Tok
+	if tag != nil {
+		p.pusherrtok(dt.Tok, "invalid_type_source")
+	}
 	return dt, true
 }
 
@@ -3606,22 +3097,60 @@ func (p *Parser) typeSourceIsFunc(dt DataType, err bool) (DataType, bool) {
 	return dt, true
 }
 
-func (p *Parser) typeSourceIsStruct(s *jnstruct, tag any, errTok Tok) (dt DataType, _ bool) {
-	var generics []DataType
-	if tag != nil {
-		generics = tag.([]DataType)
-		_ = p.checkGenericsQuantity(len(s.Ast.Generics), generics, errTok)
-		blockTypes := p.blockTypes
-		defer func() { p.blockTypes = blockTypes }()
-		p.pushGenerics(s.Ast.Generics, generics)
-		for i, generic := range generics {
-			generics[i], _ = p.typeSource(generic, true)
+func (p *Parser) typeSourceIsMap(dt DataType, err bool) (DataType, bool) {
+	types := dt.Tag.([]DataType)
+	key := &types[0]
+	*key, _ = p.realType(*key, err)
+	value := &types[1]
+	*value, _ = p.realType(*value, err)
+	dt.Kind = dt.MapKind()
+	return dt, true
+}
+
+func (p *Parser) typeSourceIsStruct(s *jnstruct, t DataType) (dt DataType, _ bool) {
+	generics := s.Generics()
+	if len(generics) > 0 {
+		if !p.checkGenericsQuantity(len(s.Ast.Generics), generics, t.Tok) {
+			goto end
+		}
+		for i, g := range generics {
+			var ok bool
+			g, ok = p.realType(g, true)
+			generics[i] = g
+			if !ok {
+				goto end
+			}
+		}
+		*s.constructor.Combines = append(*s.constructor.Combines, generics)
+		owner := s.Ast.Owner.(*Parser)
+		blockTypes := owner.blockTypes
+		owner.blockTypes = nil
+		defer func() { owner.blockTypes = blockTypes }()
+		owner.pushGenerics(s.Ast.Generics, generics)
+		for i, f := range s.Ast.Fields {
+			owner.parseField(s, &f, i)
+		}
+		if len(s.Defs.Funcs) > 0 {
+			for _, f := range s.Defs.Funcs {
+				if len(f.Ast.Generics) == 0 {
+					blockVars := owner.blockVars
+					blockTypes := owner.blockTypes
+					owner.reloadFuncTypes(f.Ast)
+					_ = p.parsePureFunc(f.Ast)
+					owner.blockVars = blockVars
+					owner.blockTypes = blockTypes
+				}
+			}
+		}
+		if owner != p {
+			owner.wg.Wait()
+			p.pusherrs(owner.Errors...)
+			owner.Errors = nil
 		}
 	} else if len(s.Ast.Generics) > 0 {
-		p.pusherrtok(errTok, "has_generics")
+		p.pusherrtok(t.Tok, "has_generics")
 	}
-	s = p.structConstructorInstance(*s)
-	s.SetGenerics(generics)
+end:
 	dt.Id = jntype.Struct
 	dt.Kind = s.dataTypeString()
 	dt.Tag = s
@@ -3629,30 +3158,103 @@ func (p *Parser) typeSourceIsStruct(s *jnstruct, tag any, errTok Tok) (dt DataTy
 	return dt, true
 }
 
+func (p *Parser) typeSourceIsTrait(t *trait, tag any, errTok Tok) (dt DataType, _ bool) {
+	if tag != nil {
+		p.pusherrtok(errTok, "invalid_type_source")
+	}
+	t.Used = true
+	dt.Id = jntype.Trait
+	dt.Kind = t.Ast.Id
+	dt.Tag = t
+	dt.Tok = t.Ast.Tok
+	dt.DontUseOriginal = true
+	return dt, true
+}
+
+func (p *Parser) tokenizeDataType(id string) []Tok {
+	parts := strings.SplitN(id, tokens.DOUBLE_COLON, -1)
+	var toks []Tok
+	for i, part := range parts {
+		toks = append(toks, Tok{
+			Id:   tokens.Id,
+			Kind: part,
+			File: p.File,
+		})
+		if i < len(parts)-1 {
+			toks = append(toks, Tok{
+				Id:   tokens.DoubleColon,
+				Kind: tokens.DOUBLE_COLON,
+				File: p.File,
+			})
+		}
+	}
+	return toks
+}
+
 func (p *Parser) typeSource(dt DataType, err bool) (ret DataType, ok bool) {
-	original := dt.Original
-	defer func() { ret.Original = original }()
 	if dt.Kind == "" {
 		return dt, true
 	}
+	original := dt.Original
+	defer func() {
+		if !ret.DontUseOriginal {
+			ret.Original = original
+		}
+	}()
+	dt.SetToOriginal()
 	if dt.MultiTyped {
 		return p.typeSourceOfMultiTyped(dt, err)
+	} else if typeIsMap(dt) {
+		return p.typeSourceIsMap(dt, err)
+	}
+	if typeIsArray(dt) {
+		p.checkArrayType(&dt)
 	}
 	switch dt.Id {
+	case jntype.Struct:
+		return p.typeSourceIsStruct(dt.Tag.(*jnstruct), dt)
 	case jntype.Id:
 		id, prefix := dt.KindId()
 		defer func() { ret.Kind = prefix + ret.Kind }()
-		def, _, _, _ := p.defById(id)
+		var def any
+		if strings.Contains(id, tokens.DOUBLE_COLON) {
+			toks := p.tokenizeDataType(id)
+			defs := p.eval.getNs(&toks)
+			if defs == nil {
+				return
+			}
+			i, m, t := defs.findById(toks[0].Kind, p.File)
+			switch t {
+			case 't':
+				def = m.Types[i]
+			case 's':
+				def = m.Structs[i]
+			case 'e':
+				def = m.Enums[i]
+			case 'i':
+				def = m.Traits[i]
+			}
+		} else {
+			def, _, _ = p.defById(id)
+		}
 		switch t := def.(type) {
 		case *Type:
 			t.Used = true
 			return p.typeSourceIsType(dt, t, err)
 		case *Enum:
 			t.Used = true
-			return p.typeSourceIsEnum(t)
+			return p.typeSourceIsEnum(t, dt.Tag)
 		case *jnstruct:
 			t.Used = true
-			return p.typeSourceIsStruct(t, dt.Tag, dt.Tok)
+			t = p.structConstructorInstance(t)
+			switch tagt := dt.Tag.(type) {
+			case []models.DataType:
+				t.SetGenerics(tagt)
+			}
+			return p.typeSourceIsStruct(t, dt)
+		case *trait:
+			t.Used = true
+			return p.typeSourceIsTrait(t, dt.Tag, dt.Tok)
 		default:
 			if err {
 				p.pusherrtok(dt.Tok, "invalid_type_source")
@@ -3666,14 +3268,20 @@ func (p *Parser) typeSource(dt DataType, err bool) (ret DataType, ok bool) {
 }
 
 func (p *Parser) realType(dt DataType, err bool) (ret DataType, _ bool) {
-	original := dt.Original
-	defer func() { ret.Original = original }()
+	if !dt.DontUseOriginal {
+		original := dt.Original
+		defer func() {
+			if !ret.DontUseOriginal {
+				ret.Original = original
+			}
+		}()
+	}
 	dt.SetToOriginal()
 	return p.typeSource(dt, err)
 }
 
-func (p *Parser) checkMultiTypeAsync(real, check DataType, ignoreAny bool, errTok Tok) {
-	defer func() { p.wg.Done() }()
+func (p *Parser) checkMultiType(real, check DataType, ignoreAny bool, errTok Tok) {
+	defer p.wg.Done()
 	if real.MultiTyped != check.MultiTyped {
 		p.pusherrtok(errTok, "incompatible_datatype", real.Kind, check.Kind)
 		return
@@ -3687,20 +3295,14 @@ func (p *Parser) checkMultiTypeAsync(real, check DataType, ignoreAny bool, errTo
 	for i := 0; i < len(realTypes); i++ {
 		realType := realTypes[i]
 		checkType := checkTypes[i]
-		p.checkTypeAsync(realType, checkType, ignoreAny, errTok)
+		p.checkType(realType, checkType, ignoreAny, errTok)
 	}
 }
 
-func (p *Parser) checkAssignConst(constant bool, t DataType, val value, errTok Tok) {
-	if typeIsMut(t) && val.constant && !constant {
-		p.pusherrtok(errTok, "constant_assignto_nonconstant")
-	}
-}
-
-func (p *Parser) checkTypeAsync(real, check DataType, ignoreAny bool, errTok Tok) {
-	defer func() { p.wg.Done() }()
+func (p *Parser) checkType(real, check DataType, ignoreAny bool, errTok Tok) {
+	defer p.wg.Done()
 	if typeIsVoid(check) {
-		p.pusherrtok(errTok, "incompatible_datatype", real.Kind, check.Kind)
+		p.eval.pusherrtok(errTok, "incompatible_datatype", real.Kind, check.Kind)
 		return
 	}
 	if !ignoreAny && real.Id == jntype.Any {
@@ -3708,16 +3310,33 @@ func (p *Parser) checkTypeAsync(real, check DataType, ignoreAny bool, errTok Tok
 	}
 	if real.MultiTyped || check.MultiTyped {
 		p.wg.Add(1)
-		go p.checkMultiTypeAsync(real, check, ignoreAny, errTok)
+		go p.checkMultiType(real, check, ignoreAny, errTok)
 		return
 	}
-	switch {
-	case typesAreCompatible(real, check, ignoreAny),
-		typeIsNilCompatible(real) && check.Id == jntype.Nil,
-		typeIsSinglePtr(real) && !typeIsPtr(check):
+	if typesAreCompatible(real, check, ignoreAny) {
 		return
 	}
 	if real.Kind != check.Kind {
 		p.pusherrtok(errTok, "incompatible_datatype", real.Kind, check.Kind)
+	} else if typeIsArray(real) || typeIsArray(check) {
+		if typeIsArray(real) != typeIsArray(check) {
+			p.pusherrtok(errTok, "incompatible_datatype", real.Kind, check.Kind)
+			return
+		}
+		i := real.Tag.([][]any)[0][0].(uint64)
+		j := check.Tag.([][]any)[0][0].(uint64)
+		realKind := strings.Replace(real.Kind, jn.Mark_Array, strconv.FormatUint(i, 10), 1)
+		checkKind := strings.Replace(check.Kind, jn.Mark_Array, strconv.FormatUint(j, 10), 1)
+		p.pusherrtok(errTok, "incompatible_datatype", realKind, checkKind)
 	}
+}
+
+func (p *Parser) evalExpr(expr Expr) (value, iExpr) {
+	p.eval.hasError = false
+	return p.eval.expr(expr)
+}
+
+func (p *Parser) evalToks(toks Toks) (value, iExpr) {
+	p.eval.hasError = false
+	return p.eval.toks(toks)
 }

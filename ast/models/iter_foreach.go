@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/DeRuneLabs/jane/lexer/tokens"
+	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
@@ -78,7 +79,8 @@ func (f *IterForeach) MapString(iter Iter) string {
 func (f *IterForeach) ForeachString(iter Iter) string {
 	switch {
 	case f.ExprType.Kind == tokens.STR,
-		strings.HasPrefix(f.ExprType.Kind, "[]"):
+		strings.HasPrefix(f.ExprType.Kind, jn.Prefix_Slice),
+		strings.HasPrefix(f.ExprType.Kind, jn.Prefix_Array):
 		return f.ClassicString(iter)
 	case f.ExprType.Kind[0] == '[':
 		return f.MapString(iter)

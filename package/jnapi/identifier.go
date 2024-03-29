@@ -9,7 +9,7 @@ import (
 )
 
 const Ignore = "_"
-const InitializerCaller = "_jnc__call_initializers"
+const InitializerCaller = "_jnc___call_initializers"
 const typeExtension = "_jnt"
 
 func IsIgnoreId(id string) bool {
@@ -45,5 +45,5 @@ func OutId(id string, f *jnio.File) string {
 }
 
 func AsTypeId(id string) string {
-	return id + "_jnt"
+	return id + typeExtension
 }

@@ -6,9 +6,11 @@ import (
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
-var IntCode uint8
-var UIntCode uint8
-var BitSize int
+var (
+	IntCode  uint8
+	UIntCode uint8
+	BitSize  int
+)
 
 const (
 	NumericTypeStr = "<numeric>"
@@ -18,7 +20,7 @@ const (
 
 func GetRealCode(t uint8) uint8 {
 	switch t {
-	case Int, Intptr:
+	case Int:
 		t = IntCode
 	case UInt, UIntptr:
 		t = UIntCode
@@ -189,33 +191,37 @@ func TypesAreCompatible(t1, t2 uint8, ignoreany bool) bool {
 	return false
 }
 
-func IsIntegerType(t uint8) bool {
-	return IsSignedIntegerType(t) || IsUnsignedNumericType(t)
+func IsInteger(t uint8) bool {
+	return IsSignedInteger(t) || IsUnsignedInteger(t)
 }
 
 func IsNumericType(t uint8) bool {
-	return IsIntegerType(t) || IsFloatType(t)
+	return IsInteger(t) || IsFloat(t)
 }
 
-func IsFloatType(t uint8) bool {
+func IsFloat(t uint8) bool {
 	return t == F32 || t == F64
 }
 
-func IsSignedNumericType(t uint8) bool {
-	return IsSignedIntegerType(t) || IsFloatType(t)
+func IsNumeric(t uint8) bool {
+	return IsInteger(t) || IsFloat(t)
 }
 
-func IsSignedIntegerType(t uint8) bool {
+func IsSignedNumeric(t uint8) bool {
+	return IsSignedInteger(t) || IsFloat(t)
+}
+
+func IsSignedInteger(t uint8) bool {
 	t = GetRealCode(t)
 	switch t {
-	case I8, I16, I32, I64, Int, Intptr:
+	case I8, I16, I32, I64, Int:
 		return true
 	default:
 		return false
 	}
 }
 
-func IsUnsignedNumericType(t uint8) bool {
+func IsUnsignedInteger(t uint8) bool {
 	t = GetRealCode(t)
 	switch t {
 	case U8, U16, U32, U64, UInt, UIntptr:
@@ -234,7 +240,7 @@ func TypeFromId(id string) uint8 {
 	return 0
 }
 
-func CxxTypeIdFromType(t uint8) string {
+func CxxId(t uint8) string {
 	if t == Void {
 		return "void"
 	}
@@ -258,6 +264,41 @@ func DefaultValOfType(t uint8) string {
 		return `""`
 	}
 	return "nil"
+}
+
+func IntFromBits(bits uint64) uint8 {
+	switch bits {
+	case 8:
+		return I8
+	case 16:
+		return I16
+	case 32:
+		return I32
+	default:
+		return I64
+	}
+}
+
+func UIntFromBits(bits uint64) uint8 {
+	switch bits {
+	case 8:
+		return U8
+	case 16:
+		return U16
+	case 32:
+		return U32
+	default:
+		return U64
+	}
+}
+
+func FloatFromBits(bits uint64) uint8 {
+	switch bits {
+	case 32:
+		return F32
+	default:
+		return F64
+	}
 }
 
 func init() {

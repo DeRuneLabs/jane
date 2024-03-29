@@ -4,19 +4,11 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/DeRuneLabs/jane/lexer/tokens"
+	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
-
-type genericableTypes struct {
-	types []DataType
-}
-
-func (gt genericableTypes) Generics() []DataType {
-	return gt.types
-}
-
-func (gt genericableTypes) SetGenerics([]DataType) {}
 
 type DataType struct {
 	Tok             Tok
@@ -34,7 +26,8 @@ func (dt *DataType) KindWithOriginalId() string {
 	}
 	_, prefix := dt.KindId()
 	original := dt.Original.(DataType)
-	return prefix + original.Tok.Kind
+	id, _ := original.KindId()
+	return prefix + id
 }
 
 func (dt *DataType) OriginalKindId() string {
@@ -47,6 +40,9 @@ func (dt *DataType) OriginalKindId() string {
 }
 
 func (dt *DataType) KindId() (id, prefix string) {
+	if dt.Id == jntype.Map || dt.Id == jntype.Func {
+		return dt.Kind, ""
+	}
 	id = dt.Kind
 	runes := []rune(dt.Kind)
 	for i, r := range dt.Kind {
@@ -56,9 +52,19 @@ func (dt *DataType) KindId() (id, prefix string) {
 			break
 		}
 	}
+	for _, dt := range jntype.TypeMap {
+		if dt == id {
+			return
+		}
+	}
 	runes = []rune(id)
-	for i, r := range runes {
-		if r != '_' && !unicode.IsLetter(r) {
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		if r == ':' && i+1 < len(runes) && runes[i+1] == ':' {
+			i++
+			continue
+		}
+		if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
 			id = string(runes[:i])
 			break
 		}
@@ -70,11 +76,19 @@ func (dt *DataType) SetToOriginal() {
 	if dt.DontUseOriginal || dt.Original == nil {
 		return
 	}
-	val := dt.KindWithOriginalId()
+	tag := dt.Tag
+	switch tag.(type) {
+	case Genericable:
+		defer func() { dt.Tag = tag }()
+	}
+	kind := dt.KindWithOriginalId()
 	tok := dt.Tok
 	*dt = dt.Original.(DataType)
-	dt.Kind = val
+	dt.Kind = kind
 	dt.Tok = tok
+	if strings.HasPrefix(dt.Kind, jn.Prefix_Array) {
+		dt.Tag = tag
+	}
 }
 
 func (dt *DataType) Pointers() string {
@@ -86,47 +100,81 @@ func (dt *DataType) Pointers() string {
 	return ""
 }
 
-func (dt DataType) String() string {
+func (dt DataType) String() (s string) {
 	dt.SetToOriginal()
 	if dt.MultiTyped {
 		return dt.MultiTypeString()
 	}
+	i := strings.LastIndex(dt.Kind, tokens.DOUBLE_COLON)
+	if i != -1 {
+		dt.Kind = dt.Kind[i+len(tokens.DOUBLE_COLON):]
+	}
 	pointers := dt.Pointers()
+
+	defer func() {
+		var cxx strings.Builder
+		for range pointers {
+			cxx.WriteString("ptr<")
+		}
+		cxx.WriteString(s)
+		for range pointers {
+			cxx.WriteString(">")
+		}
+		s = cxx.String()
+	}()
 	dt.Kind = dt.Kind[len(pointers):]
 	if dt.Kind != "" {
 		switch {
-		case strings.HasPrefix(dt.Kind, "[]"):
-			return dt.ArrayString() + pointers
-		case dt.Id == jntype.Map && dt.Kind[0] == '[':
-			return dt.MapString() + pointers
+		case strings.HasPrefix(dt.Kind, jn.Prefix_Slice):
+			return dt.SliceString()
+		case strings.HasPrefix(dt.Kind, jn.Prefix_Array):
+			return dt.ArrayString()
+		case dt.Id == jntype.Map && dt.Kind[0] == '[' && dt.Kind[len(dt.Kind)-1] == ']':
+			return dt.MapString()
 		}
 	}
-	if dt.Tag != nil {
-		switch t := dt.Tag.(type) {
-		case []DataType:
-			dt.Tag = genericableTypes{t}
-			return dt.StructString()
-		case Genericable:
-			return dt.StructString()
-		}
+	switch dt.Tag.(type) {
+	case CompiledStruct:
+		return dt.StructString()
 	}
 	switch dt.Id {
 	case jntype.Id, jntype.Enum:
-		return jnapi.OutId(dt.Kind, dt.Tok.File) + pointers
+		return jnapi.OutId(dt.Kind, dt.Tok.File)
+	case jntype.Trait:
+		return dt.TraitString()
 	case jntype.Struct:
-		return dt.StructString() + pointers
+		return dt.StructString()
 	case jntype.Func:
-		return dt.FuncString() + pointers
+		return dt.FuncString()
 	default:
-		return jntype.CxxTypeIdFromType(dt.Id) + pointers
+		return jntype.CxxId(dt.Id)
 	}
+}
+
+func (dt DataType) SliceString() string {
+	var cxx strings.Builder
+	cxx.WriteString("slice<")
+	dt.Kind = dt.Kind[len(jn.Prefix_Slice):]
+	cxx.WriteString(dt.String())
+	cxx.WriteByte('>')
+	return cxx.String()
+}
+
+func (dt DataType) ArrayComponent() DataType {
+	dt.Kind = dt.Kind[len(jn.Prefix_Array):]
+	exprs := dt.Tag.([][]any)[1:]
+	dt.Tag = exprs
+	return dt
 }
 
 func (dt DataType) ArrayString() string {
 	var cxx strings.Builder
 	cxx.WriteString("array<")
-	dt.Kind = dt.Kind[2:]
-	cxx.WriteString(dt.String())
+	exprs := dt.Tag.([][]any)
+	expr := exprs[0][1].(Expr)
+	cxx.WriteString(dt.ArrayComponent().String())
+	cxx.WriteByte(',')
+	cxx.WriteString(expr.String())
 	cxx.WriteByte('>')
 	return cxx.String()
 }
@@ -146,11 +194,19 @@ func (dt *DataType) MapString() string {
 	return cxx.String()
 }
 
-func (dt *DataType) StructString() string {
+func (dt *DataType) TraitString() string {
 	var cxx strings.Builder
 	id, _ := dt.KindId()
+	cxx.WriteString("trait<")
 	cxx.WriteString(jnapi.OutId(id, dt.Tok.File))
-	s := dt.Tag.(Genericable)
+	cxx.WriteByte('>')
+	return cxx.String()
+}
+
+func (dt *DataType) StructString() string {
+	var cxx strings.Builder
+	s := dt.Tag.(CompiledStruct)
+	cxx.WriteString(s.OutId())
 	types := s.Generics()
 	if len(types) == 0 {
 		return cxx.String()
@@ -166,7 +222,7 @@ func (dt *DataType) StructString() string {
 
 func (dt *DataType) FuncString() string {
 	var cxx strings.Builder
-	cxx.WriteString("func<")
+	cxx.WriteString("std::function<")
 	f := dt.Tag.(*Func)
 	f.RetType.Type.DontUseOriginal = dt.DontUseOriginal
 	cxx.WriteString(f.RetType.String())
@@ -197,4 +253,15 @@ func (dt *DataType) MultiTypeString() string {
 		cxx.WriteByte(',')
 	}
 	return cxx.String()[:cxx.Len()-1] + ">" + dt.Pointers()
+}
+
+func (dt *DataType) MapKind() string {
+	types := dt.Tag.([]DataType)
+	var kind strings.Builder
+	kind.WriteByte('[')
+	kind.WriteString(types[0].Kind)
+	kind.WriteByte(':')
+	kind.WriteString(types[1].Kind)
+	kind.WriteByte(']')
+	return kind.String()
 }

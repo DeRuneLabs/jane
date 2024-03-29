@@ -7,6 +7,6 @@ var Warnings = map[string]string{
 	`exist_undefined_doc`: `source code has undefined documentations (some documentations isn't document anything)`,
 }
 
-func GetWarn(key string, args ...any) string {
+func GetWarning(key string, args ...any) string {
 	return fmt.Sprintf(Warnings[key], args...)
 }

@@ -3,6 +3,7 @@ package models
 import (
 	"strings"
 
+	"github.com/DeRuneLabs/jane/package/jnapi"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
@@ -11,11 +12,13 @@ type Func struct {
 	Tok        Tok
 	Id         string
 	Generics   []*GenericType
-	Combines   [][]DataType
+	Combines   *[][]DataType
 	Attributes []Attribute
 	Params     []Param
 	RetType    RetType
-	Block      Block
+	Block      *Block
+	Receiver   *DataType
+	Owner      any
 }
 
 func (f *Func) FindAttribute(kind string) *Attribute {
@@ -44,8 +47,26 @@ func (f *Func) DataTypeString() string {
 		cxx.WriteString(cxxStr)
 	}
 	cxx.WriteByte(')')
-	if f.RetType.Type.Id != jntype.Void {
+	if f.RetType.Type.MultiTyped {
+		cxx.WriteByte('[')
+		for _, t := range f.RetType.Type.Tag.([]DataType) {
+			cxx.WriteString(t.Kind)
+			cxx.WriteByte(',')
+		}
+		return cxx.String()[:cxx.Len()-1] + "]"
+	} else if f.RetType.Type.Id != jntype.Void {
 		cxx.WriteString(f.RetType.Type.Kind)
 	}
 	return cxx.String()
+}
+
+func (f *Func) OutId() string {
+	if f.Receiver != nil {
+		return f.Id
+	}
+	return jnapi.OutId(f.Id, f.Tok.File)
+}
+
+func (f *Func) DefString() string {
+	return f.Id + f.DataTypeString()
 }

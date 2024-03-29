@@ -72,12 +72,12 @@ func (af anonFuncExpr) String() string {
 	return cxx.String()
 }
 
-type arrayExpr struct {
+type sliceExpr struct {
 	dataType DataType
 	expr     []iExpr
 }
 
-func (a arrayExpr) String() string {
+func (a sliceExpr) String() string {
 	var cxx strings.Builder
 	cxx.WriteString(a.dataType.String())
 	cxx.WriteString("({")
@@ -114,7 +114,26 @@ func (m mapExpr) String() string {
 	return cxx.String()
 }
 
-type argsExpr struct{ args []models.Arg }
+type genericsExpr struct {
+	types []DataType
+}
+
+func (ge genericsExpr) String() string {
+	if len(ge.types) == 0 {
+		return ""
+	}
+	var cxx strings.Builder
+	cxx.WriteByte('<')
+	for _, generic := range ge.types {
+		cxx.WriteString(generic.String())
+		cxx.WriteByte(',')
+	}
+	return cxx.String()[:cxx.Len()-1] + ">"
+}
+
+type argsExpr struct {
+	args []models.Arg
+}
 
 func (a argsExpr) String() string {
 	if len(a.args) == 0 {
@@ -128,7 +147,23 @@ func (a argsExpr) String() string {
 	return cxx.String()[:cxx.Len()-1]
 }
 
-type multiRetExpr struct{ models []iExpr }
+type callExpr struct {
+	generics genericsExpr
+	args     argsExpr
+}
+
+func (ce callExpr) String() string {
+	var cxx strings.Builder
+	cxx.WriteString(ce.generics.String())
+	cxx.WriteByte('(')
+	cxx.WriteString(ce.args.String())
+	cxx.WriteByte(')')
+	return cxx.String()
+}
+
+type multiRetExpr struct {
+	models []iExpr
+}
 
 func (mre multiRetExpr) String() string {
 	var cxx strings.Builder
@@ -140,17 +175,9 @@ func (mre multiRetExpr) String() string {
 	return cxx.String()[:cxx.Len()-1] + ")"
 }
 
-type assignExpr struct{ assign models.Assign }
-
-func (a assignExpr) String() string {
-	var cxx strings.Builder
-	cxx.WriteByte('(')
-	cxx.WriteString(a.assign.String())
-	cxx.WriteByte(')')
-	return cxx.String()
+type serieExpr struct {
+	exprs []any
 }
-
-type serieExpr struct{ exprs []any }
 
 func (se serieExpr) String() string {
 	var exprs strings.Builder

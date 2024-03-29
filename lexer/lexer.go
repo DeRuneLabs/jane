@@ -18,12 +18,14 @@ type File = jnio.File
 type Lex struct {
 	wg             sync.WaitGroup
 	firstTokOfLine bool
-	File           *File
-	Pos            int
-	Column         int
-	Row            int
-	Logs           []jnlog.CompilerLog
-	braces         []Tok
+
+	File   *File
+	Pos    int
+	Column int
+	Row    int
+	Logs   []jnlog.CompilerLog
+
+	braces []Tok
 }
 
 func NewLex(f *File) *Lex {
@@ -66,13 +68,13 @@ func (l *Lex) Lex() []Tok {
 		}
 	}
 	l.wg.Add(1)
-	go l.checkRangesAsync()
+	go l.checkRanges()
 	l.wg.Wait()
 	return toks
 }
 
-func (l *Lex) checkRangesAsync() {
-	defer func() { l.wg.Done() }()
+func (l *Lex) checkRanges() {
+	defer l.wg.Done()
 	for _, tok := range l.braces {
 		switch tok.Kind {
 		case tokens.LPARENTHESES:
@@ -128,9 +130,12 @@ func (l *Lex) resume() string {
 	for i, r := range runes {
 		if unicode.IsSpace(r) {
 			l.Pos++
-			if r == '\n' {
+			switch r {
+			case '\n':
 				l.Newln()
-			} else {
+			case '\t':
+				l.Column += 4
+			default:
 				l.Column++
 			}
 			continue
@@ -185,7 +190,7 @@ func (l *Lex) num(txt string) string {
 	return val
 }
 
-var escSeqRegexp = regexp.MustCompile(`^\\([\\'"abfnrtv]|U.{8}|u.{4}|x..|[0-7]{1,3})`)
+var escSeqRegexp = regexp.MustCompile(`^\\([\\'"abfnrtv]|U.{8}|u.{4}|jn..|[0-7]{1,3})`)
 
 func (l *Lex) escseq(txt string) string {
 	seq := escSeqRegexp.FindString(txt)
@@ -313,10 +318,8 @@ var keywords = map[string]uint8{
 	tokens.UINT:     tokens.DataType,
 	tokens.INT:      tokens.DataType,
 	tokens.UINTPTR:  tokens.DataType,
-	tokens.INTPTR:   tokens.DataType,
 	tokens.BOOL:     tokens.DataType,
 	tokens.STR:      tokens.DataType,
-	tokens.VOIDPTR:  tokens.DataType,
 	tokens.ANY:      tokens.DataType,
 	tokens.TRUE:     tokens.Value,
 	tokens.FALSE:    tokens.Value,
@@ -324,13 +327,12 @@ var keywords = map[string]uint8{
 	tokens.CONST:    tokens.Const,
 	tokens.RET:      tokens.Ret,
 	tokens.TYPE:     tokens.Type,
-	tokens.ITER:     tokens.Iter,
+	tokens.FOR:      tokens.For,
 	tokens.BREAK:    tokens.Break,
 	tokens.CONTINUE: tokens.Continue,
 	tokens.IN:       tokens.In,
 	tokens.IF:       tokens.If,
 	tokens.ELSE:     tokens.Else,
-	tokens.VOLATILE: tokens.Volatile,
 	tokens.USE:      tokens.Use,
 	tokens.PUB:      tokens.Pub,
 	tokens.DEFER:    tokens.Defer,
@@ -338,11 +340,12 @@ var keywords = map[string]uint8{
 	tokens.ENUM:     tokens.Enum,
 	tokens.STRUCT:   tokens.Struct,
 	tokens.CO:       tokens.Co,
-	tokens.TRY:      tokens.Try,
-	tokens.CATCH:    tokens.Catch,
 	tokens.MATCH:    tokens.Match,
 	tokens.CASE:     tokens.Case,
 	tokens.DEFAULT:  tokens.Default,
+	tokens.SELF:     tokens.Self,
+	tokens.TRAIT:    tokens.Trait,
+	tokens.IMPL:     tokens.Impl,
 }
 
 type oppair struct {
@@ -381,7 +384,7 @@ var basicOps = [...]oppair{
 	27: {tokens.PLUS, tokens.Operator},
 	28: {tokens.MINUS, tokens.Operator},
 	29: {tokens.STAR, tokens.Operator},
-	30: {tokens.SLASH, tokens.Operator},
+	30: {tokens.SOLIDUS, tokens.Operator},
 	31: {tokens.PERCENT, tokens.Operator},
 	32: {tokens.TILDE, tokens.Operator},
 	33: {tokens.AMPER, tokens.Operator},

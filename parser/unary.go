@@ -7,43 +7,75 @@ import (
 )
 
 type unary struct {
-	tok    Tok
-	toks   Toks
-	model  *exprModel
-	parser *Parser
+	tok   Tok
+	toks  Toks
+	model *exprModel
+	p     *Parser
 }
 
 func (u *unary) minus() value {
-	v := u.parser.evalExprPart(u.toks, u.model)
-	if !typeIsPure(v.data.Type) || !jntype.IsNumericType(v.data.Type.Id) {
-		u.parser.pusherrtok(u.tok, "invalid_type_unary_operator", '-')
+	v := u.p.eval.process(u.toks, u.model)
+	if !typeIsPure(v.data.Type) || !jntype.IsNumeric(v.data.Type.Id) {
+		u.p.eval.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.MINUS)
 	}
-	if isConstNumeric(v.data.Value) {
+	if v.constExpr {
 		v.data.Value = tokens.MINUS + v.data.Value
+		switch t := v.expr.(type) {
+		case float64:
+			v.expr = -t
+		case int64:
+			v.expr = -t
+		case uint64:
+			v.expr = -t
+		}
+		v.model = numericModel(v)
 	}
 	return v
 }
 
 func (u *unary) plus() value {
-	v := u.parser.evalExprPart(u.toks, u.model)
-	if !typeIsPure(v.data.Type) || !jntype.IsNumericType(v.data.Type.Id) {
-		u.parser.pusherrtok(u.tok, "invalid_type_unary_operator", '+')
+	v := u.p.eval.process(u.toks, u.model)
+	if !typeIsPure(v.data.Type) || !jntype.IsNumeric(v.data.Type.Id) {
+		u.p.eval.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.PLUS)
+	}
+	if v.constExpr {
+		switch t := v.expr.(type) {
+		case float64:
+			v.expr = +t
+		case int64:
+			v.expr = +t
+		case uint64:
+			v.expr = +t
+		}
+		v.model = numericModel(v)
 	}
 	return v
 }
 
 func (u *unary) tilde() value {
-	v := u.parser.evalExprPart(u.toks, u.model)
-	if !typeIsPure(v.data.Type) || !jntype.IsIntegerType(v.data.Type.Id) {
-		u.parser.pusherrtok(u.tok, "invalid_type_unary_operator", '~')
+	v := u.p.eval.process(u.toks, u.model)
+	if !typeIsPure(v.data.Type) || !jntype.IsInteger(v.data.Type.Id) {
+		u.p.eval.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.TILDE)
+	}
+	if v.constExpr {
+		switch t := v.expr.(type) {
+		case int64:
+			v.expr = ^t
+		case uint64:
+			v.expr = ^t
+		}
+		v.model = numericModel(v)
 	}
 	return v
 }
 
 func (u *unary) logicalNot() value {
-	v := u.parser.evalExprPart(u.toks, u.model)
+	v := u.p.eval.process(u.toks, u.model)
 	if !isBoolExpr(v) {
-		u.parser.pusherrtok(u.tok, "invalid_type_unary_operator", '!')
+		u.p.eval.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.EXCLAMATION)
+	} else if v.constExpr {
+		v.expr = !v.expr.(bool)
+		v.model = boolModel(v)
 	}
 	v.data.Type.Id = jntype.Bool
 	v.data.Type.Kind = tokens.BOOL
@@ -51,10 +83,11 @@ func (u *unary) logicalNot() value {
 }
 
 func (u *unary) star() value {
-	v := u.parser.evalExprPart(u.toks, u.model)
+	v := u.p.eval.process(u.toks, u.model)
+	v.constExpr = false
 	v.lvalue = true
 	if !typeIsExplicitPtr(v.data.Type) {
-		u.parser.pusherrtok(u.tok, "invalid_type_unary_operator", '*')
+		u.p.eval.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.STAR)
 	} else {
 		v.data.Type.Kind = v.data.Type.Kind[1:]
 	}
@@ -62,7 +95,8 @@ func (u *unary) star() value {
 }
 
 func (u *unary) amper() value {
-	v := u.parser.evalExprPart(u.toks, u.model)
+	v := u.p.eval.process(u.toks, u.model)
+	v.constExpr = false
 	switch {
 	case typeIsFunc(v.data.Type):
 		mainNode := &u.model.nodes[u.model.index]
@@ -71,17 +105,17 @@ func (u *unary) amper() value {
 		switch t := (*node).(type) {
 		case anonFuncExpr:
 			if t.capture == jnapi.LambdaByReference {
-				u.parser.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.AMPER)
+				u.p.eval.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.AMPER)
 				break
 			}
 			t.capture = jnapi.LambdaByReference
 			*node = t
 		default:
-			u.parser.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.AMPER)
+			u.p.eval.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.AMPER)
 		}
 	default:
 		if !canGetPtr(v) {
-			u.parser.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.AMPER)
+			u.p.eval.pusherrtok(u.tok, "invalid_type_unary_operator", tokens.AMPER)
 		}
 		v.lvalue = true
 		v.data.Type.Kind = tokens.STAR + v.data.Type.Kind

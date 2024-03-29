@@ -9,17 +9,38 @@ import (
 )
 
 type function struct {
-	Ast     *Func
-	Desc    string
-	used    bool
-	checked bool
+	Ast          *Func
+	Desc         string
+	used         bool
+	checked      bool
+	isEntryPoint bool
 }
 
 func (f *function) outId() string {
-	if f.Ast.Id == jn.EntryPoint {
+	if f.isEntryPoint {
 		return jnapi.OutId(f.Ast.Id, nil)
 	}
-	return jnapi.OutId(f.Ast.Id, f.Ast.Tok.File)
+	return f.Ast.OutId()
+}
+
+func (f *function) getTracePointStatements() []models.Statement {
+	var trace strings.Builder
+	trace.WriteString(`___trace.push(`)
+	var tracepoint strings.Builder
+	tracepoint.WriteString(f.Ast.Id)
+	tracepoint.WriteString(f.Ast.DataTypeString())
+	tracepoint.WriteString("\n\t")
+	tracepoint.WriteString(f.Ast.Tok.File.Path())
+	trace.WriteString(jnapi.ToStr([]byte(tracepoint.String())))
+	trace.WriteByte(')')
+	statements := []models.Statement{{}, {}}
+	statements[0].Data = models.ExprStatement{
+		Expr: models.Expr{Model: exprNode{trace.String()}},
+	}
+	statements[1].Data = models.ExprStatement{
+		Expr: models.Expr{Model: exprNode{"DEFER(___trace.ok())"}},
+	}
+	return statements
 }
 
 func (f function) String() string {
@@ -31,13 +52,18 @@ func (f function) String() string {
 	if vars != nil {
 		statements := make([]models.Statement, len(vars))
 		for i, v := range vars {
-			statements[i] = models.Statement{
-				Tok: v.IdTok,
-				Val: *v,
-			}
+			statements[i] = models.Statement{Tok: v.IdTok, Data: *v}
 		}
 		block.Tree = append(statements, block.Tree...)
 	}
+	if f.Ast.Receiver != nil && !typeIsPtr(*f.Ast.Receiver) {
+		s := f.Ast.Receiver.Tag.(*jnstruct)
+		self := s.selfVar(*f.Ast.Receiver)
+		statements := make([]models.Statement, 1)
+		statements[0] = models.Statement{Tok: s.Ast.Tok, Data: self}
+		block.Tree = append(statements, block.Tree...)
+	}
+	block.Tree = append(f.getTracePointStatements(), block.Tree...)
 	cxx.WriteString(block.String())
 	return cxx.String()
 }
@@ -54,6 +80,7 @@ func (f *function) declHead() string {
 	cxx.WriteString(genericsToCxx(f.Ast.Generics))
 	if cxx.Len() > 0 {
 		cxx.WriteByte('\n')
+		cxx.WriteString(models.IndentString())
 	}
 	cxx.WriteString(attributesToString(f.Ast.Attributes))
 	cxx.WriteString(f.Ast.RetType.String())
@@ -87,7 +114,7 @@ func isOutableAttribute(kind string) bool {
 	return kind == jn.Attribute_Inline
 }
 
-func attributesToString(attributes []Attribute) string {
+func attributesToString(attributes []models.Attribute) string {
 	var cxx strings.Builder
 	for _, attr := range attributes {
 		if isOutableAttribute(attr.Tag.Kind) {

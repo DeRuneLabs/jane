@@ -7,8 +7,10 @@ import (
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
-type Tok = lexer.Tok
-type Toks = []Tok
+type (
+	Tok  = lexer.Tok
+	Toks = []Tok
+)
 
 type Type struct {
 	Pub  bool

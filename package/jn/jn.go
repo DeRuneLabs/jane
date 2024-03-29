@@ -9,7 +9,7 @@ const (
 	SrcExt        = `.jn`
 	DocExt        = SrcExt + "doc"
 	SettingsFile  = "jn.set"
-	Stdlib        = "lib"
+	Stdlib        = "std"
 	Localizations = "localization"
 
 	EntryPoint          = "main"
@@ -28,11 +28,16 @@ const (
 	ArchAmd64 = "amd64"
 	ArchI386  = "i386"
 
-	Attribute_Inline    = "inline"
-	Attribute_TypeParam = "type_param"
+	Attribute_Inline  = "inline"
+	Attribute_TypeArg = "typearg"
 
 	PreprocessorDirective      = "pragma"
 	PreprocessorDirectiveEnofi = "enofi"
+
+	Mark_Array = "..."
+
+	Prefix_Slice = "[]"
+	Prefix_Array = "[" + Mark_Array + "]"
 )
 
 var (

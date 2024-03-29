@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/DeRuneLabs/jane/ast/models"
+	"github.com/DeRuneLabs/jane/package/jntype"
 	"github.com/DeRuneLabs/jane/parser"
 )
 
@@ -19,9 +20,10 @@ type use struct {
 }
 
 type jnstruct struct {
-	Id     string   `json:"id"`
-	Desc   string   `json:"description"`
-	Fields []global `json:"fields"`
+	Id     string     `json:"id"`
+	Desc   string     `json:"description"`
+	Fields []global   `json:"fields"`
+	Funcs  []function `json:"functions"`
 }
 
 type enum struct {
@@ -30,7 +32,7 @@ type enum struct {
 	Items []string `json:"items"`
 }
 
-type jntype struct {
+type type_alias struct {
 	Id    string `json:"id"`
 	Alias string `json:"alias"`
 	Desc  string `json:"description"`
@@ -40,7 +42,6 @@ type global struct {
 	Id       string `json:"id"`
 	Type     string `json:"type"`
 	Constant bool   `json:"constant"`
-	Volatile bool   `json:"volatile"`
 	Desc     string `json:"description"`
 }
 
@@ -54,30 +55,24 @@ type function struct {
 }
 
 type parameter struct {
-	Id       string `json:"id"`
-	Type     string `json:"type"`
-	Constant bool   `json:"constant"`
-	Volatile bool   `json:"volatile"`
-}
-
-type namespace struct {
-	Id         string      `json:"id"`
-	Enums      []enum      `json:"enums"`
-	Structs    []jnstruct  `json:"structs"`
-	Types      []jntype    `json:"types"`
-	Globals    []global    `json:"globals"`
-	Funcs      []function  `json:"functions"`
-	Namespaces []namespace `json:"namespaces"`
+	Id   string `json:"id"`
+	Type string `json:"type"`
 }
 
 type document struct {
-	Uses       []use       `json:"uses"`
-	Enums      []enum      `json:"enums"`
-	Structs    []jnstruct  `json:"structs"`
-	Types      []jntype    `json:"types"`
-	Globals    []global    `json:"globals"`
-	Funcs      []function  `json:"functions"`
-	Namespaces []namespace `json:"namespaces"`
+	Uses    []use        `json:"uses"`
+	Enums   []enum       `json:"enums"`
+	Structs []jnstruct   `json:"structs"`
+	Types   []type_alias `json:"types"`
+	Globals []global     `json:"globals"`
+	Funcs   []function   `json:"functions"`
+}
+
+func ttoa(t models.DataType) string {
+	if t.Kind == jntype.TypeMap[jntype.Void] {
+		return ""
+	}
+	return t.Kind
 }
 
 func uses(p *parser.Parser) []use {
@@ -109,21 +104,22 @@ func enums(dm *Defmap) []enum {
 func structs(dm *Defmap) []jnstruct {
 	structs := make([]jnstruct, len(dm.Structs))
 	for i, s := range dm.Structs {
-		var jns jnstruct
-		jns.Id = s.Ast.Id
-		jns.Desc = Descriptize(s.Desc)
-		jns.Fields = globals(s.Defs)
-		structs[i] = jns
+		var jstruct jnstruct
+		jstruct.Id = s.Ast.Id
+		jstruct.Desc = Descriptize(s.Desc)
+		jstruct.Fields = globals(s.Defs)
+		jstruct.Funcs = funcs(s.Defs)
+		structs[i] = jstruct
 	}
 	return structs
 }
 
-func types(dm *Defmap) []jntype {
-	types := make([]jntype, len(dm.Types))
+func types(dm *Defmap) []type_alias {
+	types := make([]type_alias, len(dm.Types))
 	for i, t := range dm.Types {
-		types[i] = jntype{
+		types[i] = type_alias{
 			Id:    t.Id,
-			Alias: t.Type.Kind,
+			Alias: ttoa(t.Type),
 			Desc:  Descriptize(t.Desc),
 		}
 	}
@@ -135,9 +131,8 @@ func globals(dm *Defmap) []global {
 	for i, v := range dm.Globals {
 		globals[i] = global{
 			Id:       v.Id,
-			Type:     v.Type.Kind,
+			Type:     ttoa(v.Type),
 			Constant: v.Const,
-			Volatile: v.Volatile,
 			Desc:     Descriptize(v.Desc),
 		}
 	}
@@ -148,10 +143,8 @@ func params(parameters []models.Param) []parameter {
 	params := make([]parameter, len(parameters))
 	for i, p := range parameters {
 		params[i] = parameter{
-			Id:       p.Id,
-			Type:     p.Type.Kind,
-			Constant: p.Const,
-			Volatile: p.Volatile,
+			Id:   p.Id,
+			Type: ttoa(p.Type),
 		}
 	}
 	return params
@@ -180,7 +173,7 @@ func funcs(dm *Defmap) []function {
 	for i, f := range dm.Funcs {
 		fun := function{
 			Id:         f.Ast.Id,
-			Ret:        f.Ast.RetType.Type.Kind,
+			Ret:        ttoa(f.Ast.RetType.Type),
 			Generics:   generics(f.Ast.Generics),
 			Params:     params(f.Ast.Params),
 			Desc:       Descriptize(f.Desc),
@@ -191,27 +184,6 @@ func funcs(dm *Defmap) []function {
 	return funcs
 }
 
-func makeNamespace(dm *Defmap) namespace {
-	var ns namespace
-	ns.Enums = enums(dm)
-	ns.Structs = structs(dm)
-	ns.Types = types(dm)
-	ns.Globals = globals(dm)
-	ns.Funcs = funcs(dm)
-	ns.Namespaces = namespaces(dm)
-	return ns
-}
-
-func namespaces(dm *Defmap) []namespace {
-	namespaces := make([]namespace, len(dm.Namespaces))
-	for i, ns := range dm.Namespaces {
-		nspace := makeNamespace(ns.Defs)
-		nspace.Id = ns.Id
-		namespaces[i] = nspace
-	}
-	return namespaces
-}
-
 func Doc(p *parser.Parser) (string, error) {
 	doc := document{
 		uses(p),
@@ -220,7 +192,6 @@ func Doc(p *parser.Parser) (string, error) {
 		types(p.Defs),
 		globals(p.Defs),
 		funcs(p.Defs),
-		namespaces(p.Defs),
 	}
 	bytes, err := json.MarshalIndent(doc, "", "\t")
 	if err != nil {

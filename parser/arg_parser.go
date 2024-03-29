@@ -1,6 +1,19 @@
 package parser
 
-import "github.com/DeRuneLabs/jane/ast/models"
+import (
+	"github.com/DeRuneLabs/jane/ast/models"
+	"github.com/DeRuneLabs/jane/package/jn"
+)
+
+func getParamMap(params []Param) *paramMap {
+	pmap := new(paramMap)
+	*pmap = make(paramMap, len(params))
+	for i := range params {
+		param := &params[i]
+		(*pmap)[param.Id] = &paramMapPair{param, nil}
+	}
+	return pmap
+}
 
 type pureArgParser struct {
 	p       *Parser
@@ -15,40 +28,38 @@ type pureArgParser struct {
 }
 
 func (pap *pureArgParser) buildArgs() {
-	pap.args.Src = make([]Arg, 0)
-	for _, p := range pap.f.Params {
+	pap.args.Src = make([]Arg, len(*pap.pmap))
+	for i, p := range pap.f.Params {
 		pair := (*pap.pmap)[p.Id]
 		switch {
 		case pair.arg != nil:
-			pap.args.Src = append(pap.args.Src, *pair.arg)
-		case paramHasDefaultArg(pair.param):
-			arg := Arg{Expr: pair.param.Default}
-			pap.args.Src = append(pap.args.Src, arg)
+			pap.args.Src[i] = *pair.arg
 		case pair.param.Variadic:
-			model := arrayExpr{pair.param.Type, nil}
-			model.dataType.Kind = "[]" + model.dataType.Kind
+			model := sliceExpr{pair.param.Type, nil}
+			model.dataType.Kind = jn.Prefix_Slice + model.dataType.Kind
 			arg := Arg{Expr: Expr{Model: model}}
-			pap.args.Src = append(pap.args.Src, arg)
+			pap.args.Src[i] = arg
 		}
 	}
 }
 
 func (pap *pureArgParser) pushVariadicArgs(pair *paramMapPair) {
-	model := arrayExpr{pair.param.Type, nil}
-	model.dataType.Kind = "[]" + model.dataType.Kind
+	var model sliceExpr
 	variadiced := false
-	pap.p.parseArg(*pair.param, pair.arg, &variadiced)
+	pap.p.parseArg(pap.f, pair, pap.args, &variadiced)
 	model.expr = append(model.expr, pair.arg.Expr.Model.(iExpr))
 	once := false
 	for pap.i++; pap.i < len(pap.args.Src); pap.i++ {
-		arg := pap.args.Src[pap.i]
-		if arg.TargetId != "" {
-			pap.i--
-			break
-		}
+		pair.arg = &pap.args.Src[pap.i]
 		once = true
-		pap.p.parseArg(*pair.param, &arg, &variadiced)
-		model.expr = append(model.expr, arg.Expr.Model.(iExpr))
+		pap.p.parseArg(pap.f, pair, pap.args, &variadiced)
+		model.expr = append(model.expr, pair.arg.Expr.Model.(iExpr))
+	}
+	model.dataType = pair.param.Type
+	model.dataType.Kind = jn.Prefix_Slice + model.dataType.Kind
+	if pap.args.NeedsPureType {
+		model.dataType.DontUseOriginal = true
+		model.dataType.Original = nil
 	}
 	if !once {
 		return
@@ -61,10 +72,8 @@ func (pap *pureArgParser) pushVariadicArgs(pair *paramMapPair) {
 
 func (pap *pureArgParser) checkPasses() {
 	for _, pair := range *pap.pmap {
-		if pair.arg == nil &&
-			!pair.param.Variadic &&
-			!paramHasDefaultArg(pair.param) {
-			pap.p.pusherrtok(pap.errTok, "missing_argument_for", pair.param.Id)
+		if pair.arg == nil && !pair.param.Variadic {
+			pap.p.pusherrtok(pap.errTok, "missing_expr_for", pair.param.Id)
 		}
 	}
 }
@@ -77,7 +86,7 @@ func (pap *pureArgParser) pushArg() {
 	if pair.param.Variadic {
 		pap.pushVariadicArgs(pair)
 	} else {
-		pap.p.parseArg(*pair.param, pair.arg, nil)
+		pap.p.parseArg(pap.f, pair, pap.args, nil)
 	}
 }
 
@@ -129,7 +138,7 @@ func (pap *pureArgParser) tryFuncMultiRetAsArgs() bool {
 		rt := types[i]
 		pap.p.wg.Add(1)
 		val := value{data: models.Data{Type: rt}}
-		go pap.p.checkArgTypeAsync(param, val, false, arg.Tok)
+		go pap.p.checkArgType(&param, val, arg.Tok)
 	}
 	return true
 }

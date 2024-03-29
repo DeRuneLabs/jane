@@ -3,54 +3,112 @@ package parser
 import (
 	"strings"
 
+	"github.com/DeRuneLabs/jane/ast/models"
 	"github.com/DeRuneLabs/jane/lexer/tokens"
+	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
+
+func findGeneric(id string, generics []*GenericType) *GenericType {
+	for _, generic := range generics {
+		if generic.Id == id {
+			return generic
+		}
+	}
+	return nil
+}
+
+func arrayIsAutoSized(t DataType) bool {
+	return arrayExprIsAutoSized(t.Tag.([][]any)[0][1].(models.Expr))
+}
 
 func typeIsVoid(t DataType) bool {
 	return t.Id == jntype.Void && !t.MultiTyped
 }
 
 func typeIsVariadicable(t DataType) bool {
-	return typeIsArray(t)
-}
-
-func typeIsMut(t DataType) bool {
-	return typeIsPtr(t)
+	return typeIsSlice(t)
 }
 
 func typeIsAllowForConst(t DataType) bool {
-	return typeIsPure(t)
-}
-
-func typeIsSinglePtr(t DataType) bool {
-	return t.Id == jntype.Voidptr
+	if !typeIsPure(t) {
+		return false
+	}
+	return t.Id == jntype.Str || jntype.IsNumeric(t.Id)
 }
 
 func typeIsStruct(dt DataType) bool {
 	return dt.Id == jntype.Struct
 }
 
+func typeIsTrait(dt DataType) bool {
+	return dt.Id == jntype.Trait
+}
+
 func typeIsEnum(dt DataType) bool {
 	return dt.Id == jntype.Enum
 }
 
-func typeIsGeneric(generics []*GenericType, t DataType) bool {
-	if t.Id != jntype.Id {
+func unptrType(t DataType) DataType {
+	t.Kind = t.Kind[1:]
+	return t
+}
+
+func typeHasThisGeneric(generic *GenericType, t DataType) bool {
+	switch {
+	case typeIsFunc(t):
+		f := t.Tag.(*Func)
+		for _, p := range f.Params {
+			if typeHasThisGeneric(generic, p.Type) {
+				return true
+			}
+		}
+		return typeHasThisGeneric(generic, f.RetType.Type)
+	case t.MultiTyped, typeIsMap(t):
+		types := t.Tag.([]DataType)
+		for _, t := range types {
+			if typeHasThisGeneric(generic, t) {
+				return true
+			}
+		}
 		return false
 	}
-	id, _ := t.KindId()
+	return typeIsThisGeneric(generic, t)
+}
+
+func typeHasGenerics(generics []*GenericType, t DataType) bool {
 	for _, generic := range generics {
-		if id == generic.Id {
+		if typeHasThisGeneric(generic, t) {
 			return true
 		}
 	}
 	return false
 }
 
-func typeOfArrayComponents(t DataType) DataType {
-	t.Kind = t.Kind[2:]
+func typeIsThisGeneric(generic *GenericType, t DataType) bool {
+	id, _ := t.KindId()
+	return id == generic.Id
+}
+
+func typeIsGeneric(generics []*GenericType, t DataType) bool {
+	if t.Id != jntype.Id {
+		return false
+	}
+	for _, generic := range generics {
+		if typeIsThisGeneric(generic, t) {
+			return true
+		}
+	}
+	return false
+}
+
+func typeOfSliceComponents(t DataType) DataType {
+	t.Kind = t.Kind[len(jn.Prefix_Slice):]
 	return t
+}
+
+func typeOfArrayComponents(t DataType) DataType {
+	return t.ArrayComponent()
 }
 
 func typeIsExplicitPtr(t DataType) bool {
@@ -61,21 +119,22 @@ func typeIsExplicitPtr(t DataType) bool {
 }
 
 func typeIsPtr(t DataType) bool {
-	return typeIsExplicitPtr(t) || typeIsSinglePtr(t)
+	return typeIsExplicitPtr(t)
+}
+
+func typeIsSlice(t DataType) bool {
+	return strings.HasPrefix(t.Kind, jn.Prefix_Slice)
 }
 
 func typeIsArray(t DataType) bool {
-	if t.Kind == "" {
-		return false
-	}
-	return strings.HasPrefix(t.Kind, "[]")
+	return strings.HasPrefix(t.Kind, jn.Prefix_Array)
 }
 
 func typeIsMap(t DataType) bool {
 	if t.Kind == "" || t.Id != jntype.Map {
 		return false
 	}
-	return t.Id == jntype.Map && t.Kind[0] == '[' && !strings.HasPrefix(t.Kind, "[]")
+	return t.Kind[0] == '[' && t.Kind[len(t.Kind)-1] == ']'
 }
 
 func typeIsFunc(t DataType) bool {
@@ -87,6 +146,7 @@ func typeIsFunc(t DataType) bool {
 
 func typeIsPure(t DataType) bool {
 	return !typeIsPtr(t) &&
+		!typeIsSlice(t) &&
 		!typeIsArray(t) &&
 		!typeIsMap(t) &&
 		!typeIsFunc(t)
@@ -100,14 +160,28 @@ func subIdAccessorOfType(t DataType) string {
 }
 
 func typeIsNilCompatible(t DataType) bool {
-	return typeIsFunc(t) || typeIsPtr(t) || typeIsArray(t) || typeIsMap(t)
+	return t.Id == jntype.Nil ||
+		typeIsFunc(t) ||
+		typeIsPtr(t) ||
+		typeIsSlice(t) ||
+		typeIsTrait(t) ||
+		typeIsMap(t)
 }
 
-func checkArrayCompatiblity(arrT, t DataType) bool {
+func checkSliceCompatiblity(arrT, t DataType) bool {
 	if t.Id == jntype.Nil {
 		return true
 	}
 	return arrT.Kind == t.Kind
+}
+
+func checkArrayCompatiblity(arrT, t DataType) bool {
+	if !typeIsArray(t) {
+		return false
+	}
+	i := arrT.Tag.([][]any)[0][0].(uint64)
+	j := t.Tag.([][]any)[0][0].(uint64)
+	return i == j
 }
 
 func checkMapCompability(mapT, t DataType) bool {
@@ -118,21 +192,30 @@ func checkMapCompability(mapT, t DataType) bool {
 }
 
 func typeIsLvalue(t DataType) bool {
-	return typeIsPtr(t) || typeIsArray(t) || typeIsMap(t)
+	return typeIsPtr(t) || typeIsSlice(t) || typeIsMap(t)
 }
 
 func checkPtrCompability(t1, t2 DataType) bool {
-	if typeIsPtr(t2) {
+	if t2.Id == jntype.Nil {
 		return true
 	}
-	if typeIsPure(t2) && jntype.IsIntegerType(t2.Id) {
-		return true
-	}
-	return false
+	return t1.Kind == t2.Kind
 }
 
 func typesEquals(t1, t2 DataType) bool {
 	return t1.Id == t2.Id && t1.Kind == t2.Kind
+}
+
+func checkTraitCompability(t1, t2 DataType) bool {
+	t := t1.Tag.(*trait)
+	switch {
+	case typeIsTrait(t2):
+		return t == t2.Tag.(*trait)
+	case typeIsStruct(t2):
+		s := t2.Tag.(*jnstruct)
+		return s.hasTrait(t)
+	}
+	return false
 }
 
 func checkStructCompability(t1, t2 DataType) bool {
@@ -146,15 +229,13 @@ func checkStructCompability(t1, t2 DataType) bool {
 		return true
 	}
 	n1, n2 := len(s1.generics), len(s2.generics)
-	if n1 > 0 || n2 > 0 {
-		if n1 != n2 {
+	if n1 != n2 {
+		return false
+	}
+	for i, g1 := range s1.generics {
+		g2 := s2.generics[i]
+		if !typesEquals(g1, g2) {
 			return false
-		}
-		for i, g1 := range s1.generics {
-			g2 := s2.generics[i]
-			if !typesEquals(g1, g2) {
-				return false
-			}
 		}
 	}
 	return true
@@ -167,6 +248,11 @@ func typesAreCompatible(t1, t2 DataType, ignoreany bool) bool {
 			t1, t2 = t2, t1
 		}
 		return checkPtrCompability(t1, t2)
+	case typeIsSlice(t1), typeIsSlice(t2):
+		if typeIsSlice(t2) {
+			t1, t2 = t2, t1
+		}
+		return checkSliceCompatiblity(t1, t2)
 	case typeIsArray(t1), typeIsArray(t2):
 		if typeIsArray(t2) {
 			t1, t2 = t2, t1
@@ -177,11 +263,18 @@ func typesAreCompatible(t1, t2 DataType, ignoreany bool) bool {
 			t1, t2 = t2, t1
 		}
 		return checkMapCompability(t1, t2)
-	case typeIsNilCompatible(t1), typeIsNilCompatible(t2):
-		return t1.Id == jntype.Nil || t2.Id == jntype.Nil
-	case t1.Id == jntype.Enum, t2.Id == jntype.Enum:
+	case typeIsTrait(t1), typeIsTrait(t2):
+		if typeIsTrait(t2) {
+			t1, t2 = t2, t1
+		}
+		return checkTraitCompability(t1, t2)
+	case typeIsNilCompatible(t1):
+		return t2.Id == jntype.Nil
+	case typeIsNilCompatible(t2):
+		return t1.Id == jntype.Nil
+	case typeIsEnum(t1), typeIsEnum(t2):
 		return t1.Id == t2.Id && t1.Kind == t2.Kind
-	case t1.Id == jntype.Struct, t2.Id == jntype.Struct:
+	case typeIsStruct(t1), typeIsStruct(t2):
 		if t2.Id == jntype.Struct {
 			t1, t2 = t2, t1
 		}

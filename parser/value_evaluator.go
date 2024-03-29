@@ -1,11 +1,12 @@
 package parser
 
 import (
+	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/DeRuneLabs/jane/lexer/tokens"
 	"github.com/DeRuneLabs/jane/package/jnapi"
-	"github.com/DeRuneLabs/jane/package/jnbits"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
@@ -15,17 +16,57 @@ type valueEvaluator struct {
 	p     *Parser
 }
 
+func strModel(v value) iExpr {
+	content := v.expr.(string)
+	if israwstr(content) {
+		return exprNode{jnapi.ToRawStr([]byte(content))}
+	}
+	return exprNode{jnapi.ToStr([]byte(content))}
+}
+
+func boolModel(v value) iExpr {
+	if v.expr.(bool) {
+		return exprNode{tokens.TRUE}
+	}
+	return exprNode{tokens.FALSE}
+}
+
+func getModel(v value) iExpr {
+	switch v.expr.(type) {
+	case string:
+		return strModel(v)
+	case bool:
+		return boolModel(v)
+	default:
+		return numericModel(v)
+	}
+}
+
+func numericModel(v value) iExpr {
+	cxxId := jntype.CxxId(v.data.Type.Id)
+	switch t := v.expr.(type) {
+	case uint64:
+		return exprNode{cxxId + "{" + strconv.FormatUint(t, 10) + "}"}
+	case int64:
+		return exprNode{cxxId + "{" + strconv.FormatInt(t, 10) + "}"}
+	case float64:
+		var bigf big.Float
+		_ = bigf.SetFloat64(t)
+		return exprNode{cxxId + "{" + bigf.String() + "}"}
+	}
+	return nil
+}
+
 func (ve *valueEvaluator) str() value {
 	var v value
+	v.constExpr = true
 	v.data.Value = ve.tok.Kind
 	v.data.Type.Id = jntype.Str
-	v.data.Type.Kind = tokens.STR
-	content := []byte(ve.tok.Kind[1 : len(ve.tok.Kind)-1])
-	if israwstr(ve.tok.Kind) {
-		ve.model.appendSubNode(exprNode{jnapi.ToRawStr(content)})
-	} else {
-		ve.model.appendSubNode(exprNode{jnapi.ToStr(content)})
-	}
+	v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
+	content := ve.tok.Kind[1 : len(ve.tok.Kind)-1]
+	v.expr = content
+	v.model = strModel(v)
+	ve.model.appendSubNode(v.model)
 	return v
 }
 
@@ -45,36 +86,44 @@ func toCharLiteral(kind string) (string, bool) {
 
 func (ve *valueEvaluator) char() value {
 	var v value
+	v.constExpr = true
 	v.data.Value = ve.tok.Kind
 	content, isByte := toCharLiteral(ve.tok.Kind)
 	if isByte {
 		v.data.Type.Id = jntype.U8
-		v.data.Type.Kind = tokens.U8
 		content = jnapi.ToChar(content[0])
 	} else {
 		v.data.Type.Id = jntype.I32
-		v.data.Type.Kind = tokens.I32
 		content = jnapi.ToRune([]byte(content))
 	}
-	ve.model.appendSubNode(exprNode{content})
+	v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
+	v.expr, _ = strconv.ParseInt(content[2:], 16, 64)
+	v.model = exprNode{content}
+	ve.model.appendSubNode(v.model)
 	return v
 }
 
 func (ve *valueEvaluator) bool() value {
 	var v value
+	v.constExpr = true
 	v.data.Value = ve.tok.Kind
 	v.data.Type.Id = jntype.Bool
-	v.data.Type.Kind = tokens.BOOL
-	ve.model.appendSubNode(exprNode{ve.tok.Kind})
+	v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
+	v.expr = ve.tok.Kind == tokens.TRUE
+	v.model = boolModel(v)
+	ve.model.appendSubNode(v.model)
 	return v
 }
 
 func (ve *valueEvaluator) nil() value {
 	var v value
+	v.constExpr = true
 	v.data.Value = ve.tok.Kind
 	v.data.Type.Id = jntype.Nil
-	v.data.Type.Kind = jntype.NilTypeStr
-	ve.model.appendSubNode(exprNode{ve.tok.Kind})
+	v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
+	v.expr = nil
+	v.model = exprNode{ve.tok.Kind}
+	ve.model.appendSubNode(v.model)
 	return v
 }
 
@@ -83,24 +132,30 @@ func (ve *valueEvaluator) float() value {
 	v.data.Value = ve.tok.Kind
 	v.data.Type.Id = jntype.F64
 	v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
+	v.expr, _ = strconv.ParseFloat(v.data.Value, 64)
 	return v
 }
 
 func (ve *valueEvaluator) integer() value {
 	var v value
 	v.data.Value = ve.tok.Kind
-	intbit := jnbits.BitsizeType(jntype.Int)
+	var bigint big.Int
 	switch {
 	case strings.HasPrefix(ve.tok.Kind, "0x"):
-		v.data.Type.Id = jntype.U64
-	case jnbits.CheckBitInt(ve.tok.Kind, intbit):
-		v.data.Type.Id = jntype.Int
-	case intbit < jnbits.MaxInt && jnbits.CheckBitInt(ve.tok.Kind, jnbits.MaxInt):
-		v.data.Type.Id = jntype.I64
+		_, _ = bigint.SetString(ve.tok.Kind[2:], 16)
+	case strings.HasPrefix(ve.tok.Kind, "0b"):
+		_, _ = bigint.SetString(ve.tok.Kind[2:], 2)
+	case ve.tok.Kind[0] == '0':
+		_, _ = bigint.SetString(ve.tok.Kind[1:], 8)
 	default:
-		v.data.Type.Id = jntype.U64
+		_, _ = bigint.SetString(ve.tok.Kind, 10)
 	}
-	v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
+	if bigint.IsInt64() {
+		v.expr = bigint.Int64()
+	} else {
+		v.expr = bigint.Uint64()
+	}
+	bitize(&v)
 	return v
 }
 
@@ -111,9 +166,9 @@ func (ve *valueEvaluator) numeric() value {
 	} else {
 		v = ve.integer()
 	}
-	cxxId := jntype.CxxTypeIdFromType(v.data.Type.Id)
-	node := exprNode{cxxId + "{" + ve.tok.Kind + "}"}
-	ve.model.appendSubNode(node)
+	v.constExpr = true
+	v.model = numericModel(v)
+	ve.model.appendSubNode(v.model)
 	return v
 }
 
@@ -121,14 +176,17 @@ func (ve *valueEvaluator) varId(id string, variable *Var) (v value) {
 	variable.Used = true
 	v.data.Value = id
 	v.data.Type = variable.Type
-	v.constant = variable.Const
-	v.volatile = variable.Volatile
+	v.constExpr = variable.Const
 	v.data.Tok = variable.IdTok
 	v.lvalue = true
-	if variable.IdTok.Id == tokens.NA {
-		ve.model.appendSubNode(exprNode{jnapi.OutId(id, nil)})
+	if id == tokens.SELF && typeIsPtr(variable.Type) {
+		ve.model.appendSubNode(exprNode{jnapi.CxxSelf})
+	} else if v.constExpr {
+		v.expr = variable.ExprTag
+		v.model = variable.Expr.Model
 	} else {
 		ve.model.appendSubNode(exprNode{jnapi.OutId(id, variable.IdTok.File)})
+		ve.p.eval.hasError = ve.p.eval.hasError || typeIsVoid(v.data.Type)
 	}
 	return
 }
@@ -151,7 +209,7 @@ func (ve *valueEvaluator) enumId(id string, e *Enum) (v value) {
 	v.data.Type.Tag = e
 	v.data.Type.Kind = e.Id
 	v.data.Tok = e.Tok
-	v.constant = true
+	v.constExpr = true
 	v.isType = true
 	if e.Tok.Id == tokens.NA {
 		ve.model.appendSubNode(exprNode{jnapi.OutId(id, nil)})
@@ -170,6 +228,7 @@ func (ve *valueEvaluator) structId(id string, s *jnstruct) (v value) {
 	v.data.Type.Tok = s.Ast.Tok
 	v.data.Tok = s.Ast.Tok
 	v.isType = true
+	// If built-in.
 	if s.Ast.Tok.Id == tokens.NA {
 		ve.model.appendSubNode(exprNode{jnapi.OutId(id, nil)})
 	} else {
@@ -191,18 +250,32 @@ func (ve *valueEvaluator) typeId(id string, t *Type) (_ value, _ bool) {
 
 func (ve *valueEvaluator) id() (_ value, ok bool) {
 	id := ve.tok.Kind
-	if v, _ := ve.p.varById(id); v != nil {
+
+	v, _, _ := ve.p.varById(id)
+	if v != nil {
 		return ve.varId(id, v), true
-	} else if f, _, _ := ve.p.FuncById(id); f != nil {
-		return ve.funcId(id, f), true
-	} else if e, _, _ := ve.p.enumById(id); e != nil {
-		return ve.enumId(id, e), true
-	} else if s, _, _ := ve.p.structById(id); s != nil {
-		return ve.structId(id, s), true
-	} else if t, _, _ := ve.p.typeById(id); t != nil {
-		return ve.typeId(id, t)
-	} else {
-		ve.p.pusherrtok(ve.tok, "id_noexist", id)
 	}
+
+	f, _, _ := ve.p.FuncById(id)
+	if f != nil {
+		return ve.funcId(id, f), true
+	}
+
+	e, _, _ := ve.p.enumById(id)
+	if e != nil {
+		return ve.enumId(id, e), true
+	}
+
+	s, _, _ := ve.p.structById(id)
+	if s != nil {
+		return ve.structId(id, s), true
+	}
+
+	t, _, _ := ve.p.typeById(id)
+	if t != nil {
+		return ve.typeId(id, t)
+	}
+
+	ve.p.eval.pusherrtok(ve.tok, "id_noexist", id)
 	return
 }

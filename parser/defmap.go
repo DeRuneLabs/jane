@@ -5,46 +5,48 @@ import (
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
+func isAccessable(finder, target *File, defIsPub bool) bool {
+	return defIsPub || finder == nil || finder.Dir == target.Dir
+}
+
 type Defmap struct {
 	Namespaces []*namespace
 	Enums      []*Enum
 	Structs    []*jnstruct
+	Traits     []*trait
 	Types      []*Type
 	Funcs      []*function
 	Globals    []*Var
-	parent     *Defmap
+	side       *Defmap
 }
 
-func (dm *Defmap) findNsById(id string, parent bool) (int, *Defmap) {
+func (dm *Defmap) findNsById(id string) int {
 	for i, t := range dm.Namespaces {
 		if t != nil && t.Id == id {
-			return i, dm
+			return i
 		}
 	}
-	if parent && dm.parent != nil {
-		return dm.parent.findNsById(id, parent)
-	}
-	return -1, nil
+	return -1
 }
 
-func (dm *Defmap) nsById(id string, parent bool) *namespace {
-	i, m := dm.findNsById(id, parent)
+func (dm *Defmap) nsById(id string) *namespace {
+	i := dm.findNsById(id)
 	if i == -1 {
 		return nil
 	}
-	return m.Namespaces[i]
+	return dm.Namespaces[i]
 }
 
 func (dm *Defmap) findStructById(id string, f *File) (int, *Defmap, bool) {
 	for i, s := range dm.Structs {
 		if s != nil && s.Ast.Id == id {
-			if s.Ast.Pub || f == nil || f.Dir == s.Ast.Tok.File.Dir {
+			if isAccessable(f, s.Ast.Tok.File, s.Ast.Pub) {
 				return i, dm, false
 			}
 		}
 	}
-	if dm.parent != nil {
-		i, m, _ := dm.parent.findStructById(id, f)
+	if dm.side != nil {
+		i, m, _ := dm.side.findStructById(id, f)
 		return i, m, true
 	}
 	return -1, nil, false
@@ -58,16 +60,39 @@ func (dm *Defmap) structById(id string, f *File) (*jnstruct, *Defmap, bool) {
 	return m.Structs[i], m, canshadow
 }
 
-func (dm *Defmap) findEnumById(id string, f *File) (int, *Defmap, bool) {
-	for i, e := range dm.Enums {
-		if e != nil && e.Id == id {
-			if e.Pub || f == nil || f.Dir == e.Tok.File.Dir {
+func (dm *Defmap) findTraitById(id string, f *File) (int, *Defmap, bool) {
+	for i, t := range dm.Traits {
+		if t != nil && t.Ast.Id == id {
+			if isAccessable(f, t.Ast.Tok.File, t.Ast.Pub) {
 				return i, dm, false
 			}
 		}
 	}
-	if dm.parent != nil {
-		i, m, _ := dm.parent.findEnumById(id, f)
+	if dm.side != nil {
+		i, m, _ := dm.side.findTraitById(id, f)
+		return i, m, true
+	}
+	return -1, nil, false
+}
+
+func (dm *Defmap) traitById(id string, f *File) (*trait, *Defmap, bool) {
+	i, m, canshadow := dm.findTraitById(id, f)
+	if i == -1 {
+		return nil, nil, false
+	}
+	return m.Traits[i], m, canshadow
+}
+
+func (dm *Defmap) findEnumById(id string, f *File) (int, *Defmap, bool) {
+	for i, e := range dm.Enums {
+		if e != nil && e.Id == id {
+			if isAccessable(f, e.Tok.File, e.Pub) {
+				return i, dm, false
+			}
+		}
+	}
+	if dm.side != nil {
+		i, m, _ := dm.side.findEnumById(id, f)
 		return i, m, true
 	}
 	return -1, nil, false
@@ -84,13 +109,13 @@ func (dm *Defmap) enumById(id string, f *File) (*Enum, *Defmap, bool) {
 func (dm *Defmap) findTypeById(id string, f *File) (int, *Defmap, bool) {
 	for i, t := range dm.Types {
 		if t != nil && t.Id == id {
-			if t.Pub || f == nil || f.Dir == t.Tok.File.Dir {
+			if isAccessable(f, t.Tok.File, t.Pub) {
 				return i, dm, false
 			}
 		}
 	}
-	if dm.parent != nil {
-		i, m, _ := dm.parent.findTypeById(id, f)
+	if dm.side != nil {
+		i, m, _ := dm.side.findTypeById(id, f)
 		return i, m, true
 	}
 	return -1, nil, false
@@ -107,13 +132,13 @@ func (dm *Defmap) typeById(id string, f *File) (*Type, *Defmap, bool) {
 func (dm *Defmap) findFuncById(id string, f *File) (int, *Defmap, bool) {
 	for i, fn := range dm.Funcs {
 		if fn != nil && fn.Ast.Id == id {
-			if fn.Ast.Pub || f == nil || f.Dir == fn.Ast.Tok.File.Dir {
+			if isAccessable(f, fn.Ast.Tok.File, fn.Ast.Pub) {
 				return i, dm, false
 			}
 		}
 	}
-	if dm.parent != nil {
-		i, m, _ := dm.parent.findFuncById(id, f)
+	if dm.side != nil {
+		i, m, _ := dm.side.findFuncById(id, f)
 		return i, m, true
 	}
 	return -1, nil, false
@@ -128,15 +153,15 @@ func (dm *Defmap) funcById(id string, f *File) (*function, *Defmap, bool) {
 }
 
 func (dm *Defmap) findGlobalById(id string, f *File) (int, *Defmap, bool) {
-	for i, v := range dm.Globals {
-		if v != nil && v.Type.Id != jntype.Void && v.Id == id {
-			if v.Pub || f == nil || f.Dir == v.IdTok.File.Dir {
+	for i, g := range dm.Globals {
+		if g != nil && g.Type.Id != jntype.Void && g.Id == id {
+			if isAccessable(f, g.IdTok.File, g.Pub) {
 				return i, dm, false
 			}
 		}
 	}
-	if dm.parent != nil {
-		i, m, _ := dm.parent.findGlobalById(id, f)
+	if dm.side != nil {
+		i, m, _ := dm.side.findGlobalById(id, f)
 		return i, m, true
 	}
 	return -1, nil, false
@@ -150,12 +175,14 @@ func (dm *Defmap) globalById(id string, f *File) (*Var, *Defmap, bool) {
 	return m.Globals[i], m, canshadow
 }
 
-func (dm *Defmap) defById(id string, f *File) (int, *Defmap, byte) {
+func (dm *Defmap) findById(id string, f *File) (int, *Defmap, byte) {
 	var finders = map[byte]func(string, *jnio.File) (int, *Defmap, bool){
 		'g': dm.findGlobalById,
 		'f': dm.findFuncById,
 		'e': dm.findEnumById,
 		's': dm.findStructById,
+		't': dm.findTypeById,
+		'i': dm.findTraitById,
 	}
 	for code, finder := range finders {
 		i, m, _ := finder(id, f)

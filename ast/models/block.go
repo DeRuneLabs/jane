@@ -26,7 +26,7 @@ func ParseBlock(b Block) string {
 	var cxx strings.Builder
 	cxx.WriteByte('{')
 	for _, s := range b.Tree {
-		if s.Val == nil {
+		if s.Data == nil {
 			continue
 		}
 		cxx.WriteByte('\n')

@@ -14,9 +14,9 @@ type retChecker struct {
 	values   []value
 }
 
-func (rc *retChecker) pushval(last, current int, errTk Tok) {
+func (rc *retChecker) pushval(last, current int, errTok Tok) {
 	if current-last == 0 {
-		rc.p.pusherrtok(errTk, "missing_expr")
+		rc.p.pusherrtok(errTok, "missing_expr")
 		return
 	}
 	toks := rc.retAST.Expr.Toks[last:current]
@@ -67,7 +67,7 @@ func (rc *retChecker) single() {
 		t:      rc.f.RetType.Type,
 		v:      rc.values[0],
 		errtok: rc.retAST.Tok,
-	}.checkAssignTypeAsync()
+	}.checkAssignType()
 }
 
 func (rc *retChecker) multi() {
@@ -90,7 +90,7 @@ func (rc *retChecker) multi() {
 			t:      t,
 			v:      rc.values[i],
 			errtok: rc.retAST.Tok,
-		}.checkAssignTypeAsync()
+		}.checkAssignType()
 	}
 }
 
@@ -127,7 +127,7 @@ func (rc *retChecker) checkMultiRetAsMutliRet() {
 			t:      rt,
 			v:      val,
 			errtok: rc.retAST.Tok,
-		}.checkAssignTypeAsync()
+		}.checkAssignType()
 	}
 }
 
@@ -135,7 +135,11 @@ func (rc *retChecker) retsVars() {
 	if !rc.f.RetType.Type.MultiTyped {
 		for _, v := range rc.f.RetType.Identifiers {
 			if !jnapi.IsIgnoreId(v.Kind) {
-				rc.retAST.Expr.Model = exprNode{v.Kind}
+				model := new(exprModel)
+				model.index = 0
+				model.nodes = make([]exprBuildNode, 1)
+				_, _ = rc.p.eval.single(v, model)
+				rc.retAST.Expr.Model = model
 				break
 			}
 		}
@@ -153,7 +157,7 @@ func (rc *retChecker) retsVars() {
 		model := new(exprModel)
 		model.index = 0
 		model.nodes = make([]exprBuildNode, 1)
-		_, _ = rc.p.evalSingleExpr(v, model)
+		_, _ = rc.p.eval.single(v, model)
 		rc.expModel.models = append(rc.expModel.models, model)
 	}
 	rc.retAST.Expr.Model = rc.expModel

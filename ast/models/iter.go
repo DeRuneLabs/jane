@@ -4,7 +4,7 @@ import "strings"
 
 type Iter struct {
 	Tok     Tok
-	Block   Block
+	Block   *Block
 	Profile IterProfile
 }
 

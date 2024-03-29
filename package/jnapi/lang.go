@@ -2,7 +2,12 @@ package jnapi
 
 import "strings"
 
-const CxxIgnore = "std::ignore"
+var JNCHeader = ""
+
+const (
+	CxxIgnore = "std::ignore"
+	CxxSelf   = "this"
+)
 
 func ToDeferredCall(expr string) string {
 	var cxx strings.Builder

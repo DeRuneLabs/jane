@@ -60,10 +60,13 @@ func (b *Builder) buildNode(toks Toks) {
 	case tokens.Use:
 		b.Use(toks)
 	case tokens.At:
-		b.Attribute(toks)
+		b.Tree = append(b.Tree, models.Object{
+			Tok:  tok,
+			Data: b.Attribute(toks),
+		})
 	case tokens.Id:
 		b.Id(toks)
-	case tokens.Const, tokens.Volatile:
+	case tokens.Const:
 		b.GlobalVar(toks)
 	case tokens.Type:
 		b.Tree = append(b.Tree, b.TypeOrGenerics(toks))
@@ -71,8 +74,12 @@ func (b *Builder) buildNode(toks Toks) {
 		b.Enum(toks)
 	case tokens.Struct:
 		b.Struct(toks)
+	case tokens.Trait:
+		b.Trait(toks)
+	case tokens.Impl:
+		b.Impl(toks)
 	case tokens.Comment:
-		b.Comment(toks[0])
+		b.Tree = append(b.Tree, b.Comment(toks[0]))
 	case tokens.Preprocessor:
 		b.Preprocessor(toks)
 	default:
@@ -114,6 +121,8 @@ func (b *Builder) Type(toks Toks) (t models.Type) {
 		b.pusherr(toks[i-1], "invalid_syntax")
 		return
 	}
+	t.Tok = toks[1]
+	t.Id = t.Tok.Kind
 	tok := toks[i]
 	if tok.Id != tokens.Id {
 		b.pusherr(tok, "invalid_syntax")
@@ -123,13 +132,12 @@ func (b *Builder) Type(toks Toks) (t models.Type) {
 		b.pusherr(toks[i-1], "invalid_syntax")
 		return
 	}
-	destType, _ := b.DataType(toks[i:], new(int), true)
-	tok = toks[1]
-	return models.Type{
-		Tok:  tok,
-		Id:   tok.Kind,
-		Type: destType,
+	destType, ok := b.DataType(toks, &i, true, true)
+	t.Type = destType
+	if ok && i+1 < len(toks) {
+		b.pusherr(toks[i+1], "invalid_syntax")
 	}
+	return
 }
 
 func (b *Builder) buildEnumItemExpr(i *int, toks Toks) models.Expr {
@@ -213,7 +221,7 @@ func (b *Builder) Enum(toks Toks) {
 			b.pusherr(toks[i-1], "invalid_syntax")
 			return
 		}
-		enum.Type, _ = b.DataType(toks, &i, true)
+		enum.Type, _ = b.DataType(toks, &i, false, true)
 		i++
 		if i >= len(toks) {
 			b.pusherr(enum.Tok, "body_not_exist")
@@ -233,29 +241,28 @@ func (b *Builder) Enum(toks Toks) {
 	b.pub = false
 	enum.Items = b.buildEnumItems(itemToks)
 	b.Tree = append(b.Tree, models.Object{
-		Tok:   enum.Tok,
-		Value: enum,
+		Tok:  enum.Tok,
+		Data: enum,
 	})
 }
 
-func (b *Builder) Comment(tok Tok) {
+func (b *Builder) Comment(tok Tok) models.Object {
 	tok.Kind = strings.TrimSpace(tok.Kind[2:])
 	if strings.HasPrefix(tok.Kind, "cxx:") {
-		b.Tree = append(b.Tree, models.Object{
+		return models.Object{
 			Tok: tok,
-			Value: models.CxxEmbed{
+			Data: models.CxxEmbed{
 				Tok:     tok,
 				Content: tok.Kind[4:],
 			},
-		})
-		return
+		}
 	}
-	b.Tree = append(b.Tree, models.Object{
+	return models.Object{
 		Tok: tok,
-		Value: models.Comment{
+		Data: models.Comment{
 			Content: tok.Kind,
 		},
-	})
+	}
 }
 
 func (b *Builder) Preprocessor(toks Toks) {
@@ -280,8 +287,8 @@ func (b *Builder) Preprocessor(toks Toks) {
 	}
 	if ok {
 		b.Tree = append(b.Tree, models.Object{
-			Tok:   pp.Tok,
-			Value: pp,
+			Tok:  pp.Tok,
+			Data: pp,
 		})
 	}
 }
@@ -328,81 +335,16 @@ func (b *Builder) Id(toks Toks) {
 	case tokens.Colon:
 		b.GlobalVar(toks)
 		return
-	case tokens.DoubleColon:
-		b.Namespace(toks)
-		return
 	case tokens.Brace:
 		switch tok.Kind {
-		case tokens.LBRACE:
-			b.Namespace(toks)
-			return
 		case tokens.LPARENTHESES:
-			f := b.Func(toks, false)
-			s := models.Statement{
-				Tok: f.Tok,
-				Val: f,
-			}
-			b.Tree = append(b.Tree, models.Object{
-				Tok:   f.Tok,
-				Value: s,
-			})
+			s := models.Statement{Tok: tok}
+			s.Data = b.Func(toks, false, false)
+			b.Tree = append(b.Tree, models.Object{Tok: s.Tok, Data: s})
 			return
 		}
 	}
 	b.pusherr(tok, "invalid_syntax")
-}
-
-func (b *Builder) nsIds(toks Toks, i *int) []string {
-	var ids []string
-	for ; *i < len(toks); *i++ {
-		tok := toks[*i]
-		if (*i+1)%2 != 0 {
-			if tok.Id != tokens.Id {
-				b.pusherr(tok, "invalid_syntax")
-				continue
-			}
-			ids = append(ids, tok.Kind)
-			continue
-		}
-		switch tok.Id {
-		case tokens.DoubleColon:
-			continue
-		default:
-			goto ret
-		}
-	}
-ret:
-	return ids
-}
-
-func (b *Builder) Namespace(toks Toks) {
-	var ns models.Namespace
-	ns.Tok = toks[0]
-	i := new(int)
-	ns.Ids = b.nsIds(toks, i)
-	treeToks := b.getrange(i, tokens.LBRACE, tokens.RBRACE, &toks)
-	if treeToks == nil {
-		b.pusherr(ns.Tok, "body_not_exist")
-		return
-	}
-	if *i < len(toks) {
-		b.pusherr(toks[*i], "invalid_syntax")
-	}
-	tree := b.Tree
-	b.Tree = nil
-	btoks := b.Toks
-	pos := b.Pos
-	b.Toks = treeToks
-	b.Pos = 0
-	b.Build()
-	b.Toks = btoks
-	b.Pos = pos
-	ns.Tree = b.Tree
-	b.Tree = tree
-	b.Tree = append(b.Tree, models.Object{
-		Tok:   ns.Tok,
-		Value: ns,
-	})
 }
 
 func (b *Builder) structFields(toks Toks) []*models.Var {
@@ -418,7 +360,7 @@ func (b *Builder) structFields(toks Toks) []*models.Var {
 			}
 			varToks = varToks[1:]
 		}
-		vast := b.Var(varToks)
+		vast := b.Var(varToks, false)
 		vast.Pub = pub
 		fields = append(fields, &vast)
 	}
@@ -449,9 +391,203 @@ func (b *Builder) Struct(toks Toks) {
 	}
 	s.Fields = b.structFields(bodyToks)
 	b.Tree = append(b.Tree, models.Object{
-		Tok:   s.Tok,
-		Value: s,
+		Tok:  s.Tok,
+		Data: s,
 	})
+}
+
+func (b *Builder) traitFuncs(toks Toks) []*models.Func {
+	var funcs []*models.Func
+	i := 0
+	for i < len(toks) {
+		funcToks := b.skipStatement(&i, &toks)
+		f := b.Func(funcToks, false, true)
+		f.Pub = true
+		funcs = append(funcs, &f)
+	}
+	return funcs
+}
+
+func (b *Builder) Trait(toks Toks) {
+	var t models.Trait
+	t.Pub = b.pub
+	b.pub = false
+	if len(toks) < 3 {
+		b.pusherr(toks[0], "invalid_syntax")
+		return
+	}
+	t.Tok = toks[1]
+	if t.Tok.Id != tokens.Id {
+		b.pusherr(t.Tok, "invalid_syntax")
+	}
+	t.Id = t.Tok.Kind
+	i := 2
+	bodyToks := b.getrange(&i, tokens.LBRACE, tokens.RBRACE, &toks)
+	if bodyToks == nil {
+		b.pusherr(t.Tok, "body_not_exist")
+		return
+	}
+	if i < len(toks) {
+		b.pusherr(toks[i], "invalid_syntax")
+	}
+	t.Funcs = b.traitFuncs(bodyToks)
+	b.Tree = append(b.Tree, models.Object{Tok: t.Tok, Data: t})
+}
+
+func (b *Builder) implTraitFuncs(impl *models.Impl, toks Toks) {
+	pos, btoks := b.Pos, make([]Tok, len(b.Toks))
+	copy(btoks, b.Toks)
+	defer func() { b.Pos, b.Toks = pos, btoks }()
+	b.Pos = 0
+	b.Toks = toks
+	for b.Pos != -1 && !b.Ended() {
+		funcToks := b.nextBuilderStatement()
+		ref := false
+		tok := funcToks[0]
+		switch tok.Id {
+		case tokens.Comment:
+			impl.Tree = append(impl.Tree, b.Comment(tok))
+			continue
+		case tokens.At:
+			impl.Tree = append(impl.Tree, models.Object{
+				Tok:  tok,
+				Data: b.Attribute(funcToks),
+			})
+			continue
+		}
+		if tok.Id == tokens.Operator && tok.Kind == tokens.AMPER {
+			ref = true
+			funcToks = funcToks[1:]
+		}
+		f := b.Func(funcToks, false, false)
+		f.Pub = true
+		f.Receiver = &models.DataType{
+			Id:   jntype.Struct,
+			Kind: impl.Target.Kind,
+		}
+		if ref {
+			f.Receiver.Kind = tokens.STAR + f.Receiver.Kind
+		}
+		impl.Tree = append(impl.Tree, models.Object{Tok: f.Tok, Data: &f})
+	}
+}
+
+func (b *Builder) implStruct(impl *models.Impl, toks Toks) {
+	pos, btoks := b.Pos, make([]Tok, len(b.Toks))
+	copy(btoks, b.Toks)
+	defer func() { b.Pos, b.Toks = pos, btoks }()
+	b.Pos = 0
+	b.Toks = toks
+	for b.Pos != -1 && !b.Ended() {
+		funcToks := b.nextBuilderStatement()
+		tok := funcToks[0]
+		pub := false
+		switch tok.Id {
+		case tokens.Comment:
+			impl.Tree = append(impl.Tree, b.Comment(tok))
+			continue
+		case tokens.At:
+			impl.Tree = append(impl.Tree, models.Object{
+				Tok:  tok,
+				Data: b.Attribute(funcToks),
+			})
+			continue
+		case tokens.Type:
+			impl.Tree = append(impl.Tree, models.Object{
+				Tok:  tok,
+				Data: b.Generics(funcToks),
+			})
+			continue
+		}
+		if tok.Id == tokens.Pub {
+			pub = true
+			if len(funcToks) == 1 {
+				b.pusherr(funcToks[0], "invalid_syntax")
+				continue
+			}
+			funcToks = funcToks[1:]
+			if len(funcToks) > 0 {
+				tok = funcToks[0]
+			}
+		}
+		ref := false
+		if tok.Id == tokens.Operator && tok.Kind == tokens.AMPER {
+			ref = true
+			funcToks = funcToks[1:]
+		}
+		f := b.Func(funcToks, false, false)
+		f.Pub = pub
+		f.Receiver = &models.DataType{
+			Id:   jntype.Struct,
+			Kind: impl.Trait.Kind,
+		}
+		if ref {
+			f.Receiver.Kind = tokens.STAR + f.Receiver.Kind
+		}
+		impl.Tree = append(impl.Tree, models.Object{Tok: f.Tok, Data: &f})
+	}
+}
+
+func (b *Builder) implFuncs(impl *models.Impl, toks Toks) {
+	if impl.Target.Id != jntype.Void {
+		b.implTraitFuncs(impl, toks)
+		return
+	}
+	b.implStruct(impl, toks)
+}
+
+func (b *Builder) Impl(toks Toks) {
+	tok := toks[0]
+	if len(toks) < 2 {
+		b.pusherr(tok, "invalid_syntax")
+		return
+	}
+	tok = toks[1]
+	if tok.Id != tokens.Id {
+		b.pusherr(tok, "invalid_syntax")
+		return
+	}
+	var impl models.Impl
+	if len(toks) < 3 {
+		b.pusherr(tok, "invalid_syntax")
+		return
+	}
+	impl.Trait = tok
+	tok = toks[2]
+	if tok.Id != tokens.For {
+		if tok.Id == tokens.Brace && tok.Kind == tokens.LBRACE {
+			toks = toks[2:]
+			goto body
+		}
+		b.pusherr(tok, "invalid_syntax")
+		return
+	}
+	if len(toks) < 4 {
+		b.pusherr(tok, "invalid_syntax")
+		return
+	}
+	tok = toks[3]
+	if tok.Id != tokens.Id {
+		b.pusherr(tok, "invalid_syntax")
+		return
+	}
+	{
+		i := 0
+		impl.Target, _ = b.DataType(toks[3:4], &i, false, true)
+		toks = toks[4:]
+	}
+body:
+	i := 0
+	bodyToks := b.getrange(&i, tokens.LBRACE, tokens.RBRACE, &toks)
+	if bodyToks == nil {
+		b.pusherr(impl.Trait, "body_not_exist")
+		return
+	}
+	if i < len(toks) {
+		b.pusherr(toks[i], "invalid_syntax")
+	}
+	b.implFuncs(&impl, bodyToks)
+	b.Tree = append(b.Tree, models.Object{Tok: impl.Trait, Data: impl})
 }
 
 func tokstoa(toks Toks) string {
@@ -470,21 +606,102 @@ func (b *Builder) Use(toks Toks) {
 		return
 	}
 	toks = toks[1:]
-	use.LinkString = tokstoa(toks)
-	use.Path = b.usePath(toks)
+	b.buildUseDecl(&use, toks)
 	b.Tree = append(b.Tree, models.Object{
-		Tok:   use.Tok,
-		Value: use,
+		Tok:  use.Tok,
+		Data: use,
 	})
 }
 
-func (b *Builder) usePath(toks Toks) string {
+func (b *Builder) getSelectors(toks Toks) []Tok {
+	toks = b.getrange(new(int), tokens.LBRACE, tokens.RBRACE, &toks)
+	parts, errs := Parts(toks, tokens.Comma, true)
+	if len(errs) > 0 {
+		b.Errors = append(b.Errors, errs...)
+		return nil
+	}
+	selectors := make([]Tok, len(parts))
+	for i, part := range parts {
+		if len(part) > 1 {
+			b.pusherr(part[1], "invalid_syntax")
+		}
+		tok := part[0]
+		if tok.Id != tokens.Id && tok.Id != tokens.Self {
+			b.pusherr(tok, "invalid_syntax")
+			continue
+		}
+		selectors[i] = tok
+	}
+	return selectors
+}
+
+func (b *Builder) buildUseDecl(use *models.Use, toks Toks) {
 	var path strings.Builder
 	path.WriteString(jn.StdlibPath)
 	path.WriteRune(os.PathSeparator)
+	tok := toks[0]
+	isStd := false
+	if tok.Id != tokens.Id || tok.Kind != "std" {
+		b.pusherr(toks[0], "invalid_syntax")
+	}
+	isStd = true
+	if len(toks) < 3 {
+		b.pusherr(tok, "invalid_syntax")
+		return
+	}
+	toks = toks[2:]
+	tok = toks[len(toks)-1]
+	switch tok.Id {
+	case tokens.DoubleColon:
+		b.pusherr(tok, "invalid_syntax")
+		return
+	case tokens.Brace:
+		if tok.Kind != tokens.RBRACE {
+			b.pusherr(tok, "invalid_syntax")
+			return
+		}
+		var selectors Toks
+		toks, selectors = RangeLast(toks)
+		use.Selectors = b.getSelectors(selectors)
+		if len(toks) == 0 {
+			b.pusherr(tok, "invalid_syntax")
+			return
+		}
+		tok = toks[len(toks)-1]
+		if tok.Id != tokens.DoubleColon {
+			b.pusherr(tok, "invalid_syntax")
+			return
+		}
+		toks = toks[:len(toks)-1]
+		if len(toks) == 0 {
+			b.pusherr(tok, "invalid_syntax")
+			return
+		}
+	case tokens.Operator:
+		if tok.Kind != tokens.STAR {
+			b.pusherr(tok, "invalid_syntax")
+			return
+		}
+		toks = toks[:len(toks)-1]
+		if len(toks) == 0 {
+			b.pusherr(tok, "invalid_syntax")
+			return
+		}
+		tok = toks[len(toks)-1]
+		if tok.Id != tokens.DoubleColon {
+			b.pusherr(tok, "invalid_syntax")
+			return
+		}
+		toks = toks[:len(toks)-1]
+		if len(toks) == 0 {
+			b.pusherr(tok, "invalid_syntax")
+			return
+		}
+		use.FullUse = true
+	}
 	for i, tok := range toks {
 		if i%2 != 0 {
-			if tok.Id != tokens.Dot {
+			if tok.Id != tokens.DoubleColon {
 				b.pusherr(tok, "invalid_syntax")
 			}
 			path.WriteRune(os.PathSeparator)
@@ -495,31 +712,36 @@ func (b *Builder) usePath(toks Toks) string {
 		}
 		path.WriteString(tok.Kind)
 	}
-	return path.String()
+	use.LinkString = tokstoa(toks)
+	if isStd {
+		use.LinkString = "std::" + use.LinkString
+	}
+	use.Path = path.String()
 }
 
-func (b *Builder) Attribute(toks Toks) {
-	var a models.Attribute
+func (b *Builder) Attribute(toks Toks) (a models.Attribute) {
 	i := 0
 	a.Tok = toks[i]
 	i++
-	if b.Ended() {
-		b.pusherr(toks[i-1], "invalid_syntax")
-		return
-	}
 	a.Tag = toks[i]
 	if a.Tag.Id != tokens.Id || a.Tok.Column+1 != a.Tag.Column {
 		b.pusherr(a.Tag, "invalid_syntax")
 		return
 	}
-	b.Tree = append(b.Tree, models.Object{
-		Tok:   a.Tok,
-		Value: a,
-	})
+	toks = toks[i+1:]
+	if len(toks) > 0 {
+		tok := toks[0]
+		if a.Tok.Column+len(a.Tag.Kind)+1 == tok.Column {
+			b.pusherr(tok, "invalid_syntax")
+		}
+		b.Toks = append(toks, b.Toks...)
+	}
+	return
 }
 
-func (b *Builder) Func(toks Toks, anon bool) (f models.Func) {
-	f.Tok = toks[0]
+func (b *Builder) funcPrototype(toks *Toks, anon bool) (f models.Func, ok bool) {
+	ok = true
+	f.Tok = (*toks)[0]
 	i := 0
 	f.Pub = b.pub
 	b.pub = false
@@ -528,43 +750,44 @@ func (b *Builder) Func(toks Toks, anon bool) (f models.Func) {
 	} else {
 		if f.Tok.Id != tokens.Id {
 			b.pusherr(f.Tok, "invalid_syntax")
+			ok = false
 		}
 		f.Id = f.Tok.Kind
 		i++
 	}
 	f.RetType.Type.Id = jntype.Void
-	f.RetType.Type.Kind = jntype.VoidTypeStr
-	paramToks := b.getrange(&i, tokens.LPARENTHESES, tokens.RPARENTHESES, &toks)
+	f.RetType.Type.Kind = jntype.TypeMap[f.RetType.Type.Id]
+	paramToks := b.getrange(&i, tokens.LPARENTHESES, tokens.RPARENTHESES, toks)
 	if len(paramToks) > 0 {
 		b.Params(&f, paramToks)
 	}
-	if i >= len(toks) {
-		if b.Ended() {
+	t, retok := b.FuncRetDataType(*toks, &i)
+	if retok {
+		f.RetType = t
+		i++
+	}
+	*toks = (*toks)[i:]
+	return
+}
+
+func (b *Builder) Func(toks Toks, anon, prototype bool) (f models.Func) {
+	f, ok := b.funcPrototype(&toks, anon)
+	if !ok {
+		return
+	}
+	if len(toks) == 0 {
+		if prototype {
+			return
+		} else if b.Ended() {
 			b.pusherr(f.Tok, "body_not_exist")
 			return
 		}
-		i = 0
 		toks = b.nextBuilderStatement()
-	}
-	tok := toks[i]
-	t, ok := b.FuncRetDataType(toks, &i)
-	if ok {
-		f.RetType = t
-		i++
-		if i >= len(toks) {
-			if b.Ended() {
-				b.pusherr(f.Tok, "body_not_exist")
-				return
-			}
-			i = 0
-			toks = b.nextBuilderStatement()
-		}
-		tok = toks[i]
-	}
-	if tok.Id != tokens.Brace || tok.Kind != tokens.LBRACE {
-		b.pusherr(tok, "invalid_syntax")
+	} else if prototype {
+		b.pusherr(f.Tok, "invalid_syntax")
 		return
 	}
+	i := 0
 	blockToks := b.getrange(&i, tokens.LBRACE, tokens.RBRACE, &toks)
 	if blockToks == nil {
 		b.pusherr(f.Tok, "body_not_exist")
@@ -599,7 +822,7 @@ func (b *Builder) Generics(toks Toks) []models.GenericType {
 	} else if i < len(toks) {
 		b.pusherr(toks[i], "invalid_syntax")
 	}
-	parts, errs := Parts(genericsToks, tokens.Comma)
+	parts, errs := Parts(genericsToks, tokens.Comma, true)
 	b.Errors = append(b.Errors, errs...)
 	generics := make([]models.GenericType, len(parts))
 	for i, part := range parts {
@@ -617,8 +840,8 @@ func (b *Builder) TypeOrGenerics(toks Toks) models.Object {
 		if tok.Id == tokens.Brace && tok.Kind == tokens.LBRACKET {
 			generics := b.Generics(toks)
 			return models.Object{
-				Tok:   tok,
-				Value: generics,
+				Tok:  tok,
+				Data: generics,
 			}
 		}
 	}
@@ -626,8 +849,8 @@ func (b *Builder) TypeOrGenerics(toks Toks) models.Object {
 	t.Pub = b.pub
 	b.pub = false
 	return models.Object{
-		Tok:   t.Tok,
-		Value: t,
+		Tok:  t.Tok,
+		Data: t,
 	}
 }
 
@@ -637,23 +860,23 @@ func (b *Builder) GlobalVar(toks Toks) {
 	}
 	s := b.VarStatement(toks)
 	b.Tree = append(b.Tree, models.Object{
-		Tok:   s.Tok,
-		Value: s,
+		Tok:  s.Tok,
+		Data: s,
 	})
 }
 
 func (b *Builder) Params(f *models.Func, toks Toks) {
-	parts, errs := Parts(toks, tokens.Comma)
+	parts, errs := Parts(toks, tokens.Comma, true)
 	b.Errors = append(b.Errors, errs...)
 	for _, part := range parts {
 		b.pushParam(f, part)
 	}
 	b.wg.Add(1)
-	go b.checkParamsAsync(f)
+	b.checkParams(f)
 }
 
-func (b *Builder) checkParamsAsync(f *models.Func) {
-	defer func() { b.wg.Done() }()
+func (b *Builder) checkParams(f *models.Func) {
+	defer b.wg.Done()
 	for i := range f.Params {
 		p := &f.Params[i]
 		if p.Type.Tok.Id == tokens.NA {
@@ -675,18 +898,6 @@ func (b *Builder) paramBegin(p *models.Param, i *int, toks Toks) {
 	for ; *i < len(toks); *i++ {
 		tok := toks[*i]
 		switch tok.Id {
-		case tokens.Const:
-			if p.Const {
-				b.pusherr(tok, "already_constant")
-				continue
-			}
-			p.Const = true
-		case tokens.Volatile:
-			if p.Volatile {
-				b.pusherr(tok, "already_volatile")
-				continue
-			}
-			p.Volatile = true
 		case tokens.Operator:
 			switch tok.Kind {
 			case tokens.TRIPLE_DOT:
@@ -724,43 +935,9 @@ func (b *Builder) paramBodyId(f *models.Func, p *models.Param, tok Tok) {
 	p.Id = tok.Kind
 }
 
-type exprNode struct {
-	expr string
-}
-
-func (en exprNode) String() string {
-	return en.expr
-}
-
-func (b *Builder) paramBodyDefaultExpr(p *models.Param, toks *Toks) {
-	braceCount := 0
-	for i, tok := range *toks {
-		if tok.Id == tokens.Brace {
-			switch tok.Kind {
-			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
-				braceCount++
-				continue
-			default:
-				braceCount--
-			}
-		}
-		if braceCount > 0 {
-			continue
-		}
-		exprToks := (*toks)[1:i]
-		*toks = (*toks)[i+1:]
-		if len(exprToks) > 0 {
-			p.Default = b.Expr(exprToks)
-		} else {
-			p.Default.Model = exprNode{jnapi.DefaultExpr}
-		}
-		break
-	}
-}
-
 func (b *Builder) paramBodyDataType(f *models.Func, p *models.Param, toks Toks) {
 	i := 0
-	p.Type, _ = b.DataType(toks, &i, true)
+	p.Type, _ = b.DataType(toks, &i, false, true)
 	i++
 	if i < len(toks) {
 		b.pusherr(toks[i], "invalid_syntax")
@@ -781,9 +958,6 @@ func (b *Builder) paramBody(f *models.Func, p *models.Param, i *int, toks Toks) 
 	if len(toks) == 0 {
 		return
 	}
-	if tok := toks[0]; tok.Id == tokens.Brace && tok.Kind == tokens.LBRACE {
-		b.paramBodyDefaultExpr(p, &toks)
-	}
 	if len(toks) > 0 {
 		b.paramBodyDataType(f, p, toks)
 	}
@@ -799,13 +973,12 @@ func (b *Builder) pushParam(f *models.Func, toks Toks) {
 	tok := toks[i]
 	p.Tok = tok
 	if tok.Id != tokens.Id {
-		if t, ok := b.DataType(toks, &i, true); ok {
+		p.Id = jn.Anonymous
+		if t, ok := b.DataType(toks, &i, false, true); ok {
 			if i+1 == len(toks) {
 				p.Type = t
-				goto end
 			}
 		}
-		b.pusherr(tok, "invalid_syntax")
 		goto end
 	}
 	b.paramBody(f, &p, &i, toks)
@@ -831,7 +1004,7 @@ func (b *Builder) idGenericsParts(toks Toks, i *int) []Toks {
 		}
 	}
 	toks = toks[first+1 : *i]
-	parts, errs := Parts(toks, tokens.Comma)
+	parts, errs := Parts(toks, tokens.Comma, true)
 	b.Errors = append(b.Errors, errs...)
 	return parts
 }
@@ -852,7 +1025,7 @@ func (b *Builder) idDataTypePartEnd(t *models.DataType, dtv *strings.Builder, to
 	generics := make([]models.DataType, len(parts))
 	for i, part := range parts {
 		index := 0
-		t, _ := b.DataType(part, &index, true)
+		t, _ := b.DataType(part, &index, false, true)
 		if index+1 < len(part) {
 			b.pusherr(part[index+1], "invalid_syntax")
 		}
@@ -865,7 +1038,7 @@ func (b *Builder) idDataTypePartEnd(t *models.DataType, dtv *strings.Builder, to
 	t.Tag = generics
 }
 
-func (b *Builder) DataType(toks Toks, i *int, err bool) (t models.DataType, ok bool) {
+func (b *Builder) DataType(toks Toks, i *int, arrays, err bool) (t models.DataType, ok bool) {
 	defer func() { t.Original = t }()
 	first := *i
 	var dtv strings.Builder
@@ -879,12 +1052,17 @@ func (b *Builder) DataType(toks Toks, i *int, err bool) (t models.DataType, ok b
 			ok = true
 			goto ret
 		case tokens.Id:
+			dtv.WriteString(tok.Kind)
+			if *i+1 < len(toks) && toks[*i+1].Id == tokens.DoubleColon {
+				break
+			}
 			t.Id = jntype.Id
 			t.Tok = tok
-			dtv.WriteString(t.Tok.Kind)
 			b.idDataTypePartEnd(&t, &dtv, toks, i)
 			ok = true
 			goto ret
+		case tokens.DoubleColon:
+			dtv.WriteString(tok.Kind)
 		case tokens.Operator:
 			if tok.Kind == tokens.STAR {
 				dtv.WriteString(tok.Kind)
@@ -919,21 +1097,25 @@ func (b *Builder) DataType(toks Toks, i *int, err bool) (t models.DataType, ok b
 				}
 				tok = toks[*i]
 				if tok.Id == tokens.Brace && tok.Kind == tokens.RBRACKET {
-					dtv.WriteString("[]")
+					arrays = false
+					dtv.WriteString(jn.Prefix_Slice)
 					continue
 				}
 				*i--
-				dt, val := b.MapDataType(toks, i, err)
-				if val == "" {
+				if arrays {
+					t = b.MapOrArrayDataType(toks, i, err)
+				} else {
+					t = b.MapDataType(toks, i, err)
+				}
+				if t.Id == jntype.Void {
 					if err {
 						b.pusherr(tok, "invalid_syntax")
 					}
 					return
 				}
-				t = dt
-				dtv.WriteString(val)
+				t.Kind = dtv.String() + t.Kind
 				ok = true
-				goto ret
+				return
 			}
 			return
 		default:
@@ -951,40 +1133,71 @@ ret:
 	return
 }
 
-func (b *Builder) MapDataType(toks Toks, i *int, err bool) (t models.DataType, _ string) {
+func (b *Builder) arrayDataType(toks Toks, i *int, err bool) (t models.DataType) {
 	defer func() { t.Original = t }()
-	t.Id = jntype.Map
-	t.Tok = toks[0]
-	typeToks, colon := MapDataTypeInfo(toks, i)
+	if *i+1 >= len(toks) {
+		return
+	}
+	*i++
+	exprI := *i
+	t, ok := b.DataType(toks, i, true, err)
+	if !ok {
+		return
+	}
+	var exprs [][]any
+	if t.Tag != nil {
+		exprs = t.Tag.([][]any)
+	}
+	_, exprToks := RangeLast(toks[:exprI])
+	exprToks = exprToks[1 : len(exprToks)-1]
+	tok := exprToks[0]
+	if len(exprToks) == 1 && tok.Id == tokens.Operator && tok.Kind == tokens.TRIPLE_DOT {
+		exprs = append([][]any{{uint64(0), models.Expr{}}}, exprs...)
+	} else {
+		exprs = append([][]any{{uint64(0), b.Expr(exprToks)}}, exprs...)
+	}
+	t.Tag = exprs
+	t.Kind = jn.Prefix_Array + t.Kind
+	return t
+}
+
+func (b *Builder) MapOrArrayDataType(toks Toks, i *int, err bool) models.DataType {
+	t := b.MapDataType(toks, i, err)
+	if t.Id == jntype.Void {
+		return b.arrayDataType(toks, i, err)
+	}
+	return t
+}
+
+func (b *Builder) MapDataType(toks Toks, i *int, err bool) (t models.DataType) {
+	typeToks, colon := SplitColon(toks, i)
 	if typeToks == nil || colon == -1 {
 		return
 	}
+	return b.mapDataType(toks, typeToks, colon, err)
+}
+
+func (b *Builder) mapDataType(toks, typeToks Toks, colon int, err bool) (t models.DataType) {
+	defer func() { t.Original = t }()
+	t.Id = jntype.Map
+	t.Tok = toks[0]
 	colonTok := toks[colon]
 	if colon == 0 || colon+1 >= len(typeToks) {
-		b.pusherr(colonTok, "missing_expr")
-		return t, " "
+		if err {
+			b.pusherr(colonTok, "missing_expr")
+		}
+		return t
 	}
 	keyTypeToks := typeToks[:colon]
-	valTypeToks := typeToks[colon+1:]
+	valueTypeToks := typeToks[colon+1:]
 	types := make([]models.DataType, 2)
 	j := 0
-	types[0], _ = b.DataType(keyTypeToks, &j, err)
-	if j < len(keyTypeToks) && err {
-		b.pusherr(keyTypeToks[j], "invalid_syntax")
-	}
+	types[0], _ = b.DataType(keyTypeToks, &j, true, err)
 	j = 0
-	types[1], _ = b.DataType(valTypeToks, &j, err)
-	if j < len(valTypeToks) && err {
-		b.pusherr(valTypeToks[j], "invalid_syntax")
-	}
+	types[1], _ = b.DataType(valueTypeToks, &j, true, err)
 	t.Tag = types
-	var val strings.Builder
-	val.WriteByte('[')
-	val.WriteString(types[0].Kind)
-	val.WriteByte(':')
-	val.WriteString(types[1].Kind)
-	val.WriteByte(']')
-	return t, val.String()
+	t.Kind = t.MapKind()
+	return t
 }
 
 func (b *Builder) FuncDataTypeHead(toks Toks, i *int) models.Func {
@@ -1024,7 +1237,7 @@ func (b *Builder) pushTypeToTypes(ids *Toks, types *[]models.DataType, toks Toks
 		*ids = append(*ids, Tok{Kind: jnapi.Ignore})
 	}
 	index := new(int)
-	currentDt, ok := b.DataType(toks, index, true)
+	currentDt, ok := b.DataType(toks, index, false, true)
 	if !ok {
 		return
 	} else if *index < len(toks)-1 {
@@ -1041,13 +1254,13 @@ func (b *Builder) funcMultiTypeRet(toks Toks, i *int) (t models.RetType, ok bool
 	*i++
 	if *i >= len(toks) {
 		*i--
-		t.Type, ok = b.DataType(toks, i, false)
+		t.Type, ok = b.DataType(toks, i, false, false)
 		return
 	}
 	tok = toks[*i]
 	if tok.Id == tokens.Brace && tok.Kind == tokens.RBRACKET {
 		*i--
-		t.Type, ok = b.DataType(toks, i, false)
+		t.Type, ok = b.DataType(toks, i, false, false)
 		return
 	}
 	var types []models.DataType
@@ -1067,7 +1280,7 @@ func (b *Builder) funcMultiTypeRet(toks Toks, i *int) (t models.RetType, ok bool
 		if braceCount == 0 {
 			if tok.Id == tokens.Colon {
 				*i = start
-				t.Type, ok = b.DataType(toks, i, false)
+				t.Type, ok = b.DataType(toks, i, false, false)
 				return
 			}
 			b.pushTypeToTypes(&t.Identifiers, &types, toks[last:*i], toks[last-1])
@@ -1079,7 +1292,7 @@ func (b *Builder) funcMultiTypeRet(toks Toks, i *int) (t models.RetType, ok bool
 		case tokens.Comma:
 		case tokens.Colon:
 			*i = start
-			t.Type, ok = b.DataType(toks, i, false)
+			t.Type, ok = b.DataType(toks, i, false, false)
 			return
 		default:
 			continue
@@ -1100,15 +1313,20 @@ func (b *Builder) funcMultiTypeRet(toks Toks, i *int) (t models.RetType, ok bool
 func (b *Builder) FuncRetDataType(toks Toks, i *int) (t models.RetType, ok bool) {
 	defer func() { t.Type.Original = t.Type }()
 	t.Type.Id = jntype.Void
-	t.Type.Kind = jntype.VoidTypeStr
+	t.Type.Kind = jntype.TypeMap[t.Type.Id]
 	if *i >= len(toks) {
 		return
 	}
 	tok := toks[*i]
-	if tok.Id == tokens.Brace && tok.Kind == tokens.LBRACKET {
-		return b.funcMultiTypeRet(toks, i)
+	if tok.Id == tokens.Brace {
+		switch tok.Kind {
+		case tokens.LBRACKET:
+			return b.funcMultiTypeRet(toks, i)
+		case tokens.LBRACE:
+			return
+		}
 	}
-	t.Type, ok = b.DataType(toks, i, false)
+	t.Type, ok = b.DataType(toks, i, false, false)
 	return
 }
 
@@ -1124,16 +1342,17 @@ func (b *Builder) pushStatementToBlock(bs *blockStatement) {
 		bs.toks = bs.toks[:len(bs.toks)-1]
 	}
 	s := b.Statement(bs)
-	if s.Val == nil {
+	if s.Data == nil {
 		return
 	}
 	s.WithTerminator = bs.withTerminator
 	bs.block.Tree = append(bs.block.Tree, s)
 }
 
-func (b *Builder) Block(toks Toks) (block models.Block) {
+func (b *Builder) Block(toks Toks) (block *models.Block) {
+	block = new(models.Block)
 	bs := new(blockStatement)
-	bs.block = &block
+	bs.block = block
 	bs.srcToks = &toks
 	for {
 		bs.pos, bs.withTerminator = NextStatementPos(toks, 0)
@@ -1168,11 +1387,11 @@ func (b *Builder) Statement(bs *blockStatement) (s models.Statement) {
 		if ok {
 			return s
 		}
-	case tokens.Const, tokens.Volatile:
+	case tokens.Const:
 		return b.VarStatement(bs.toks)
 	case tokens.Ret:
 		return b.RetStatement(bs.toks)
-	case tokens.Iter:
+	case tokens.For:
 		return b.IterExpr(bs.toks)
 	case tokens.Break:
 		return b.BreakStatement(bs.toks)
@@ -1190,14 +1409,10 @@ func (b *Builder) Statement(bs *blockStatement) (s models.Statement) {
 		return b.ConcurrentCallStatement(bs.toks)
 	case tokens.Goto:
 		return b.GotoStatement(bs.toks)
-	case tokens.Try:
-		return b.TryBlock(bs)
-	case tokens.Catch:
-		return b.CatchBlock(bs)
 	case tokens.Type:
 		t := b.Type(bs.toks)
 		s.Tok = t.Tok
-		s.Val = t
+		s.Data = t
 		return
 	case tokens.Match:
 		return b.MatchCase(bs.toks)
@@ -1207,7 +1422,7 @@ func (b *Builder) Statement(bs *blockStatement) (s models.Statement) {
 		}
 	}
 	if IsFuncCall(bs.toks) != nil {
-		return b.ExprStatement(bs.toks)
+		return b.ExprStatement(bs)
 	}
 	tok = Tok{
 		File:   tok.File,
@@ -1228,7 +1443,7 @@ func (b *Builder) blockStatement(toks Toks) models.Statement {
 		b.pusherr(toks[*i], "invalid_syntax")
 	}
 	block := b.Block(toks)
-	return models.Statement{Tok: tok, Val: block}
+	return models.Statement{Tok: tok, Data: block}
 }
 
 func (b *Builder) assignInfo(toks Toks) (info AssignInfo) {
@@ -1273,42 +1488,38 @@ func (b *Builder) assignInfo(toks Toks) (info AssignInfo) {
 	return
 }
 
-func (b *Builder) pushAssignSelector(
-	selectors *[]models.AssignLeft,
-	last, current int,
-	info AssignInfo,
-) {
-	var selector models.AssignLeft
-	selector.Expr.Toks = info.Left[last:current]
+func (b *Builder) pushAssignLeft(lefts *[]models.AssignLeft, last, current int, info AssignInfo) {
+	var left models.AssignLeft
+	left.Expr.Toks = info.Left[last:current]
 	if last-current == 0 {
 		b.pusherr(info.Left[current-1], "missing_expr")
 		return
 	}
-	if selector.Expr.Toks[0].Id == tokens.Id &&
+	if left.Expr.Toks[0].Id == tokens.Id &&
 		current-last > 1 &&
-		selector.Expr.Toks[1].Id == tokens.Colon {
+		left.Expr.Toks[1].Id == tokens.Colon {
 		if info.IsExpr {
-			b.pusherr(selector.Expr.Toks[0], "notallow_declares")
+			b.pusherr(left.Expr.Toks[0], "notallow_declares")
 		}
-		selector.Var.New = true
-		selector.Var.IdTok = selector.Expr.Toks[0]
-		selector.Var.Id = selector.Var.IdTok.Kind
-		selector.Var.SetterTok = info.Setter
+		left.Var.New = true
+		left.Var.IdTok = left.Expr.Toks[0]
+		left.Var.Id = left.Var.IdTok.Kind
+		left.Var.SetterTok = info.Setter
 		if current-last > 2 {
-			selector.Var.Type, _ = b.DataType(selector.Expr.Toks[2:], new(int), false)
+			left.Var.Type, _ = b.DataType(left.Expr.Toks[2:], new(int), true, false)
 		}
 	} else {
-		if selector.Expr.Toks[0].Id == tokens.Id {
-			selector.Var.IdTok = selector.Expr.Toks[0]
-			selector.Var.Id = selector.Var.IdTok.Kind
+		if left.Expr.Toks[0].Id == tokens.Id {
+			left.Var.IdTok = left.Expr.Toks[0]
+			left.Var.Id = left.Var.IdTok.Kind
 		}
-		selector.Expr = b.Expr(selector.Expr.Toks)
+		left.Expr = b.Expr(left.Expr.Toks)
 	}
-	*selectors = append(*selectors, selector)
+	*lefts = append(*lefts, left)
 }
 
-func (b *Builder) assignSelectors(info AssignInfo) []models.AssignLeft {
-	var selectors []models.AssignLeft
+func (b *Builder) assignLefts(info AssignInfo) []models.AssignLeft {
+	var lefts []models.AssignLeft
 	braceCount := 0
 	lastIndex := 0
 	for i, tok := range info.Left {
@@ -1325,13 +1536,13 @@ func (b *Builder) assignSelectors(info AssignInfo) []models.AssignLeft {
 		} else if tok.Id != tokens.Comma {
 			continue
 		}
-		b.pushAssignSelector(&selectors, lastIndex, i, info)
+		b.pushAssignLeft(&lefts, lastIndex, i, info)
 		lastIndex = i + 1
 	}
 	if lastIndex < len(info.Left) {
-		b.pushAssignSelector(&selectors, lastIndex, len(info.Left), info)
+		b.pushAssignLeft(&lefts, lastIndex, len(info.Left), info)
 	}
-	return selectors
+	return lefts
 }
 
 func (b *Builder) pushAssignExpr(exps *[]models.Expr, last, current int, info AssignInfo) {
@@ -1376,7 +1587,7 @@ func (b *Builder) AssignStatement(toks Toks, isExpr bool) (s models.Statement, _
 		return
 	}
 	s.Tok = toks[0]
-	s.Val = assign
+	s.Data = assign
 	return s, true
 }
 
@@ -1392,7 +1603,7 @@ func (b *Builder) AssignExpr(toks Toks, isExpr bool) (assign models.Assign, ok b
 	info.IsExpr = isExpr
 	assign.IsExpr = isExpr
 	assign.Setter = info.Setter
-	assign.Left = b.assignSelectors(info)
+	assign.Left = b.assignLefts(info)
 	if isExpr && len(assign.Left) > 1 {
 		b.pusherr(assign.Setter, "notallow_multiple_assign")
 	}
@@ -1402,7 +1613,7 @@ func (b *Builder) AssignExpr(toks Toks, isExpr bool) (assign models.Assign, ok b
 	return
 }
 
-func (b *Builder) IdStatement(toks Toks) (s models.Statement, _ bool) {
+func (b *Builder) IdStatement(toks Toks) (s models.Statement, ok bool) {
 	if len(toks) == 1 {
 		return
 	}
@@ -1421,20 +1632,20 @@ func (b *Builder) LabelStatement(tok Tok) models.Statement {
 	var l models.Label
 	l.Tok = tok
 	l.Label = tok.Kind
-	return models.Statement{Tok: tok, Val: l}
+	return models.Statement{Tok: tok, Data: l}
 }
 
-func (b *Builder) ExprStatement(toks Toks) models.Statement {
-	block := models.ExprStatement{
-		Expr: b.Expr(toks),
+func (b *Builder) ExprStatement(bs *blockStatement) models.Statement {
+	expr := models.ExprStatement{
+		Expr: b.Expr(bs.toks),
 	}
 	return models.Statement{
-		Tok: toks[0],
-		Val: block,
+		Tok:  bs.toks[0],
+		Data: expr,
 	}
 }
 
-func (b *Builder) Args(toks Toks) *models.Args {
+func (b *Builder) Args(toks Toks, targeting bool) *models.Args {
 	args := new(models.Args)
 	last := 0
 	braceCount := 0
@@ -1450,30 +1661,32 @@ func (b *Builder) Args(toks Toks) *models.Args {
 		if braceCount > 0 || tok.Id != tokens.Comma {
 			continue
 		}
-		b.pushArg(args, toks[last:i], tok)
+		b.pushArg(args, targeting, toks[last:i], tok)
 		last = i + 1
 	}
 	if last < len(toks) {
 		if last == 0 {
-			b.pushArg(args, toks[last:], toks[last])
+			if len(toks) > 0 {
+				b.pushArg(args, targeting, toks[last:], toks[last])
+			}
 		} else {
-			b.pushArg(args, toks[last:], toks[last-1])
+			b.pushArg(args, targeting, toks[last:], toks[last-1])
 		}
 	}
 	return args
 }
 
-func (b *Builder) pushArg(args *models.Args, toks Toks, err Tok) {
+func (b *Builder) pushArg(args *models.Args, targeting bool, toks Toks, err Tok) {
 	if len(toks) == 0 {
 		b.pusherr(err, "invalid_syntax")
 		return
 	}
 	var arg models.Arg
 	arg.Tok = toks[0]
-	if arg.Tok.Id == tokens.Id {
+	if targeting && arg.Tok.Id == tokens.Id {
 		if len(toks) > 1 {
 			tok := toks[1]
-			if tok.Id == tokens.Operator && tok.Kind == tokens.EQUAL {
+			if tok.Id == tokens.Colon {
 				args.Targeted = true
 				arg.TargetId = arg.Tok.Kind
 				toks = toks[2:]
@@ -1497,12 +1710,6 @@ func (b *Builder) varBegin(v *models.Var, i *int, toks Toks) {
 				break
 			}
 			v.Const = true
-		case tokens.Volatile:
-			if v.Volatile {
-				b.pusherr(tok, "already_volatile")
-				break
-			}
-			v.Volatile = true
 		default:
 			b.pusherr(tok, "invalid_syntax")
 		}
@@ -1511,7 +1718,7 @@ func (b *Builder) varBegin(v *models.Var, i *int, toks Toks) {
 
 func (b *Builder) varTypeNExpr(v *models.Var, toks Toks, i int) {
 	tok := toks[i]
-	t, ok := b.DataType(toks, &i, false)
+	t, ok := b.DataType(toks, &i, true, false)
 	if ok {
 		v.Type = t
 		i++
@@ -1530,21 +1737,23 @@ func (b *Builder) varTypeNExpr(v *models.Var, toks Toks, i int) {
 			b.pusherr(tok, "missing_expr")
 			return
 		}
-		v.Val = b.Expr(valueToks)
+		v.Expr = b.Expr(valueToks)
 		v.SetterTok = tok
 	} else {
 		b.pusherr(tok, "invalid_syntax")
 	}
 }
 
-func (b *Builder) Var(toks Toks) (v models.Var) {
+func (b *Builder) Var(toks Toks, begin bool) (v models.Var) {
 	v.Pub = b.pub
 	b.pub = false
 	i := 0
 	v.DefTok = toks[i]
-	b.varBegin(&v, &i, toks)
-	if i >= len(toks) {
-		return
+	if begin {
+		b.varBegin(&v, &i, toks)
+		if i >= len(toks) {
+			return
+		}
 	}
 	v.IdTok = toks[i]
 	if v.IdTok.Id != tokens.Id {
@@ -1552,8 +1761,7 @@ func (b *Builder) Var(toks Toks) (v models.Var) {
 	}
 	v.Id = v.IdTok.Kind
 	v.Type.Id = jntype.Void
-	v.Type.Kind = jntype.VoidTypeStr
-	v.Type.Kind = jntype.VoidTypeStr
+	v.Type.Kind = jntype.TypeMap[v.Type.Id]
 	i++
 	if i >= len(toks) {
 		b.pusherr(toks[i-1], "invalid_syntax")
@@ -1573,10 +1781,10 @@ func (b *Builder) Var(toks Toks) (v models.Var) {
 }
 
 func (b *Builder) VarStatement(toks Toks) models.Statement {
-	vast := b.Var(toks)
+	vast := b.Var(toks, true)
 	return models.Statement{
-		Tok: vast.IdTok,
-		Val: vast,
+		Tok:  vast.IdTok,
+		Data: vast,
 	}
 }
 
@@ -1584,12 +1792,12 @@ func (b *Builder) CommentStatement(tok Tok) (s models.Statement) {
 	s.Tok = tok
 	tok.Kind = strings.TrimSpace(tok.Kind[2:])
 	if strings.HasPrefix(tok.Kind, "cxx:") {
-		s.Val = models.CxxEmbed{
+		s.Data = models.CxxEmbed{
 			Tok:     tok,
 			Content: tok.Kind[4:],
 		}
 	} else {
-		s.Val = models.Comment{
+		s.Data = models.Comment{
 			Content: tok.Kind,
 		}
 	}
@@ -1609,7 +1817,7 @@ func (b *Builder) DeferStatement(toks Toks) (s models.Statement) {
 	}
 	d.Expr = b.Expr(toks)
 	s.Tok = d.Tok
-	s.Val = d
+	s.Data = d
 	return
 }
 
@@ -1626,7 +1834,7 @@ func (b *Builder) ConcurrentCallStatement(toks Toks) (s models.Statement) {
 	}
 	cc.Expr = b.Expr(toks)
 	s.Tok = cc.Tok
-	s.Val = cc
+	s.Data = cc
 	return
 }
 
@@ -1646,7 +1854,7 @@ func (b *Builder) GotoStatement(toks Toks) (s models.Statement) {
 	var gt models.Goto
 	gt.Tok = s.Tok
 	gt.Label = idTok.Kind
-	s.Val = gt
+	s.Data = gt
 	return
 }
 
@@ -1657,8 +1865,8 @@ func (b *Builder) RetStatement(toks Toks) models.Statement {
 		ret.Expr = b.Expr(toks[1:])
 	}
 	return models.Statement{
-		Tok: ret.Tok,
-		Val: ret,
+		Tok:  ret.Tok,
+		Data: ret,
 	}
 }
 
@@ -1669,7 +1877,7 @@ func (b *Builder) getWhileIterProfile(toks Toks) models.IterWhile {
 }
 
 func (b *Builder) getForeachVarsToks(toks Toks) []Toks {
-	vars, errs := Parts(toks, tokens.Comma)
+	vars, errs := Parts(toks, tokens.Comma, true)
 	b.Errors = append(b.Errors, errs...)
 	return vars
 }
@@ -1697,7 +1905,7 @@ func (b *Builder) getVarProfile(toks Toks) (vast models.Var) {
 	if *i >= len(toks) {
 		return
 	}
-	vast.Type, _ = b.DataType(toks, i, true)
+	vast.Type, _ = b.DataType(toks, i, false, true)
 	if *i < len(toks)-1 {
 		b.pusherr(toks[*i], "invalid_syntax")
 	}
@@ -1738,13 +1946,51 @@ func (b *Builder) getForeachIterProfile(varToks, exprToks Toks, inTok Tok) model
 	return foreach
 }
 
-func (b *Builder) getIterProfile(toks Toks) models.IterProfile {
+func (b *Builder) getForIterProfile(toks Toks, errtok Tok) models.IterProfile {
+	parts, errs := Parts(toks, tokens.Comma, false)
+	switch {
+	case len(errs) > 0:
+		b.Errors = append(b.Errors, errs...)
+		return nil
+	case len(parts) != 3:
+		b.pusherr(errtok, "invalid_syntax")
+		return nil
+	}
+	var fp models.IterFor
+	once := parts[0]
+	if len(once) > 0 {
+		fp.Once = b.forStatement(once)
+	}
+	condition := parts[1]
+	if len(condition) > 0 {
+		fp.Condition = b.Expr(condition)
+	}
+	next := parts[2]
+	if len(next) > 0 {
+		fp.Next = b.forStatement(next)
+	}
+	return fp
+}
+
+func (b *Builder) forStatement(toks Toks) models.Statement {
+	s := b.Statement(&blockStatement{toks: toks})
+	switch s.Data.(type) {
+	case models.ExprStatement, models.Assign:
+	default:
+		b.pusherr(s.Tok, "invalid_syntax")
+	}
+	return s
+}
+
+func (b *Builder) getIterProfile(toks Toks, errtok Tok) models.IterProfile {
 	braceCount := 0
+	comma := false
 	for i, tok := range toks {
 		if tok.Id == tokens.Brace {
 			switch tok.Kind {
 			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
 				braceCount++
+				continue
 			default:
 				braceCount--
 			}
@@ -1752,11 +1998,17 @@ func (b *Builder) getIterProfile(toks Toks) models.IterProfile {
 		if braceCount != 0 {
 			continue
 		}
-		if tok.Id == tokens.In {
+		switch tok.Id {
+		case tokens.In:
 			varToks := toks[:i]
 			exprToks := toks[i+1:]
 			return b.getForeachIterProfile(varToks, exprToks, tok)
+		case tokens.Comma:
+			comma = true
 		}
+	}
+	if comma {
+		return b.getForIterProfile(toks, errtok)
 	}
 	return b.getWhileIterProfile(toks)
 }
@@ -1771,7 +2023,7 @@ func (b *Builder) IterExpr(toks Toks) (s models.Statement) {
 	}
 	exprToks := BlockExpr(toks)
 	if len(exprToks) > 0 {
-		iter.Profile = b.getIterProfile(exprToks)
+		iter.Profile = b.getIterProfile(exprToks, iter.Tok)
 	}
 	i := new(int)
 	*i = len(exprToks)
@@ -1785,61 +2037,8 @@ func (b *Builder) IterExpr(toks Toks) (s models.Statement) {
 	}
 	iter.Block = b.Block(blockToks)
 	return models.Statement{
-		Tok: iter.Tok,
-		Val: iter,
-	}
-}
-
-func (b *Builder) TryBlock(bs *blockStatement) (s models.Statement) {
-	var try models.Try
-	try.Tok = bs.toks[0]
-	bs.toks = bs.toks[1:]
-	i := new(int)
-	blockToks := b.getrange(i, tokens.LBRACE, tokens.RBRACE, &bs.toks)
-	if blockToks == nil {
-		b.pusherr(try.Tok, "body_not_exist")
-		return
-	}
-	if *i < len(bs.toks) {
-		if bs.toks[*i].Id == tokens.Catch {
-			bs.nextToks = bs.toks[*i:]
-		} else {
-			b.pusherr(bs.toks[*i], "invalid_syntax")
-		}
-	}
-	try.Block = b.Block(blockToks)
-	return models.Statement{
-		Tok: try.Tok,
-		Val: try,
-	}
-}
-
-func (b *Builder) CatchBlock(bs *blockStatement) (s models.Statement) {
-	var catch models.Catch
-	catch.Tok = bs.toks[0]
-	bs.toks = bs.toks[1:]
-	varToks := BlockExpr(bs.toks)
-	i := new(int)
-	*i = len(varToks)
-	blockToks := b.getrange(i, tokens.LBRACE, tokens.RBRACE, &bs.toks)
-	if blockToks == nil {
-		b.pusherr(catch.Tok, "body_not_exist")
-		return
-	}
-	if *i < len(bs.toks) {
-		if bs.toks[*i].Id == tokens.Catch {
-			bs.nextToks = bs.toks[*i:]
-		} else {
-			b.pusherr(bs.toks[*i], "invalid_syntax")
-		}
-	}
-	if len(varToks) > 0 {
-		catch.Var = b.getVarProfile(varToks)
-	}
-	catch.Block = b.Block(blockToks)
-	return models.Statement{
-		Tok: catch.Tok,
-		Val: catch,
+		Tok:  iter.Tok,
+		Data: iter,
 	}
 }
 
@@ -1889,7 +2088,7 @@ func (b *Builder) caseexprs(toks *Toks, caseIsDefault bool) []models.Expr {
 	return nil
 }
 
-func (b *Builder) caseblock(toks *Toks) models.Block {
+func (b *Builder) caseblock(toks *Toks) *models.Block {
 	braceCount := 0
 	for i, tok := range *toks {
 		if tok.Id == tokens.Brace {
@@ -1964,7 +2163,7 @@ func (b *Builder) MatchCase(toks Toks) (s models.Statement) {
 		return
 	}
 	match.Cases, match.Default = b.cases(blockToks)
-	s.Val = match
+	s.Data = match
 	return
 }
 
@@ -2001,8 +2200,8 @@ func (b *Builder) IfExpr(bs *blockStatement) (s models.Statement) {
 	ifast.Expr = b.Expr(exprToks)
 	ifast.Block = b.Block(blockToks)
 	return models.Statement{
-		Tok: ifast.Tok,
-		Val: ifast,
+		Tok:  ifast.Tok,
+		Data: ifast,
 	}
 }
 
@@ -2039,8 +2238,8 @@ func (b *Builder) ElseIfExpr(bs *blockStatement) (s models.Statement) {
 	elif.Expr = b.Expr(exprToks)
 	elif.Block = b.Block(blockToks)
 	return models.Statement{
-		Tok: elif.Tok,
-		Val: elif,
+		Tok:  elif.Tok,
+		Data: elif,
 	}
 }
 
@@ -2066,8 +2265,8 @@ func (b *Builder) ElseBlock(bs *blockStatement) (s models.Statement) {
 	}
 	elseast.Block = b.Block(blockToks)
 	return models.Statement{
-		Tok: elseast.Tok,
-		Val: elseast,
+		Tok:  elseast.Tok,
+		Data: elseast,
 	}
 }
 
@@ -2078,8 +2277,8 @@ func (b *Builder) BreakStatement(toks Toks) models.Statement {
 		b.pusherr(toks[1], "invalid_syntax")
 	}
 	return models.Statement{
-		Tok: breakAST.Tok,
-		Val: breakAST,
+		Tok:  breakAST.Tok,
+		Data: breakAST,
 	}
 }
 
@@ -2090,8 +2289,8 @@ func (b *Builder) ContinueStatement(toks Toks) models.Statement {
 		b.pusherr(toks[1], "invalid_syntax")
 	}
 	return models.Statement{
-		Tok: continueAST.Tok,
-		Val: continueAST,
+		Tok:  continueAST.Tok,
+		Data: continueAST,
 	}
 }
 
@@ -2161,7 +2360,7 @@ func (b *Builder) exprBracePart(info *exprProcessInfo, tok Tok) bool {
 	case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
 		if tok.Kind == tokens.LBRACKET {
 			oldIndex := info.i
-			_, ok := b.DataType(info.toks, &info.i, false)
+			_, ok := b.DataType(info.toks, &info.i, false, false)
 			if ok {
 				info.part = append(info.part, info.toks[oldIndex:info.i+1]...)
 				return true
@@ -2190,6 +2389,8 @@ func (b *Builder) exprProcesses(toks Toks) []Toks {
 			if skipStep {
 				continue
 			}
+		case tokens.Comma:
+			info.singleOperatored = false
 		}
 		b.exprValuePart(&info, tok)
 	}

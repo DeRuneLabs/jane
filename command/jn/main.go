@@ -34,8 +34,6 @@ const (
 	localizationWarnings = "warning.json"
 )
 
-const builtinBaseFile = "lib.xx"
-
 var helpmap = [...][2]string{
 	0: {commandHelp, "Show help."},
 	1: {commandVersion, "Show version."},
@@ -45,7 +43,7 @@ var helpmap = [...][2]string{
 
 func help(cmd string) {
 	if cmd != "" {
-		println("This module can only be used as single")
+		println("This mod can only be used as single")
 		return
 	}
 	max := len(helpmap[0][0])
@@ -68,10 +66,10 @@ func help(cmd string) {
 
 func version(cmd string) {
 	if cmd != "" {
-		println("This module can only be used as single!")
+		println("This mod can only be used as single!")
 		return
 	}
-	println("jane version", jn.Version)
+	println("jn version", jn.Version)
 }
 
 func initProject(cmd string) {
@@ -141,6 +139,8 @@ func init() {
 	execp = filepath.Dir(execp)
 	jn.ExecPath = execp
 	jn.StdlibPath = filepath.Join(jn.ExecPath, jn.Stdlib)
+	jnapi.JNCHeader = filepath.Join(jn.ExecPath, "api")
+	jnapi.JNCHeader = filepath.Join(jnapi.JNCHeader, "jnc.hpp")
 	jn.LangsPath = filepath.Join(jn.ExecPath, jn.Localizations)
 
 	if len(os.Args) < 2 {
@@ -191,7 +191,7 @@ func loadLangWarns(path string, infos []fs.FileInfo) {
 func loadLangErrs(path string, infos []fs.FileInfo) {
 	i := -1
 	for j, f := range infos {
-		if f.IsDir() || f.Name() != "errs.json" {
+		if f.IsDir() || f.Name() != localizationErrors {
 			continue
 		}
 		i = j
@@ -247,7 +247,7 @@ func checkMode() {
 func loadJnSet() {
 	info, err := os.Stat(jn.SettingsFile)
 	if err != nil || info.IsDir() {
-		println(`jn settings file ("` + jn.SettingsFile + `") is not found!`)
+		println(`JN settings file ("` + jn.SettingsFile + `") is not found!`)
 		os.Exit(0)
 	}
 	bytes, err := os.ReadFile(jn.SettingsFile)
@@ -257,7 +257,7 @@ func loadJnSet() {
 	}
 	jn.Set, err = jnset.Load(bytes)
 	if err != nil {
-		println("jn settings has errors;")
+		println("X settings has errors;")
 		println(err.Error())
 		os.Exit(0)
 	}
@@ -298,11 +298,10 @@ func appendStandard(code *string) {
 	sb.WriteByte('\n')
 	sb.WriteString("// corresponding to the definition in the JN source files")
 	sb.WriteString("\n\n")
-	sb.WriteString(jnapi.CxxDefault)
-	sb.WriteString("\n\n// region TRANSPILED_JN_CODE\n")
+	sb.WriteString("\n\n#include \"")
+	sb.WriteString(jnapi.JNCHeader)
+	sb.WriteString("\"\n")
 	sb.WriteString(*code)
-	sb.WriteString("\n// endregion TRANSPILED_JN_CODE\n\n")
-	sb.WriteString(jnapi.CxxMain)
 	*code = sb.String()
 }
 
@@ -321,18 +320,6 @@ func writeOutput(path, content string) {
 	}
 }
 
-func loadBuiltin() bool {
-	f, err := jnio.OpenJn(filepath.Join(jn.StdlibPath, "lib.jn"))
-	if err != nil {
-		println(err.Error())
-		return false
-	}
-	p := parser.New(f)
-	p.Defs = parser.Builtin
-	p.Parsef(false, false)
-	return !printlogs(p)
-}
-
 func compile(path string, main, nolocal, justDefs bool) *Parser {
 	loadJnSet()
 	p := parser.New(nil)
@@ -349,9 +336,6 @@ func compile(path string, main, nolocal, justDefs bool) *Parser {
 	if err != nil || !inf.IsDir() {
 		p.PushErr("no_stdlib")
 		return p
-	}
-	if !loadBuiltin() {
-		return nil
 	}
 	p.File = f
 	p.NoLocalPkg = nolocal

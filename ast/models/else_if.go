@@ -5,7 +5,7 @@ import "strings"
 type ElseIf struct {
 	Tok   Tok
 	Expr  Expr
-	Block Block
+	Block *Block
 }
 
 func (elif ElseIf) String() string {

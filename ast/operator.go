@@ -15,7 +15,7 @@ var SolidOperators = [...]string{
 	0:  tokens.PLUS,
 	1:  tokens.MINUS,
 	2:  tokens.STAR,
-	3:  tokens.SLASH,
+	3:  tokens.SOLIDUS,
 	4:  tokens.PERCENT,
 	5:  tokens.AMPER,
 	6:  tokens.VLINE,
@@ -28,6 +28,7 @@ var SolidOperators = [...]string{
 
 var ExpressionOperators = [...]string{
 	0: tokens.TRIPLE_DOT,
+	1: tokens.COLON,
 }
 
 func IsUnaryOperator(kind string) bool {

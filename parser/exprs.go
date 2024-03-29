@@ -9,6 +9,10 @@ import (
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
+func arrayExprIsAutoSized(expr models.Expr) bool {
+	return len(expr.Processes) == 0 || len(expr.Toks) == 0
+}
+
 func isstr(s string) bool {
 	return s != "" && (s[0] == '"' || israwstr(s))
 }
@@ -29,34 +33,46 @@ func isbool(s string) bool {
 	return s == tokens.TRUE || s == tokens.FALSE
 }
 
-func valIsStructType(v value) bool {
-	return v.isType && typeIsStruct(v.data.Type)
-}
-
 func valIsEnumType(v value) bool {
 	return v.isType && typeIsEnum(v.data.Type)
 }
 
-func isBoolExpr(val value) bool {
-	switch {
-	case typeIsNilCompatible(val.data.Type):
-		return true
-	case val.data.Type.Id == jntype.Bool && typeIsPure(val.data.Type):
-		return true
-	}
-	return false
+func isBoolExpr(v value) bool {
+	return typeIsPure(v.data.Type) && v.data.Type.Id == jntype.Bool
 }
 
 func isfloat(s string) bool {
 	if strings.HasPrefix(s, "0x") {
 		return false
 	}
-	return strings.Contains(s, tokens.DOT) || strings.ContainsAny(s, "eE")
+	return strings.Contains(s, tokens.DOT) ||
+		strings.ContainsAny(s, "eE")
+}
+
+func canGetPtr(v value) bool {
+	if !v.lvalue {
+		return false
+	}
+	switch v.data.Type.Id {
+	case jntype.Func, jntype.Enum:
+		return false
+	default:
+		return v.data.Tok.Id == tokens.Id
+	}
+}
+
+func valIsStructIns(val value) bool {
+	return !val.isType && typeIsStruct(val.data.Type)
+}
+
+func valIsTraitIns(val value) bool {
+	return !val.isType && typeIsTrait(val.data.Type)
 }
 
 func isForeachIterExpr(val value) bool {
 	switch {
-	case typeIsArray(val.data.Type),
+	case typeIsSlice(val.data.Type),
+		typeIsArray(val.data.Type),
 		typeIsMap(val.data.Type):
 		return true
 	case !typeIsPure(val.data.Type):
@@ -77,16 +93,6 @@ func isConstExpression(v string) bool {
 	return isConstNumeric(v) || isstr(v) || ischar(v) || isnil(v) || isbool(v)
 }
 
-func checkIntBit(v models.Data, bit int) bool {
-	if bit == 0 {
-		return false
-	}
-	if jntype.IsSignedNumericType(v.Type.Id) {
-		return jnbits.CheckBitInt(v.Value, bit)
-	}
-	return jnbits.CheckBitUInt(v.Value, bit)
-}
-
 func checkFloatBit(v models.Data, bit int) bool {
 	if bit == 0 {
 		return false
@@ -94,9 +100,23 @@ func checkFloatBit(v models.Data, bit int) bool {
 	return jnbits.CheckBitFloat(v.Value, bit)
 }
 
-func defaultValueOfType(t DataType) string {
-	if typeIsNilCompatible(t) {
-		return tokens.NIL
+func validExprForConst(v value) bool {
+	return v.constExpr
+}
+
+func okForShifting(v value) bool {
+	if !typeIsPure(v.data.Type) ||
+		!jntype.IsInteger(v.data.Type.Id) {
+		return false
 	}
-	return jntype.DefaultValOfType(t.Id)
+	if !v.constExpr {
+		return true
+	}
+	switch t := v.expr.(type) {
+	case int64:
+		return t >= 0
+	case uint64:
+		return true
+	}
+	return false
 }

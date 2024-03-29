@@ -7,12 +7,12 @@ import (
 
 type Statement struct {
 	Tok            Tok
-	Val            any
+	Data           any
 	WithTerminator bool
 }
 
 func (s Statement) String() string {
-	return fmt.Sprint(s.Val)
+	return fmt.Sprint(s.Data)
 }
 
 type ExprStatement struct {

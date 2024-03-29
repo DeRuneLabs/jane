@@ -1,34 +1,30 @@
 package jnapi
 
 import (
-	"encoding/hex"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 )
 
-const RawStrMark = "R"
-
 func ToStr(bytes []byte) string {
 	var cxx strings.Builder
-	cxx.WriteString("str_jnt{\"")
-	cxx.WriteString(bytesToStr(bytes))
-	cxx.WriteString("\"}")
+	cxx.WriteString("str_jnt{")
+	btoa := bytesToStr(bytes)
+	if btoa != "" {
+		cxx.WriteByte('{')
+		cxx.WriteString(btoa)
+		cxx.WriteByte('}')
+	}
+	cxx.WriteString("}")
 	return cxx.String()
 }
 
 func ToRawStr(bytes []byte) string {
-	var cxx strings.Builder
-	cxx.WriteString("str_jnt{")
-	cxx.WriteString(RawStrMark)
-	cxx.WriteString("\"(")
-	cxx.WriteString(bytesToStr(bytes))
-	cxx.WriteString(")\"}")
-	return cxx.String()
+	return ToStr(bytes)
 }
 
 func ToChar(b byte) string {
-	return "'" + string(b) + "'"
+	return btoa(b)
 }
 
 func ToRune(bytes []byte) string {
@@ -46,16 +42,41 @@ func ToRune(bytes []byte) string {
 }
 
 func btoa(b byte) string {
-	if b <= 127 {
-		return string(b)
-	}
-	return "\\x" + hex.EncodeToString([]byte{b})
+	return "0x" + strconv.FormatUint(uint64(b), 16)
 }
 
 func bytesToStr(bytes []byte) string {
-	var str strings.Builder
-	for _, b := range bytes {
-		str.WriteString(btoa(b))
+	if len(bytes) == 0 {
+		return ""
 	}
-	return str.String()
+	var str strings.Builder
+	for i := 0; i < len(bytes); i++ {
+		b := bytes[i]
+		if b == '\\' {
+			i++
+			switch bytes[i] {
+			case 'u':
+				rc, _ := strconv.ParseUint(string(bytes[i+1:i+5]), 16, 32)
+				r := rune(rc)
+				str.WriteString(bytesToStr([]byte(string(r))))
+				i += 4
+			case 'U':
+				rc, _ := strconv.ParseUint(string(bytes[i+1:i+9]), 16, 32)
+				r := rune(rc)
+				str.WriteString(bytesToStr([]byte(string(r))))
+				i += 8
+			case 'x':
+				str.WriteByte('0')
+				str.Write(bytes[i : i+3])
+				i += 2
+			default:
+				str.Write(bytes[i : i+3])
+				i += 2
+			}
+		} else {
+			str.WriteString(btoa(b))
+		}
+		str.WriteByte(',')
+	}
+	return str.String()[:str.Len()-1]
 }

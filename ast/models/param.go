@@ -31,26 +31,24 @@ func (p *Param) TypeString() string {
 	return ts.String()
 }
 
+func (p *Param) OutId() string {
+	return jnapi.OutId(p.Id, p.Tok.File)
+}
+
 func (p Param) String() string {
 	var cxx strings.Builder
 	cxx.WriteString(p.Prototype())
 	if p.Id != "" && !jnapi.IsIgnoreId(p.Id) && p.Id != jn.Anonymous {
 		cxx.WriteByte(' ')
-		cxx.WriteString(jnapi.OutId(p.Id, p.Tok.File))
+		cxx.WriteString(p.OutId())
 	}
 	return cxx.String()
 }
 
 func (p *Param) Prototype() string {
 	var cxx strings.Builder
-	if p.Volatile {
-		cxx.WriteString("volatile ")
-	}
-	if p.Const {
-		cxx.WriteString("const ")
-	}
 	if p.Variadic {
-		cxx.WriteString("array<")
+		cxx.WriteString("slice<")
 		cxx.WriteString(p.Type.String())
 		cxx.WriteByte('>')
 	} else {

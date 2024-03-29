@@ -4,7 +4,7 @@ import "strings"
 
 type Else struct {
 	Tok   Tok
-	Block Block
+	Block *Block
 }
 
 func (elseast Else) String() string {
