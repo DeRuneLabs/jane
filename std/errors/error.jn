@@ -18,5 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+struct error {
+  message: str
+}
+
+impl Error for error {
+  &error() str {
+    ret .message
+  }
+}

@@ -18,5 +18,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+//doc:
+// copy component of source slice to destination slice
+type[Item]
+pub copy(destination, source []Item) {
+  if source.empty() || destination.empty() {
+    ret
+  }
+
+  len: int
+  match {
+    case destination.len > source.len:
+      len = source.len
+    case source.len > destination.len:
+      len = destination.len
+    default:
+      len = source.len
+  }
+
+  for i: = 0, i < len, i++ {
+    destination[i] = source[i]
+  }
+}

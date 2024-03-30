@@ -1,56 +1,41 @@
-// MIT License
-// Copyright (c) DeRuneLabs
+// Copyright (c) 2024 - DeRuneLabs
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 //doc:
-// allocate n memory by sizeof specified data-type.
-// allocated memory initialized with zero (0) value
-type[Alloc_T]
-pub calloc(const n size) *Alloc_T {
-  if n == 0 {
-    ret nil
-  }
-  //cxx: return (@Alloc_T*)(std::calloc(@n, sizeof(@Alloc_T)));
-}
-
-//doc:
-// allocate memory by specified size
-pub malloc(const size size) voidptr {
-  if size == 0 {
-    ret nil
-  }
-  //cxx: return std::malloc(@size);
-}
-
-//doc:
-// resize allocation based on given size
-pub realloc(ptr voidptr, const size size) voidptr {
-  if !ptr {
-    ret nil
-  }
-  //cxx: return std::realloc(@ptr, @size);
-}
-
-//doc:
-// return pointer to new allocation of data type.
-// if allocation is success, otherwise nil
-@inline
-@type_param
+// return pointer to heap-allocateion of data type if allocation
+// is success, nil if not
+@typearg
 type[T]
 pub new() *T {
-  //cxx: return new(std::nothrow) @T;
+  ptr: *T
+  //cxx: @ptr._ptr = new(std::nothrow) @T;
+  if (ptr == nil) {
+    panic(std::errors::new("memory allocation failed"))
+  }
 }
 
 //doc:
-// deallocate given healp-allocated pointer
+// drop pointer from reference if include reference counting and
+// set as nil
 @inline
-pub free(ptr voidptr) {
-  //cxx: std::free(@ptr);
+type[T]
+pub drop(&ptr *T) {
+  ptr = nil
 }

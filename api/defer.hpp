@@ -7,8 +7,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,19 +23,28 @@
 
 #include "jn_util.hpp"
 
-#define DEFER(_Expr) defer CONCAT(JNDEFER_, __LINE__){[&](void) mutable -> void { _Expr; }}
+#define DEFER(_Expr)                                                           \
+  defer CONCAT(JNDEFER_, __LINE__) {                                           \
+    [&](void) mutable -> void { _Expr; }                                       \
+  }
 
 struct defer;
 
 struct defer {
   typedef std::function<void(void)> _Function_t;
-    template<class Callable>
-    defer(Callable &&_function): _function(std::forward<Callable>(_function)) {}
-    defer(defer &&_Src): _function(std::move(_Src._function))                 { _Src._function = nullptr; }
-    ~defer() noexcept                                                         { if (this->_function) { this->_function(); } }
-    defer(const defer &)          = delete;
-    void operator=(const defer &) = delete;
-    _Function_t _function;
+  template <class Callable>
+  defer(Callable &&_function) : _function(std::forward<Callable>(_function)) {}
+  defer(defer &&_Src) : _function(std::move(_Src._function)) {
+    _Src._function = nullptr;
+  }
+  ~defer() noexcept {
+    if (this->_function) {
+      this->_function();
+    }
+  }
+  defer(const defer &) = delete;
+  void operator=(const defer &) = delete;
+  _Function_t _function;
 };
 
 #endif // !__JNC_DEFER_HPP

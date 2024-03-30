@@ -18,5 +18,58 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+//doc:
+// wrapper structure for unsafe raw pointer
+type[T]
+pub struct Ptr {
+  ptr: uintptr
+}
+
+impl Ptr {
+  //doc: return unsafe pointer as unsafe voidptr
+  @inline
+  pub &to_voidptr() Voidptr {
+    ret voidptr_from(.ptr)
+  }
+
+  //doc:
+  // move pointer from its pointing position by size of data type.
+  // the offset amount is determined by n,
+  // moving back require negative expression
+  // and moving forward require positive expression
+  @inline
+  pub &move(n int) {
+    .ptr += n * std::mem::sizeof(T)
+  }
+
+  //doc: rerturn data of pointer
+  @inline
+  pub &get() T {
+    ptr: = .ptr
+    //cxx: return *(@T*)(@ptr);
+  }
+}
+
+impl Pointer for Ptr {
+  @inline
+  &addr() uintptr {
+    ret .ptr
+  }
+}
+
+//doc:
+// return unsafe poiter for given raw pointer
+type[T]
+pub ptr_of(ptr *T) Ptr[T] {
+  ret ptr_from[T](uintptr(ptr))
+}
+
+//doc:
+// return unsafe pointer from given address
+@inline
+type[T]
+pub ptr_from(addr uintptr) Ptr[T] {
+  ret Ptr[T] {
+    ptr: addr,
+  }
+}

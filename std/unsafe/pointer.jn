@@ -18,5 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+//doc:
+// common behavior unsafe pointer
+pub trait Pointer {
+  addr() uintptr
+}

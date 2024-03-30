@@ -18,5 +18,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+//doc:
+// wrapper structure for voidptr
+pub struct Voidptr {
+  ptr: uintptr
+}
+
+impl Voidptr {
+  //doc: return casted raw pointer of given type
+  @typearg
+  type[T]
+  pub &cast() *T {
+    ptr: *T
+    //cxx: @ptr = (@T*)(this->@ptr);
+    ret ptr
+  }
+
+  //doc: return unsafe pointer of given type
+  @inline @typearg
+  type[T]
+  pub &to_ptr() Ptr[T] {
+    ret ptr_from[T](.ptr)
+  }
+}
+
+impl Pointer for Voidptr {
+  @inline
+  &addr() uintptr {
+    ret .ptr
+  }
+}
+
+//doc: return voidptr instance from given addresss
+@inline
+pub voidptr_from(addr uintptr) Voidptr {
+  ret Voidptr {
+    ptr: addr
+  }
+}

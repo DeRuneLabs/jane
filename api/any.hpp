@@ -7,8 +7,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -26,70 +26,78 @@
 struct any_jnt;
 
 struct any_jnt {
-  public:
-    std::any _expr;
+public:
+  std::any _expr;
 
-    any_jnt(void) noexcept {}
+  any_jnt(void) noexcept {}
 
-    template<typename T>
-    any_jnt(const T &_Expr) noexcept
-    { this->operator=(_Expr); }
+  template <typename T> any_jnt(const T &_Expr) noexcept {
+    this->operator=(_Expr);
+  }
 
-    ~any_jnt(void) noexcept
-    { this->_delete(); }
+  ~any_jnt(void) noexcept { this->_delete(); }
 
-    inline void _delete(void) noexcept
-    { this->_expr.reset(); }
+  inline void _delete(void) noexcept { this->_expr.reset(); }
 
-    inline bool _isnil(void) const noexcept
-    { return !this->_expr.has_value(); }
+  inline bool _isnil(void) const noexcept { return !this->_expr.has_value(); }
 
-    template<typename T>
-    inline bool type_is(void) const noexcept {
-        if (std::is_same<T, std::nullptr_t>::value) { return false; }
-        if (this->_isnil()) { return false; }
-        return std::strcmp(this->_expr.type().name(), typeid(T).name()) == 0;
+  template <typename T> inline bool type_is(void) const noexcept {
+    if (std::is_same<T, std::nullptr_t>::value) {
+      return false;
     }
-
-    template<typename T>
-    void operator=(const T &_Expr) noexcept {
-        this->_delete();
-        this->_expr = _Expr;
+    if (this->_isnil()) {
+      return false;
     }
+    return std::strcmp(this->_expr.type().name(), typeid(T).name()) == 0;
+  }
 
-    inline void operator=(const std::nullptr_t) noexcept
-    { this->_delete(); }
+  template <typename T> void operator=(const T &_Expr) noexcept {
+    this->_delete();
+    this->_expr = _Expr;
+  }
 
-    template<typename T>
-    operator T(void) const noexcept {
-        if (this->_isnil()) { JNID(panic)("invalid memory address or nil pointer deference"); }
-        if (!this->type_is<T>()) { JNID(panic)("incompatible type"); }
-        return std::any_cast<T>(this->_expr);
+  inline void operator=(const std::nullptr_t) noexcept { this->_delete(); }
+
+  template <typename T> operator T(void) const noexcept {
+    if (this->_isnil()) {
+      JNID(panic)("invalid memory address or nil pointer deference");
     }
-
-    template<typename T>
-    inline bool operator==(const T &_Expr) const noexcept
-    { return this->type_is<T>() && this->operator T() == _Expr; }
-
-    template<typename T>
-    inline constexpr
-    bool operator!=(const T &_Expr) const noexcept
-    { return !this->operator==(_Expr); }
-
-    inline bool operator==(const any_jnt &_Any) const noexcept {
-        if (this->_isnil() && _Any._isnil()) { return true; }
-        return std::strcmp(this->_expr.type().name(), _Any._expr.type().name()) == 0;
+    if (!this->type_is<T>()) {
+      JNID(panic)("incompatible type");
     }
+    return std::any_cast<T>(this->_expr);
+  }
 
-    inline bool operator!=(const any_jnt &_Any) const noexcept
-    { return !this->operator==(_Any); }
+  template <typename T> inline bool operator==(const T &_Expr) const noexcept {
+    return this->type_is<T>() && this->operator T() == _Expr;
+  }
 
-    friend std::ostream &operator<<(std::ostream &_Stream, const any_jnt &_Src) noexcept {
-        if (_Src._expr.has_value()) { _Stream << "<any>"; }
-        else { _Stream << 0; }
-        return _Stream;
+  template <typename T>
+  inline constexpr bool operator!=(const T &_Expr) const noexcept {
+    return !this->operator==(_Expr);
+  }
+
+  inline bool operator==(const any_jnt &_Any) const noexcept {
+    if (this->_isnil() && _Any._isnil()) {
+      return true;
     }
+    return std::strcmp(this->_expr.type().name(), _Any._expr.type().name()) ==
+           0;
+  }
+
+  inline bool operator!=(const any_jnt &_Any) const noexcept {
+    return !this->operator==(_Any);
+  }
+
+  friend std::ostream &operator<<(std::ostream &_Stream,
+                                  const any_jnt &_Src) noexcept {
+    if (_Src._expr.has_value()) {
+      _Stream << "<any>";
+    } else {
+      _Stream << 0;
+    }
+    return _Stream;
+  }
 };
 
 #endif // !__JNC_ANY_HPP
-

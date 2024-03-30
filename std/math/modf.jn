@@ -18,5 +18,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+//doc:
+// return integer and frac float-point number that sum to f,
+// both value have the same sign as f
+pub modf(f f64) [integer f64, frac f64] {
+  if f < 1 {
+    match {
+      case f < 0:
+        integer, frac = modf(-f)
+        ret -integer, -frac
+      case f == 0:
+        ret f, f
+    }
+    ret 0, f
+  }
+  x: = f64_bits(f)
+	e: = uint(x>>SHIFT)&MASK - BIAS
+
+  if e < 64-12 {
+		x &= ~(1<<uint(64-12-e) - 1)
+	}
+	integer = f64_from_bits(x)
+	frac = f - integer
+	ret
+}

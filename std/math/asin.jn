@@ -18,5 +18,35 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+pub asin(x f64) f64 {
+  if x == 0 {
+    ret x
+  }
+  sign: = false
+  if x < 0 {
+    x = -x
+    sign = true
+  }
+  if x > 1 {
+    ret nan()
+  }
+
+  temp: = sqrt(1 - x * x)
+  if x > 0.7 {
+    temp = PI/2 - satan(temp/x)
+  } else {
+    temp = satan(x / temp)
+  }
+
+  if sign {
+    temp = -temp
+  }
+  ret temp
+}
+
+//doc:
+// return the arccosine, in radian, of x
+@inline
+pub acos(x f64) f64 {
+  ret PI/2 - asin(x)
+}

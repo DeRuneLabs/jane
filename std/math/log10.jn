@@ -18,5 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+//doc:
+// return binary logarithm of x, the special cases are the same as for log
+pub log2(x f64) f64 {
+  frac:, exp: = frexp(x)
+  if frac == 0.5 {
+    ret f64(exp - 1)
+  }
+  ret log(frac)*(1/LN2) + f64(exp)
+}

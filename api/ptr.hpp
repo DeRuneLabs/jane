@@ -7,8 +7,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,81 +24,91 @@
 #include "jn_util.hpp"
 #include "typedef.hpp"
 
-template<typename T>
-struct ptr;
+template <typename T> struct ptr;
 
-template<typename T>
-struct ptr {
-    T *_ptr{nil};
-    mutable uint_jnt *_ref{nil};
+template <typename T> struct ptr {
+  T *_ptr{nil};
+  mutable uint_jnt *_ref{nil};
 
-    ptr<T>(void) noexcept {}
+  ptr<T>(void) noexcept {}
 
-    ptr<T>(T* _Ptr) noexcept
-    { this->_ptr = _Ptr; }
+  ptr<T>(T *_Ptr) noexcept { this->_ptr = _Ptr; }
 
-    ptr<T>(const ptr<T> &_Ptr) noexcept
-    { this->operator=(_Ptr); }
+  ptr<T>(const ptr<T> &_Ptr) noexcept { this->operator=(_Ptr); }
 
-    ~ptr<T>(void) noexcept
-    { this->__dealloc(); }
+  ~ptr<T>(void) noexcept { this->__dealloc(); }
 
-    inline void __check_valid(void) const noexcept
-    { if(!this->_ptr) { JNID(panic)("invalid memory address or nil pointer deference"); } }
-
-    void __dealloc(void) noexcept {
-        if (!this->_ref) { return; }
-        (*this->_ref)--;
-        if ((*this->_ref) != 0) { return; }
-        delete this->_ref;
-        this->_ref = nil;
-        delete this->_ptr;
-        this->_ptr = nil;
+  inline void __check_valid(void) const noexcept {
+    if (!this->_ptr) {
+      JNID(panic)("invalid memory address or nil pointer deference");
     }
+  }
 
-    inline T &operator*(void) noexcept {
-        this->__check_valid();
-        return *this->_ptr;
+  void __dealloc(void) noexcept {
+    if (!this->_ref) {
+      return;
     }
-
-    inline T *operator->(void) noexcept {
-        this->__check_valid();
-        return this->_ptr;
+    (*this->_ref)--;
+    if ((*this->_ref) != 0) {
+      return;
     }
+    delete this->_ref;
+    this->_ref = nil;
+    delete this->_ptr;
+    this->_ptr = nil;
+  }
 
-    inline operator uintptr_jnt(void) const noexcept
-    { return (uintptr_jnt)(this->_ptr); }
+  inline T &operator*(void) noexcept {
+    this->__check_valid();
+    return *this->_ptr;
+  }
 
-    void operator=(const ptr<T> &_Ptr) noexcept {
-        this->__dealloc();
-        if (_Ptr._ref) { (*_Ptr._ref)++; }
-        this->_ref = _Ptr._ref;
-        this->_ptr = _Ptr._ptr;
+  inline T *operator->(void) noexcept {
+    this->__check_valid();
+    return this->_ptr;
+  }
+
+  inline operator uintptr_jnt(void) const noexcept {
+    return (uintptr_jnt)(this->_ptr);
+  }
+
+  void operator=(const ptr<T> &_Ptr) noexcept {
+    this->__dealloc();
+    if (_Ptr._ref) {
+      (*_Ptr._ref)++;
     }
+    this->_ref = _Ptr._ref;
+    this->_ptr = _Ptr._ptr;
+  }
 
-    void operator=(const std::nullptr_t) noexcept {
-        if (!this->_ref) {
-            this->_ptr = nil;
-            return;
-        }
-        this->__dealloc();
+  void operator=(const std::nullptr_t) noexcept {
+    if (!this->_ref) {
+      this->_ptr = nil;
+      return;
     }
+    this->__dealloc();
+  }
 
-    inline bool operator==(const std::nullptr_t) const noexcept
-    { return this->_ptr == nil; }
+  inline bool operator==(const std::nullptr_t) const noexcept {
+    return this->_ptr == nil;
+  }
 
-    inline bool operator!=(const std::nullptr_t) const noexcept
-    { return !this->operator==(nil); }
+  inline bool operator!=(const std::nullptr_t) const noexcept {
+    return !this->operator==(nil);
+  }
 
-    inline bool operator==(const ptr<T> &_Ptr) const noexcept
-    { return this->_ptr == _Ptr; }
+  inline bool operator==(const ptr<T> &_Ptr) const noexcept {
+    return this->_ptr == _Ptr;
+  }
 
-    inline bool operator!=(const ptr<T> &_Ptr) const noexcept
-    { return !this->operator==(_Ptr); }
+  inline bool operator!=(const ptr<T> &_Ptr) const noexcept {
+    return !this->operator==(_Ptr);
+  }
 
-    friend inline
-    std::ostream &operator<<(std::ostream &_Stream, const ptr<T> &_Src) noexcept
-    { return _Stream << _Src._ptr; }
+  friend inline std::ostream &operator<<(std::ostream &_Stream,
+                                         const ptr<T> &_Src) noexcept {
+    return _Stream << _Src._ptr;
+  }
 };
 
 #endif // !__JNC_PTR_HPP

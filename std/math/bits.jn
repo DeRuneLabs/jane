@@ -9,12 +9,15 @@
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
 
-const nannumber: = 0x7FF8000000000001
-const uvinf: = 0x7FF0000000000000
-const uvneginf: = 0xFFF0000000000000
-const mask : = 0x7FF
-const shift : = 64 - 11 - 1
-const bias : = 1023
+const UVNAN    : = 0x7FF8000000000001
+const UVINF    : = 0x7FF0000000000000
+const UVNEGINF : = 0xFFF0000000000000
+const UVONE    : = 0x3FF0000000000000
+const MASK     : = 0x7FF
+const SHIFT    : = 64 - 11 - 1
+const BIAS     : = 1023
+const SIGN_MASK: = 1 << 63
+const FRAC_MASK: = 1<<SHIFT - 1
 
 
 //doc: return IEEE 754 `not-a-number` value

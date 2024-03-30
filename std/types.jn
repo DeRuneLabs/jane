@@ -1,55 +1,93 @@
-// MIT License
-// Copyright (c) DeRuneLabs
+// Copyright (c) 2024 - DeRuneLabs
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-
-#pragma enofi
-
-//doc:
-// it can hold any value and can be nil
-// INFO:
-// if you can compare two any data type value,
-// you can get true if compare same any instance, false if not.
-
-// BUILT-IN
-
-// pub type i8
-// pub type i16
-// pub type i32
-// pub type i64
-// pub type u8
-// pub type u16
-// pub type u32
-// pub type u64
-// pub type f32
-// pub type f64
-// pub type int
-// pub type uint
-// pub type intptr
-// pub type uintptr
-// pub type voidptr
-// pub type any
-// pub type str
-// pub type bool
-
-// END BUILT-IN
-
-//doc: type alias for u8
-pub type byte u8
-
-//doc: type alias for i8
-pub type sbyte i8
-
-//doc: type alias for i32
-pub type rune i32
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 //doc:
-// uint
-// can store the maximum size
-pub type size uint
+// Signed 8-bit integer.
+type i8
+
+//doc:
+// Signed 16-bit integer.
+type i16
+
+//doc:
+// Signed 32-bit integer.
+type i32
+
+//doc:
+// Signed 64-bit integer.
+type i64
+
+//doc:
+// Unsigned 8-bit integer.
+type u8
+
+//doc:
+// Unsigned 16-bit integer.
+type u16
+
+//doc:
+// Unsigned 32-bit integer.
+type u32
+
+//doc:
+// Unsigned 16-bit integer.
+type u64
+
+//doc:
+// 32-bit floating-point.
+type f32
+
+//doc:
+// 64-bit floating-point.
+type f64
+
+//doc:
+// It is a platform dependent integer type.
+type int
+
+//doc:
+// It is a platform dependent unsigned integer type.
+type uint
+
+//doc:
+// It is a platform dependent unsigned integer type
+// that is big enough to hold a pointer.
+// Can used for casting pointers to integers.
+type uintptr
+
+//doc:
+// UTF-8 byte encoded character string.
+type str
+
+//doc:
+// Boolean type for logical expressions.
+type bool
+
+//doc:
+// it can be hold any data type and nil only support equal (==) and not equal (!=) operatos.
+type any
+
+//doc:
+// alias for u8. it is used, by convention, to distinguish byte value from 8-bit unsigned, integer value
+type byte u8
+
+//doc:
+// is an alias for i32, it is used, by convention, to distinguish char value from integer value
+type rune i32

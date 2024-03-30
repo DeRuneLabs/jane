@@ -18,5 +18,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+//doc:
+// return next representation f32 value after x towards y
+pub nextafter32(x, y f32) [r f32] {
+  match {
+    case isnan(f64(x)) || isnan(f64(y)):
+      r = f32(nan())
+    case x == y:
+		  r = x
+	  case x == 0:
+		  r = f32(copysign(f64(f32_from_bits(1)), f64(y)))
+	  case (y > x) == (x > 0):
+		  r = f32_from_bits(f32_bits(x) + 1)
+	  default:
+		  r = f32_from_bits(f32_bits(x) - 1)
+  }
+  ret
+}
+
+//doc:
+// return next representable f64 value after x towards y
+pub nextafter(x, y f64) [r f64] {
+  match {
+    case isnan(x) || isnan(y):
+      r = nan()
+    case x == y:
+      r = x
+    case x == 0:
+      r = copysign(f64_from_bits(1), y)
+    case (y > x) == (x > 0):
+		  r = f64_from_bits(f64_bits(x) + 1)
+	  default:
+		  r = f64_from_bits(f64_bits(x) - 1)
+  }
+  ret
+}

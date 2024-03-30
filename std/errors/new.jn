@@ -18,5 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+//doc: create new error with given message
+@inline
+pub new(message str) Error {
+  ret error{message}
+}

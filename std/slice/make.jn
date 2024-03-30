@@ -18,5 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+//doc:
+// allocate new n size slice for given data type
+@inline
+pub make(n int) []Item {
+  if n < 0 {
+    ret nil
+  }
+  //cxx: return slice<@Item>(@n);
+}

@@ -8,8 +8,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -25,33 +25,34 @@
 #ifndef _WINDOWS
 #define _WINDOWS
 #endif // !_WINDOWS
-#endif // defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+#endif // defined(WIN32) || defined(_WIN32) || defined(__WIN32__) ||
+       // defined(__NT__)
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <sstream>
 #include <type_traits>
-#include <functional>
-#include <sstream>
 
-#include <iostream>
+#include <any>
 #include <cstring>
-#include <string>
-#include <sstream>
 #include <functional>
-#include <vector>
+#include <iostream>
 #include <map>
+#include <sstream>
+#include <string>
 #include <thread>
 #include <typeinfo>
-#include <any>
 #include <valarray>
+#include <vector>
 #ifdef _WINDOWS
 #include <codecvt>
-#include <windows.h>
 #include <fcntl.h>
+#include <windows.h>
 #endif // _WINDOWS
 
 #define JN_EXIT_PANIC 2
-#define _CONCAT(_A, _B) _A ## _B
+#define _CONCAT(_A, _B) _A##_B
 #define CONCAT(_A, _B) _CONCAT(_A, _B)
 #define JNID(_Identifier) CONCAT(_, _Identifier)
 #define nil nullptr

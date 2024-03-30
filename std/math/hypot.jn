@@ -18,5 +18,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//doc: panic with given error instance
-panic(error Error)
+//doc:
+// return sqrt(p*p + q*q), taking care to avoid
+// unnecessary overflow and underflow
+pub hypot(p, q f64) f64 {
+  match {
+    case isinf(p, 0) || isinf(q, 0):
+      ret inf(1)
+    case isnan(p) || isnan(q):
+      ret nan()
+  }
+  p, q = abs(p), abs(q)
+	if p < q {
+		p, q = q, p
+	}
+	if p == 0 {
+		ret 0
+	}
+	q = q / p
+	ret p * sqrt(1+q*q)
+}
