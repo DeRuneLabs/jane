@@ -18,33 +18,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use cpp `read.hpp`
+#ifndef __JNC_STD_IO_READ_HPP
+#define __JNC_STD_IO_READ_HPP
 
-cpp __jnc_read() str
-cpp __jnc_readln() str
+#include "../../api/str.hpp"
 
-//doc:
-// read first part of line from command-line
-@inline
-pub read() str {
-  ret cpp.__jnc_read()
+str_jnt __jnc_read() noexcept;
+str_jnt __jnc_readln() noexcept;
+
+#ifdef _WINDOWS
+
+inline std::string
+__jnc_std_io_encode_utf8(const std::wstring &_WStr) noexcept {
+  std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> conv{};
+  return conv.to_bytes(_WStr);
+}
+#endif // _WINDOWS
+
+str_jnt __jnc_read() noexcept {
+#ifdef _WINDOWS
+  std::wstring buffer{};
+  std::wcin >> buffer;
+  return __jnc_std_io_encode_utf8(buffer).c_str();
+#else
+  std::string buffer{};
+  std::cin >> buffer;
+  return buffer.c_str();
+#endif // _WINDOWS
 }
 
-//doc:
-// read full-complete line from command-line
-@inline
-pub readln() str {
-  ret cpp.__jnc_readln()
+str_jnt __jnc_readln() noexcept {
+#ifdef _WINDOWS
+  std::wstring buffer{};
+  std::getline(std::wcin, buffer);
+  return __jnc_std_io_encode_utf8(buffer).c_str();
+#else
+  std::string buffer{};
+  std::getline(std::cin, buffer);
+  return buffer.c_str();
+#endif // _WINDOWS
 }
 
-#pragma enofi
-
-testing_read() {
-  print("insert name: ")
-  input: = read()
-  println("welcome " + input)
-}
-
-main() {
-  testing_read()
-}
+#endif // !__JNC_STD_IO_READ_HPP

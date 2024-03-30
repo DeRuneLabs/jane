@@ -293,11 +293,43 @@ func getCallData(toks Toks, m *exprModel) (data callData) {
 	if len(data.expr) == 0 {
 		return
 	}
-	// Below is call expression
 	if tok := data.expr[len(data.expr)-1]; tok.Id == tokens.Brace && tok.Kind == tokens.RBRACKET {
 		data.expr, data.generics = ast.RangeLast(data.expr)
 	}
 	return
+}
+
+func (e *eval) callCppLink(data callData, m *exprModel) (v value) {
+	v.data.Type.Id = jntype.Void
+	v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
+	tok := data.expr[0]
+	data.expr = data.expr[1:]
+	if len(data.expr) == 0 {
+		e.pusherrtok(tok, "invalid_syntax")
+		return
+	}
+	tok = data.expr[0]
+	if tok.Id != tokens.Dot {
+		e.pusherrtok(tok, "invalid_syntax")
+		return
+	}
+	data.expr = data.expr[1:]
+	if len(data.expr) == 0 {
+		e.pusherrtok(tok, "invalid_syntax")
+		return
+	}
+	tok = data.expr[0]
+	if tok.Id != tokens.Id {
+		e.pusherrtok(tok, "invalid_syntax")
+		return
+	}
+	link := e.p.linkById(tok.Kind)
+	if link == nil {
+		e.pusherrtok(tok, "id_noexist", tok.Kind)
+		return
+	}
+	m.appendSubNode(exprNode{link.Link.Id})
+	return e.p.callFunc(link.Link, data, m)
 }
 
 func (e *eval) parenthesesRange(toks Toks, m *exprModel) (v value) {
@@ -318,6 +350,8 @@ func (e *eval) parenthesesRange(toks Toks, m *exprModel) (v value) {
 		return e.betweenParentheses(data.args, m)
 	}
 	switch tok := data.expr[0]; tok.Id {
+	case tokens.Cpp:
+		return e.callCppLink(data, m)
 	case tokens.DataType, tokens.Id:
 		if len(data.expr) == 1 && len(data.generics) == 0 {
 			v, isret := e.dataTypeFunc(data.expr[0], data.args, m)
@@ -332,7 +366,7 @@ func (e *eval) parenthesesRange(toks Toks, m *exprModel) (v value) {
 	switch {
 	case typeIsFunc(v.data.Type):
 		f := v.data.Type.Tag.(*Func)
-		return e.p.callFunc(f, data.generics, data.args, m)
+		return e.p.callFunc(f, data, m)
 	}
 	e.pusherrtok(data.expr[len(data.expr)-1], "invalid_syntax")
 	return

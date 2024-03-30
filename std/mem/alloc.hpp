@@ -18,33 +18,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use cpp `read.hpp`
+#ifndef __JNC_STD_MEM_ALLOC_HPP
+#define __JNC_STD_MEM_ALLOC_HPP
 
-cpp __jnc_read() str
-cpp __jnc_readln() str
+#include "../../api/ptr.hpp"
 
-//doc:
-// read first part of line from command-line
-@inline
-pub read() str {
-  ret cpp.__jnc_read()
+template <typename T>
+ptr<T> __jnc_new_heap_ptr(void) noexcept;
+
+template <typename T>
+ptr<T> __jnc_new_heap_ptr(void) noexcept {
+  ptr<T> _ptr;
+  _ptr._ptr = new(std::nothrow) T;
+  if (!_ptr._ptr) {
+    JNID(panic)("memory allocation failed");
+  }
+  _ptr._ref = new(std::nothrow) uint_jnt{1};
+  if (!_ptr._ref) {
+    JNID(panic)("memory allocation failed");
+  }
+  return _ptr;
 }
 
-//doc:
-// read full-complete line from command-line
-@inline
-pub readln() str {
-  ret cpp.__jnc_readln()
-}
-
-#pragma enofi
-
-testing_read() {
-  print("insert name: ")
-  input: = read()
-  println("welcome " + input)
-}
-
-main() {
-  testing_read()
-}
+#endif // !__JNC_STD_MEM_ALLOC_HPP

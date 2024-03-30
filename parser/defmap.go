@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"github.com/DeRuneLabs/jane/ast/models"
 	"github.com/DeRuneLabs/jane/package/jnio"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
@@ -144,6 +145,15 @@ func (dm *Defmap) findFuncById(id string, f *File) (int, *Defmap, bool) {
 	return -1, nil, false
 }
 
+func (p *Parser) linkById(id string) *models.CppLink {
+	for _, link := range p.cppLinks {
+		if link.Link.Id == id {
+			return link
+		}
+	}
+	return nil
+}
+
 func (dm *Defmap) funcById(id string, f *File) (*function, *Defmap, bool) {
 	i, m, canshadow := dm.findFuncById(id, f)
 	if i == -1 {
@@ -176,7 +186,7 @@ func (dm *Defmap) globalById(id string, f *File) (*Var, *Defmap, bool) {
 }
 
 func (dm *Defmap) findById(id string, f *File) (int, *Defmap, byte) {
-	var finders = map[byte]func(string, *jnio.File) (int, *Defmap, bool){
+	finders := map[byte]func(string, *jnio.File) (int, *Defmap, bool){
 		'g': dm.findGlobalById,
 		'f': dm.findFuncById,
 		'e': dm.findEnumById,

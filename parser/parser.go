@@ -61,6 +61,7 @@ type Parser struct {
 	waitingGlobals []waitingGlobal
 	eval           *eval
 	allowBuiltin   bool
+	cppLinks       []*models.CppLink
 
 	NoLocalPkg bool
 	JustDefs   bool
@@ -129,6 +130,18 @@ func (p *Parser) pushwarn(key string, args ...any) {
 	})
 }
 
+func (p *Parser) CppLinks() string {
+	var cpp strings.Builder
+	for _, use := range used {
+		if use.cppLink {
+			cpp.WriteString(`#include "`)
+			cpp.WriteString(use.Path)
+			cpp.WriteString("\"\n")
+		}
+	}
+	return cpp.String()
+}
+
 func cppTypes(dm *Defmap) string {
 	var cpp strings.Builder
 	for _, t := range dm.Types {
@@ -143,7 +156,9 @@ func cppTypes(dm *Defmap) string {
 func (p *Parser) CppTypes() string {
 	var cpp strings.Builder
 	for _, use := range used {
-		cpp.WriteString(cppTypes(use.defs))
+		if !use.cppLink {
+			cpp.WriteString(cppTypes(use.defs))
+		}
 	}
 	cpp.WriteString(cppTypes(p.Defs))
 	return cpp.String()
@@ -163,7 +178,9 @@ func cppEnums(dm *Defmap) string {
 func (p *Parser) CppEnums() string {
 	var cpp strings.Builder
 	for _, use := range used {
-		cpp.WriteString(cppEnums(use.defs))
+		if !use.cppLink {
+			cpp.WriteString(cppEnums(use.defs))
+		}
 	}
 	cpp.WriteString(cppEnums(p.Defs))
 	return cpp.String()
@@ -183,13 +200,15 @@ func cppTraits(dm *Defmap) string {
 func (p *Parser) CppTraits() string {
 	var cpp strings.Builder
 	for _, use := range used {
-		cpp.WriteString(cppTraits(use.defs))
+		if !use.cppLink {
+			cpp.WriteString(cppTraits(use.defs))
+		}
 	}
 	cpp.WriteString(cppTraits(p.Defs))
 	return cpp.String()
 }
 
-func cxxStructs(dm *Defmap) string {
+func cppStructs(dm *Defmap) string {
 	var cpp strings.Builder
 	for _, s := range dm.Structs {
 		if s.Used && s.Ast.Tok.Id != tokens.NA {
@@ -203,9 +222,11 @@ func cxxStructs(dm *Defmap) string {
 func (p *Parser) CppStructs() string {
 	var cpp strings.Builder
 	for _, use := range used {
-		cpp.WriteString(cxxStructs(use.defs))
+		if !use.cppLink {
+			cpp.WriteString(cppStructs(use.defs))
+		}
 	}
-	cpp.WriteString(cxxStructs(p.Defs))
+	cpp.WriteString(cppStructs(p.Defs))
 	return cpp.String()
 }
 
@@ -234,11 +255,15 @@ func cppFuncPrototypes(dm *Defmap) string {
 func (p *Parser) CppPrototypes() string {
 	var cpp strings.Builder
 	for _, use := range used {
-		cpp.WriteString(cppStructPrototypes(use.defs))
+		if !use.cppLink {
+			cpp.WriteString(cppStructPrototypes(use.defs))
+		}
 	}
 	cpp.WriteString(cppStructPrototypes(p.Defs))
 	for _, use := range used {
-		cpp.WriteString(cppFuncPrototypes(use.defs))
+		if !use.cppLink {
+			cpp.WriteString(cppFuncPrototypes(use.defs))
+		}
 	}
 	cpp.WriteString(cppFuncPrototypes(p.Defs))
 	return cpp.String()
@@ -258,13 +283,15 @@ func cppGlobals(dm *Defmap) string {
 func (p *Parser) CppGlobals() string {
 	var cpp strings.Builder
 	for _, use := range used {
-		cpp.WriteString(cppGlobals(use.defs))
+		if !use.cppLink {
+			cpp.WriteString(cppGlobals(use.defs))
+		}
 	}
 	cpp.WriteString(cppGlobals(p.Defs))
 	return cpp.String()
 }
 
-func cxxFuncs(dm *Defmap) string {
+func cppFuncs(dm *Defmap) string {
 	var cpp strings.Builder
 	for _, f := range dm.Funcs {
 		if f.used && f.Ast.Tok.Id != tokens.NA {
@@ -278,9 +305,11 @@ func cxxFuncs(dm *Defmap) string {
 func (p *Parser) CppFuncs() string {
 	var cpp strings.Builder
 	for _, use := range used {
-		cpp.WriteString(cxxFuncs(use.defs))
+		if !use.cppLink {
+			cpp.WriteString(cppFuncs(use.defs))
+		}
 	}
-	cpp.WriteString(cxxFuncs(p.Defs))
+	cpp.WriteString(cppFuncs(p.Defs))
 	return cpp.String()
 }
 
@@ -303,7 +332,9 @@ func (p *Parser) CppInitializerCaller() string {
 		cpp.WriteString("();")
 	}
 	for _, use := range used {
-		pushInit(use.defs)
+		if !use.cppLink {
+			pushInit(use.defs)
+		}
 	}
 	pushInit(p.Defs)
 	cpp.WriteString("\n}")
@@ -312,6 +343,8 @@ func (p *Parser) CppInitializerCaller() string {
 
 func (p *Parser) Cpp() string {
 	var cpp strings.Builder
+	cpp.WriteString(p.CppLinks())
+	cpp.WriteByte('\n')
 	cpp.WriteString(p.CppTypes())
 	cpp.WriteByte('\n')
 	cpp.WriteString(p.CppEnums())
@@ -332,16 +365,44 @@ func getTree(toks Toks) ([]models.Object, []jnlog.CompilerLog) {
 	return b.Tree, b.Errors
 }
 
-func (p *Parser) checkUsePath(use *models.Use) bool {
+func (p *Parser) checkCppUsePath(use *models.Use) bool {
+	ext := filepath.Ext(use.Path)
+	if !jnapi.IsValidHeader(ext) {
+		p.pusherrtok(use.Tok, "invalid_header_ext", ext)
+		return false
+	}
+	err := os.Chdir(use.Tok.File.Dir)
+	if err != nil {
+		p.pusherrtok(use.Tok, "use_not_found", use.Path)
+		return false
+	}
 	info, err := os.Stat(use.Path)
+
+	if err != nil || info.IsDir() {
+		p.pusherrtok(use.Tok, "use_not_found", use.Path)
+		return false
+	}
+	use.Path, _ = filepath.Abs(use.Path)
+	_ = os.Chdir(jn.ExecPath)
+	return true
+}
+
+func (p *Parser) checkPureUsePath(use *models.Use) bool {
+	info, err := os.Stat(use.Path)
+	if err != nil || !info.IsDir() {
+		p.pusherrtok(use.Tok, "use_not_found", use.Path)
+		return false
+	}
+	return true
+}
+
+func (p *Parser) checkUsePath(use *models.Use) bool {
 	if use.Cpp {
-		if err != nil || info.IsDir() {
-			p.pusherrtok(use.Tok, "use_not_found", use.Path)
+		if !p.checkCppUsePath(use) {
 			return false
 		}
 	} else {
-		if err != nil || !info.IsDir() {
-			p.pusherrtok(use.Tok, "use_not_found", use.Path)
+		if !p.checkPureUsePath(use) {
 			return false
 		}
 	}
@@ -417,7 +478,15 @@ func (p *Parser) pushUse(use *use, selectors []Tok) {
 	src.defs = use.defs
 }
 
-func (p *Parser) compileUse(useAST *models.Use) (_ *use, hasErr bool) {
+func (p *Parser) compileCppLinkUse(useAST *models.Use) (*use, bool) {
+	use := new(use)
+	use.cppLink = true
+	use.Path = useAST.Path
+	use.tok = useAST.Tok
+	return use, false
+}
+
+func (p *Parser) compilePureUse(useAST *models.Use) (_ *use, hassErr bool) {
 	infos, err := ioutil.ReadDir(useAST.Path)
 	if err != nil {
 		p.pusherrmsg(err.Error())
@@ -454,6 +523,13 @@ func (p *Parser) compileUse(useAST *models.Use) (_ *use, hasErr bool) {
 		return use, false
 	}
 	return nil, false
+}
+
+func (p *Parser) compileUse(useAST *models.Use) (_ *use, hasErr bool) {
+	if useAST.Cpp {
+		return p.compileCppLinkUse(useAST)
+	}
+	return p.compilePureUse(useAST)
 }
 
 func (p *Parser) pushDefs(dest, src *Defmap) {
@@ -517,7 +593,8 @@ func (p *Parser) parseSrcTreeObj(obj models.Object) {
 	case models.Trait:
 		p.Trait(t)
 	case models.Impl:
-		// Parse at end
+	case models.CppLink:
+		p.CppLink(t)
 	case models.Comment:
 		p.Comment(t)
 	case models.Use:
@@ -834,6 +911,20 @@ func (p *Parser) Struct(s Struct) {
 	p.generics = nil
 	xs.Defs = new(Defmap)
 	p.parseFields(xs)
+}
+
+func (p *Parser) CppLink(link models.CppLink) {
+	if jnapi.IsIgnoreId(link.Link.Id) {
+		p.pusherrtok(link.Tok, "ignore_id")
+		return
+	} else if p.linkById(link.Link.Id) != nil {
+		p.pusherrtok(link.Tok, "exist_id", link.Link.Id)
+		return
+	}
+	linkf := link.Link
+	setGenerics(linkf, p.generics)
+	p.generics = nil
+	p.cppLinks = append(p.cppLinks, &link)
 }
 
 func (p *Parser) Trait(t models.Trait) {
@@ -1763,8 +1854,8 @@ func (p *Parser) checkFuncSpecialCases(f *Func) {
 	}
 }
 
-func (p *Parser) callFunc(f *Func, genericsToks, argsToks Toks, m *exprModel) value {
-	v := p.parseFuncCallToks(f, genericsToks, argsToks, m)
+func (p *Parser) callFunc(f *Func, data callData, m *exprModel) value {
+	v := p.parseFuncCallToks(f, data.generics, data.args, m)
 	v.lvalue = typeIsLvalue(v.data.Type)
 	return v
 }
@@ -1940,6 +2031,9 @@ func itsCombined(f *Func, generics []DataType) bool {
 }
 
 func (p *Parser) parseGenericFunc(f *Func, generics []DataType, errtok Tok) {
+	if f.Block == nil {
+		return
+	}
 	owner := f.Owner.(*Parser)
 	if owner == p {
 		rootBlock := p.rootBlock

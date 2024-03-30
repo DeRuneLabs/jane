@@ -18,33 +18,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use cpp `read.hpp`
+#ifndef __JNC_STD_SLICE_MAKE_HPP
+#define __JNC_STD_SLICE_MAKE_HPP
 
-cpp __jnc_read() str
-cpp __jnc_readln() str
+#include "../../api/typedef.hpp"
+#include "../../api/slice.hpp"
 
-//doc:
-// read first part of line from command-line
-@inline
-pub read() str {
-  ret cpp.__jnc_read()
+template <typename _Item_t>
+inline slice<_Item_t> __make_slice(const int_jnt &_N) noexcept;
+
+template <typename _Item_t>
+inline slice<_Item_t> __make_slice(const int_jnt &_N) noexcept {
+  return slice<_Item_t>(_N);
 }
 
-//doc:
-// read full-complete line from command-line
-@inline
-pub readln() str {
-  ret cpp.__jnc_readln()
-}
-
-#pragma enofi
-
-testing_read() {
-  print("insert name: ")
-  input: = read()
-  println("welcome " + input)
-}
-
-main() {
-  testing_read()
-}
+#endif // !__JNC_STD_SLICE_MAKE_HPP

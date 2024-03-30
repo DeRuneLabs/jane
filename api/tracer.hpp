@@ -61,4 +61,6 @@ struct tracer {
   }
 };
 
+tracer ___trace{};
+
 #endif // !_JNC_TRACER_HPP

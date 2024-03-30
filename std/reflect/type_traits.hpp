@@ -18,33 +18,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use cpp `read.hpp`
+#ifndef __JNC_STD_REFLECT_TYPE_TRAITS_HPP
+#define __JNC_STD_REFLECT_TYPE_TRAITS_HPP
 
-cpp __jnc_read() str
-cpp __jnc_readln() str
+#include "../../api/any.hpp"
+#include <type_traits>
 
-//doc:
-// read first part of line from command-line
-@inline
-pub read() str {
-  ret cpp.__jnc_read()
+template <typename T1, typename T2>
+inline bool __jnc_is_same(void) noexcept;
+
+template <typename T>
+inline bool __jnc_any_is(const any_jnt &_Src) noexcept;
+
+template <typename T1, typename T2>
+inline bool __jnc_is_same(void) noexcept {
+  return std::is_same<T1, T2>::value;
 }
 
-//doc:
-// read full-complete line from command-line
-@inline
-pub readln() str {
-  ret cpp.__jnc_readln()
+template <typename T>
+inline bool __jnc_any_is(const any_jnt &_Src) noexcept {
+  return _Src.type_is<T>();
 }
 
-#pragma enofi
-
-testing_read() {
-  print("insert name: ")
-  input: = read()
-  println("welcome " + input)
-}
-
-main() {
-  testing_read()
-}
+#endif // !__JNC_STD_REFLECT_TYPE_TRAITS_HPP

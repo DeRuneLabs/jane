@@ -21,23 +21,33 @@
 use std::debug
 use std::os
 
+use cpp `assert.hpp`
+
+cpp __jnc_cerr_assert(message str)
+
 //doc:
 // assertion function
 // writing fail message to std::cerr and exit fail if assertion fail
 @inline
 _assert(expr bool, msg str) {
-  if !std::debug::ENABLE || expr { ret }
-  //cpp: std::cerr << "assertion error: " << @msg << std::endl << std::endl
-  //cpp: ___trace.ok();
-  //cpp: ___trace.ok();
-  //cpp: std::cout << ___trace.string();
+  if !std::debug::ENABLE || expr {
+    ret
+  }
+  cpp.__jnc_cerr_assert(msg)
   std::os::exit(std::os::EXIT_FAILURE)
 }
 
 //doc:
 // writing default fail message to std::cerr and exit fail if assert failed
 @inline
-pub assert_messagE(expr bool, msg str) {
+pub assert(expr bool) {
+  _assert(expr, "assertion failed")
+}
+
+//doc:
+// write fail message to std::cerr and exit fail if assert failed
+@inline
+pub assert_message(expr bool, msg str) {
   _assert(expr, msg)
 }
 

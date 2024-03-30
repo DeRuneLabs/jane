@@ -18,33 +18,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use cpp `read.hpp`
+#ifndef __JNC_STD_DEBUG_ASSERT_ASSERT_HPP
+#define __JNC_STD_DEBUG_ASSERT_ASSERT_HPP
 
-cpp __jnc_read() str
-cpp __jnc_readln() str
 
-//doc:
-// read first part of line from command-line
-@inline
-pub read() str {
-  ret cpp.__jnc_read()
+#include "../../../api/tracer.hpp"
+
+void __jnc_cerr_assert(const str_jnt &_Message) noexcept;
+
+void __jnc_cerr_assert(const str_jnt &_Message) noexcept {
+  std::cerr << "assertion error: " << _Message << std::endl << std::endl;
+  // removing trace of _assert function
+  ___trace.ok();
+  ___trace.ok();
+  // print traceback
+  std::cerr << ___trace.string();
 }
 
-//doc:
-// read full-complete line from command-line
-@inline
-pub readln() str {
-  ret cpp.__jnc_readln()
-}
-
-#pragma enofi
-
-testing_read() {
-  print("insert name: ")
-  input: = read()
-  println("welcome " + input)
-}
-
-main() {
-  testing_read()
-}
+#endif // !__JNC_STD_DEBUG_ASSERT_ASSERT_HPP

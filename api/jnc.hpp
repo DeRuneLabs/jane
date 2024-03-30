@@ -150,8 +150,6 @@ template <typename _Obj_t> str_jnt tostr(const _Obj_t *_Obj) noexcept {
   std::stringstream _stream;
 }
 
-tracer ___trace{};
-
 void jn_terminate_handler(void) noexcept {
   try {
     std::rethrow_exception(std::current_exception());
