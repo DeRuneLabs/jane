@@ -201,9 +201,6 @@ func (e *eval) single(tok Tok, m *exprModel) (v value, ok bool) {
 
 func (e *eval) unary(toks Toks, m *exprModel) value {
 	var v value
-	//? Length is 1 cause all length of operator tokens is 1.
-	//? Change "1" with length of token's value
-	//? if all operators length is not 1.
 	exprToks := toks[1:]
 	processor := unary{toks[0], exprToks, m, e.p}
 	m.appendSubNode(exprNode{processor.tok.Kind})
@@ -232,7 +229,6 @@ func (e *eval) unary(toks Toks, m *exprModel) value {
 }
 
 func (e *eval) betweenParentheses(toks Toks, m *exprModel) value {
-	// Write parentheses.
 	m.appendSubNode(exprNode{tokens.LPARENTHESES})
 	defer m.appendSubNode(exprNode{tokens.RPARENTHESES})
 
@@ -252,7 +248,6 @@ func (e *eval) dataTypeFunc(expr Tok, callRange Toks, m *exprModel) (v value, is
 		switch expr.Kind {
 		case tokens.STR:
 			m.appendSubNode(exprNode{"tostr"})
-			// Val: "()" for accept DataType as function.
 			v.data.Type = DataType{Id: jntype.Func, Kind: "()", Tag: strDefaultFunc}
 			isret = true
 		default:
@@ -981,13 +976,7 @@ func (e *eval) bracketRange(toks Toks, m *exprModel) (v value) {
 			var model iExpr
 			leftV, model = e.p.evalToks(leftToks)
 			m.appendSubNode(model)
-			e.p.wg.Add(1)
-			go assignChecker{
-				p:      e.p,
-				t:      DataType{Id: jntype.Int, Kind: jntype.TypeMap[jntype.Int]},
-				v:      leftV,
-				errtok: errTok,
-			}.checkAssignType()
+			e.checkIntegerIndexing(leftV, errTok)
 			if leftV.constExpr && tonums(leftV.expr) < 0 {
 				e.p.pusherrtok(leftV.data.Tok, "invalid_expr")
 			}
@@ -999,13 +988,7 @@ func (e *eval) bracketRange(toks Toks, m *exprModel) (v value) {
 			var model iExpr
 			rightV, model = e.p.evalToks(rightToks)
 			m.appendSubNode(model)
-			e.p.wg.Add(1)
-			go assignChecker{
-				p:      e.p,
-				t:      DataType{Id: jntype.Int, Kind: jntype.TypeMap[jntype.Int]},
-				v:      rightV,
-				errtok: errTok,
-			}.checkAssignType()
+			e.checkIntegerIndexing(rightV, errTok)
 			if rightV.constExpr && tonums(rightV.expr) < 0 {
 				e.p.pusherrtok(rightV.data.Tok, "invalid_expr")
 			}
@@ -1018,6 +1001,15 @@ func (e *eval) bracketRange(toks Toks, m *exprModel) (v value) {
 	m.appendSubNode(model)
 	m.appendSubNode(exprNode{tokens.RBRACKET})
 	return e.indexing(v, leftv, errTok)
+}
+
+func (e *eval) checkIntegerIndexing(v value, errtok Tok) {
+	switch {
+	case !typeIsPure(v.data.Type):
+		e.pusherrtok(errtok, "invalid_expr")
+	case !jntype.IsInteger(v.data.Type.Id):
+		e.pusherrtok(errtok, "invalid_expr")
+	}
 }
 
 func (e *eval) indexing(enumv, leftv value, errtok Tok) (v value) {
@@ -1037,13 +1029,7 @@ func (e *eval) indexing(enumv, leftv value, errtok Tok) (v value) {
 
 func (e *eval) indexingSlice(slicev, index value, errtok Tok) value {
 	slicev.data.Type = typeOfSliceComponents(slicev.data.Type)
-	e.p.wg.Add(1)
-	go assignChecker{
-		p:      e.p,
-		t:      DataType{Id: jntype.Int, Kind: jntype.TypeMap[jntype.Int]},
-		v:      index,
-		errtok: errtok,
-	}.checkAssignType()
+	e.checkIntegerIndexing(index, errtok)
 	if index.constExpr && tonums(index.expr) < 0 {
 		e.p.pusherrtok(index.data.Tok, "invalid_expr")
 	}
@@ -1053,12 +1039,7 @@ func (e *eval) indexingSlice(slicev, index value, errtok Tok) value {
 func (e *eval) indexingArray(arrv, index value, errtok Tok) value {
 	arrv.data.Type = typeOfArrayComponents(arrv.data.Type)
 	e.p.wg.Add(1)
-	go assignChecker{
-		p:      e.p,
-		t:      DataType{Id: jntype.Int, Kind: jntype.TypeMap[jntype.Int]},
-		v:      index,
-		errtok: errtok,
-	}.checkAssignType()
+	e.checkIntegerIndexing(index, errtok)
 	if index.constExpr && tonums(index.expr) < 0 {
 		e.p.pusherrtok(index.data.Tok, "invalid_expr")
 	}
@@ -1078,13 +1059,7 @@ func (e *eval) indexingMap(mapv, leftv value, errtok Tok) value {
 func (e *eval) indexingStr(strv, index value, errtok Tok) value {
 	strv.data.Type.Id = jntype.U8
 	strv.data.Type.Kind = jntype.TypeMap[strv.data.Type.Id]
-	e.p.wg.Add(1)
-	go assignChecker{
-		p:      e.p,
-		t:      DataType{Id: jntype.Int, Kind: jntype.TypeMap[jntype.Int]},
-		v:      index,
-		errtok: errtok,
-	}.checkAssignType()
+	e.checkIntegerIndexing(index, errtok)
 	if index.constExpr && tonums(index.expr) < 0 {
 		e.p.pusherrtok(index.data.Tok, "invalid_expr")
 	}

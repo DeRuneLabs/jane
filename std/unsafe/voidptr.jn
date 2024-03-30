@@ -52,6 +52,14 @@ impl Pointer for Voidptr {
   }
 }
 
+//doc:
+// return unsafe voidptr for given raw pointer
+@inline
+type[T]
+pub voidptr_of(ptr *T) Voidptr {
+  ret voidptr_from(uintptr(ptr))
+}
+
 //doc: return voidptr instance from given addresss
 @inline
 pub voidptr_from(addr uintptr) Voidptr {
