@@ -27,10 +27,10 @@ use std::os
 @inline
 _assert(expr bool, msg str) {
   if !std::debug::ENABLE || expr { ret }
-  //cxx: std::cerr << "assertion error: " << @msg << std::endl << std::endl
-  //cxx: ___trace.ok();
-  //cxx: ___trace.ok();
-  //cxx: std::cout << ___trace.string();
+  //cpp: std::cerr << "assertion error: " << @msg << std::endl << std::endl
+  //cpp: ___trace.ok();
+  //cpp: ___trace.ok();
+  //cpp: std::cout << ___trace.string();
   std::os::exit(std::os::EXIT_FAILURE)
 }
 

@@ -7,16 +7,16 @@ import (
 )
 
 func ToStr(bytes []byte) string {
-	var cxx strings.Builder
-	cxx.WriteString("str_jnt{")
+	var cpp strings.Builder
+	cpp.WriteString("str_jnt{")
 	btoa := bytesToStr(bytes)
 	if btoa != "" {
-		cxx.WriteByte('{')
-		cxx.WriteString(btoa)
-		cxx.WriteByte('}')
+		cpp.WriteByte('{')
+		cpp.WriteString(btoa)
+		cpp.WriteByte('}')
 	}
-	cxx.WriteString("}")
-	return cxx.String()
+	cpp.WriteString("}")
+	return cpp.String()
 }
 
 func ToRawStr(bytes []byte) string {

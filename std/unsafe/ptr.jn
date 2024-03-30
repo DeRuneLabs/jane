@@ -46,7 +46,7 @@ impl Ptr {
   @inline
   pub &get() T {
     ptr: = .ptr
-    //cxx: return *(@T*)(@ptr);
+    //cpp: return *(@T*)(@ptr);
   }
 }
 

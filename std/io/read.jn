@@ -18,42 +18,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//cxx: #include <wchar.h>
-//cxx: #include <locale>
-//cxx: #include <codecvt>
+//cpp: #include <wchar.h>
+//cpp: #include <locale>
+//cpp: #include <codecvt>
 
-//cxx: static inline std::string
-//cxx: jn_stdlib_io__encode_utf8(const std::wstrinng &_WStr) noexcept {
-//cxx:    std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> conv{};
-//cxx:    return conv.to_bytes_(_Wstr);
-//cxx: }
+//cpp: static inline std::string
+//cpp: jn_stdlib_io__encode_utf8(const std::wstrinng &_WStr) noexcept {
+//cpp:    std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> conv{};
+//cpp:    return conv.to_bytes_(_Wstr);
+//cpp: }
 
 //doc: read first part of line from command-line
 @inline
 pub read() str {
-//cxx: #ifdef _WINDOWS
-//cxx:    std::wstring buffer{};
-//cxx:    std::wcin >> buffer;
-//cxx:    return jn_stdlib_io__encode_utf8(buffer).c_str();
-//cxx: #else
-//cxx:    std::string buffer{};
-//cxx:    std::cin >> buffer;
-//cxx:    return buffer.c_str();
-//cxx: #endif
+//cpp: #ifdef _WINDOWS
+//cpp:    std::wstring buffer{};
+//cpp:    std::wcin >> buffer;
+//cpp:    return jn_stdlib_io__encode_utf8(buffer).c_str();
+//cpp: #else
+//cpp:    std::string buffer{};
+//cpp:    std::cin >> buffer;
+//cpp:    return buffer.c_str();
+//cpp: #endif
 }
 
 //doc: read full-complete line from command-line
 @inline
 pub readln() str {
-//cxx: #ifdef _WINDOWS
-//cxx:    std::wstring buffer{};
-//cxx:    std::getline(std::wcin, buffer);
-//cxx:    return jn_stdlib_io__encode_utf8(buffer).c_str();
-//cxx: #else
-//cxx:    std::string buffer{};
-//cxx:    std::getline(std::cin, buffer);
-//cxx:    return buffer.c_str();
-//cxx: #endif
+//cpp: #ifdef _WINDOWS
+//cpp:    std::wstring buffer{};
+//cpp:    std::getline(std::wcin, buffer);
+//cpp:    return jn_stdlib_io__encode_utf8(buffer).c_str();
+//cpp: #else
+//cpp:    std::string buffer{};
+//cpp:    std::getline(std::cin, buffer);
+//cpp:    return buffer.c_str();
+//cpp: #endif
 }
 
 #pragma enofi

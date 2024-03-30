@@ -240,7 +240,7 @@ func TypeFromId(id string) uint8 {
 	return 0
 }
 
-func CxxId(t uint8) string {
+func CppId(t uint8) string {
 	if t == Void {
 		return "void"
 	}

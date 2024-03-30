@@ -8,8 +8,8 @@ const (
 )
 
 type JnSet struct {
-	CxxOutDir    string   `json:"cxx_out_dir"`
-	CxxOutName   string   `json:"cxx_out_name"`
+	CppOutDir    string   `json:"cxx_out_dir"`
+	CppOutName   string   `json:"cxx_out_name"`
 	OutName      string   `json:"out_name"`
 	Language     string   `json:"language"`
 	Mode         string   `json:"mode"`
@@ -19,8 +19,8 @@ type JnSet struct {
 }
 
 var Default = &JnSet{
-	CxxOutDir:    "./dist",
-	CxxOutName:   "jn.cxx",
+	CppOutDir:    "./dist",
+	CppOutName:   "jn.cpp",
 	OutName:      "main",
 	Language:     "",
 	Mode:         "transpile",

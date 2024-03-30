@@ -25,5 +25,5 @@ pub make(n int) []Item {
   if n < 0 {
     ret nil
   }
-  //cxx: return slice<@Item>(@n);
+  //cpp: return slice<@Item>(@n);
 }

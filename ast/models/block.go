@@ -23,21 +23,21 @@ func (b Block) String() string {
 }
 
 func ParseBlock(b Block) string {
-	var cxx strings.Builder
-	cxx.WriteByte('{')
+	var cpp strings.Builder
+	cpp.WriteByte('{')
 	for _, s := range b.Tree {
 		if s.Data == nil {
 			continue
 		}
-		cxx.WriteByte('\n')
-		cxx.WriteString(IndentString())
-		cxx.WriteString(s.String())
+		cpp.WriteByte('\n')
+		cpp.WriteString(IndentString())
+		cpp.WriteString(s.String())
 	}
-	cxx.WriteByte('\n')
+	cpp.WriteByte('\n')
 	indent := strings.Repeat(jn.Set.Indent, int(Indent-1)*jn.Set.IndentCount)
-	cxx.WriteString(indent)
-	cxx.WriteByte('}')
-	return cxx.String()
+	cpp.WriteString(indent)
+	cpp.WriteByte('}')
+	return cpp.String()
 }
 
 var Indent uint32 = 0

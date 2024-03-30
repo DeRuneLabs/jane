@@ -36,26 +36,26 @@ func (p *Param) OutId() string {
 }
 
 func (p Param) String() string {
-	var cxx strings.Builder
-	cxx.WriteString(p.Prototype())
+	var cpp strings.Builder
+	cpp.WriteString(p.Prototype())
 	if p.Id != "" && !jnapi.IsIgnoreId(p.Id) && p.Id != jn.Anonymous {
-		cxx.WriteByte(' ')
-		cxx.WriteString(p.OutId())
+		cpp.WriteByte(' ')
+		cpp.WriteString(p.OutId())
 	}
-	return cxx.String()
+	return cpp.String()
 }
 
 func (p *Param) Prototype() string {
-	var cxx strings.Builder
+	var cpp strings.Builder
 	if p.Variadic {
-		cxx.WriteString("slice<")
-		cxx.WriteString(p.Type.String())
-		cxx.WriteByte('>')
+		cpp.WriteString("slice<")
+		cpp.WriteString(p.Type.String())
+		cpp.WriteByte('>')
 	} else {
-		cxx.WriteString(p.Type.String())
+		cpp.WriteString(p.Type.String())
 	}
 	if p.Reference {
-		cxx.WriteByte('&')
+		cpp.WriteByte('&')
 	}
-	return cxx.String()
+	return cpp.String()
 }

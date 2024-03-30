@@ -23,5 +23,5 @@
 @inline @typearg
 type[T]
 pub sizeof() uint {
-  //cxx: return sizeof(@T);
+  //cpp: return sizeof(@T);
 }

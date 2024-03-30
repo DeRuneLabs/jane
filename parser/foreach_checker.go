@@ -54,7 +54,7 @@ func (fc *foreachChecker) checkKeyASize() {
 	keyA := &fc.profile.KeyA
 	if keyA.Type.Id == jntype.Void {
 		keyA.Type.Id = jntype.UInt
-		keyA.Type.Kind = jntype.CxxId(keyA.Type.Id)
+		keyA.Type.Kind = jntype.CppId(keyA.Type.Id)
 		return
 	}
 	var ok bool
@@ -102,7 +102,7 @@ func (fc *foreachChecker) str() {
 	}
 	runeType := DataType{
 		Id:   jntype.U8,
-		Kind: jntype.CxxId(jntype.U8),
+		Kind: jntype.CppId(jntype.U8),
 	}
 	keyB := &fc.profile.KeyB
 	if keyB.Type.Id == jntype.Void {
