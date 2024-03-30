@@ -18,6 +18,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use cpp `unsafe.cpp`
+
+type[T]
+cpp __jnc_uintptr_cast_to_raw(add uintptr) *T
+
 //doc:
 // wrapper structure for voidptr
 pub struct Voidptr {
@@ -29,9 +34,7 @@ impl Voidptr {
   @typearg
   type[T]
   pub &cast() *T {
-    ptr: *T
-    //cpp: @ptr = (@T*)(this->@ptr);
-    ret ptr
+    ret cpp.__jnc_uintptr_cast_to_raw[T](.ptr)
   }
 
   //doc: return unsafe pointer of given type

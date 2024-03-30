@@ -18,64 +18,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::mem
+#ifndef __JNC_STD_UNSAFE_UNSAFE_HPP
+#define __JNC_STD_UNSAFE_UNSAFE_HPP
 
-use cpp `unsafe.hpp`
+#include "../../api/ptr.hpp"
+#include "../../api/typedef.hpp"
 
-type [T]
-cpp __jnc_uintptr_cast_to_raw(addr uintptr) *T
+template <typename T>
+inline ptr<T> __jnc_uintptr_cast_to_raw(const uintptr_jnt &_Addr) noexcept;
 
-//doc:
-// wrapper structure for unsafe raw pointer
-type[T]
-pub struct Ptr {
-  ptr: uintptr
+template <typename T>
+inline ptr<T> __jnc_uintptr_cast_to_raw(const uintptr_jnt &_Addr) noexcept {
+  return (T *)(_Addr);
 }
 
-impl Ptr {
-  //doc: return unsafe pointer as unsafe voidptr
-  @inline
-  pub &to_voidptr() Voidptr {
-    ret voidptr_from(.ptr)
-  }
-
-  //doc:
-  // move pointer from its pointing position by size of data type.
-  // the offset amount is determined by n,
-  // moving back require negative expression
-  // and moving forward require positive expression
-  @inline
-  pub &move(n int) {
-    .ptr += n * std::mem::sizeof(T)
-  }
-
-  //doc: rerturn data of pointer
-  @inline
-  pub &get() T {
-    ret *cpp.__jnc_uintptr_cast_to_raw[T](.ptr)
-  }
-}
-
-impl Pointer for Ptr {
-  @inline
-  &addr() uintptr {
-    ret .ptr
-  }
-}
-
-//doc:
-// return unsafe poiter for given raw pointer
-type[T]
-pub ptr_of(ptr *T) Ptr[T] {
-  ret ptr_from[T](uintptr(ptr))
-}
-
-//doc:
-// return unsafe pointer from given address
-@inline
-type[T]
-pub ptr_from(addr uintptr) Ptr[T] {
-  ret Ptr[T] {
-    ptr: addr,
-  }
-}
+#endif // !__JNC_STD_UNSAFE_UNSAFE_HPP
