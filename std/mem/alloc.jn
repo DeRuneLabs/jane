@@ -18,17 +18,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use cpp "alloc.hpp"
+
+type[T]
+cpp __jnc_new_heap_ptr() *T
+
 //doc:
 // return pointer to heap-allocateion of data type if allocation
 // is success, nil if not
 @typearg
 type[T]
 pub new() *T {
-  ptr: *T
-  //cpp: @ptr._ptr = new(std::nothrow) @T;
-  if (ptr == nil) {
-    panic(std::errors::new("memory allocation failed"))
-  }
+  ret cpp.__jnc_new_heap_ptr[T]()
 }
 
 //doc:

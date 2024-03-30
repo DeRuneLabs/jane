@@ -18,6 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use cpp "exit.hpp"
+
+cpp __jnc_exit(code int)
+
 //doc:
 // exit code for success
 pub const EXIT_SUCCESS: = 0
@@ -30,5 +34,5 @@ pub const EXIT_FAILURE: = 1
 // conventionally, code zero mean are success, non-zero is an error
 @inline
 pub exit(code int) {
-  //cpp: std::exit(@code)
+  cpp.__jnc_exit(code)
 }

@@ -18,15 +18,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//cpp: #include <type_traits>
+use cpp "type_traits.hpp"
 
+type[T1, T2]
+cpp __jnc_is_same() bool
 
 //doc:
 // report the given data types are same or not
 @inline @typearg
 type[T1, T2]
 pub is_same() bool {
-  //cpp: return std::is_same<@T1, @T2>::value;
+  ret cpp.__jnc_is_same[T1, T2]()
 }
 
 //doc:
@@ -35,6 +37,6 @@ pub is_same() bool {
 @inline
 type[T]
 pub any_is(src any) bool {
-  //cpp: return @src.type_is<@T>();
+  ret cpp.__jnc_any_is[T](src)
 }
 
