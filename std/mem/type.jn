@@ -18,10 +18,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use cpp "type.hpp"
+
+type[T]
+cpp __jnc_sizeof() uint
+
 //doc:
 // return size fo data type in bytes
 @inline @typearg
 type[T]
 pub sizeof() uint {
-  //cpp: return sizeof(@T);
+  ret cpp.__jnc_sizeof[T]()
 }
