@@ -5,22 +5,22 @@ import "strings"
 var JNCHeader = ""
 
 const (
-	CxxIgnore = "std::ignore"
-	CxxSelf   = "this"
+	CppIgnore = "std::ignore"
+	CppSelf   = "this"
 )
 
 func ToDeferredCall(expr string) string {
-	var cxx strings.Builder
-	cxx.WriteString("DEFER(")
-	cxx.WriteString(expr)
-	cxx.WriteString(");")
-	return cxx.String()
+	var cpp strings.Builder
+	cpp.WriteString("DEFER(")
+	cpp.WriteString(expr)
+	cpp.WriteString(");")
+	return cpp.String()
 }
 
 func ToConcurrentCall(expr string) string {
-	var cxx strings.Builder
-	cxx.WriteString("CO(")
-	cxx.WriteString(expr)
-	cxx.WriteString(");")
-	return cxx.String()
+	var cpp strings.Builder
+	cpp.WriteString("CO(")
+	cpp.WriteString(expr)
+	cpp.WriteString(");")
+	return cpp.String()
 }

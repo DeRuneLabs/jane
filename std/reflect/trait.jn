@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//cxx: #include <type_traits>
+//cpp: #include <type_traits>
 
 
 //doc:
@@ -26,7 +26,7 @@
 @inline @typearg
 type[T1, T2]
 pub is_same() bool {
-  //cxx: return std::is_same<@T1, @T2>::value;
+  //cpp: return std::is_same<@T1, @T2>::value;
 }
 
 //doc:
@@ -35,6 +35,6 @@ pub is_same() bool {
 @inline
 type[T]
 pub any_is(src any) bool {
-  //cxx: return @src.type_is<@T>();
+  //cpp: return @src.type_is<@T>();
 }
 

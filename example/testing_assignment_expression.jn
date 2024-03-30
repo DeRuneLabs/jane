@@ -1,6 +1,6 @@
 #pragma enofi
 
-// cxx:#define TEST_CXX_EMBED
+// cpp:#define TEST_CXX_EMBED
 
 type TEST_TYPEDEF i32
 

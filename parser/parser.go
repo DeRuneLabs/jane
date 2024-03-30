@@ -4,7 +4,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,7 +58,6 @@ type Parser struct {
 	generics       []*GenericType
 	blockTypes     []*Type
 	blockVars      []*Var
-	embeds         strings.Builder
 	waitingGlobals []waitingGlobal
 	eval           *eval
 	allowBuiltin   bool
@@ -131,172 +129,166 @@ func (p *Parser) pushwarn(key string, args ...any) {
 	})
 }
 
-func (p *Parser) CxxEmbeds() string {
-	var cxx strings.Builder
-	cxx.WriteString(p.embeds.String())
-	return cxx.String()
-}
-
-func cxjntypes(dm *Defmap) string {
-	var cxx strings.Builder
+func cppTypes(dm *Defmap) string {
+	var cpp strings.Builder
 	for _, t := range dm.Types {
 		if t.Used && t.Tok.Id != tokens.NA {
-			cxx.WriteString(t.String())
-			cxx.WriteByte('\n')
+			cpp.WriteString(t.String())
+			cpp.WriteByte('\n')
 		}
 	}
-	return cxx.String()
+	return cpp.String()
 }
 
-func (p *Parser) Cxjntypes() string {
-	var cxx strings.Builder
+func (p *Parser) CppTypes() string {
+	var cpp strings.Builder
 	for _, use := range used {
-		cxx.WriteString(cxjntypes(use.defs))
+		cpp.WriteString(cppTypes(use.defs))
 	}
-	cxx.WriteString(cxjntypes(p.Defs))
-	return cxx.String()
+	cpp.WriteString(cppTypes(p.Defs))
+	return cpp.String()
 }
 
-func cxxEnums(dm *Defmap) string {
-	var cxx strings.Builder
+func cppEnums(dm *Defmap) string {
+	var cpp strings.Builder
 	for _, e := range dm.Enums {
 		if e.Used && e.Tok.Id != tokens.NA {
-			cxx.WriteString(e.String())
-			cxx.WriteString("\n\n")
+			cpp.WriteString(e.String())
+			cpp.WriteString("\n\n")
 		}
 	}
-	return cxx.String()
+	return cpp.String()
 }
 
-func (p *Parser) CxxEnums() string {
-	var cxx strings.Builder
+func (p *Parser) CppEnums() string {
+	var cpp strings.Builder
 	for _, use := range used {
-		cxx.WriteString(cxxEnums(use.defs))
+		cpp.WriteString(cppEnums(use.defs))
 	}
-	cxx.WriteString(cxxEnums(p.Defs))
-	return cxx.String()
+	cpp.WriteString(cppEnums(p.Defs))
+	return cpp.String()
 }
 
-func cxxTraits(dm *Defmap) string {
-	var cxx strings.Builder
+func cppTraits(dm *Defmap) string {
+	var cpp strings.Builder
 	for _, t := range dm.Traits {
 		if t.Used && t.Ast.Tok.Id != tokens.NA {
-			cxx.WriteString(t.String())
-			cxx.WriteString("\n\n")
+			cpp.WriteString(t.String())
+			cpp.WriteString("\n\n")
 		}
 	}
-	return cxx.String()
+	return cpp.String()
 }
 
-func (p *Parser) CxxTraits() string {
-	var cxx strings.Builder
+func (p *Parser) CppTraits() string {
+	var cpp strings.Builder
 	for _, use := range used {
-		cxx.WriteString(cxxTraits(use.defs))
+		cpp.WriteString(cppTraits(use.defs))
 	}
-	cxx.WriteString(cxxTraits(p.Defs))
-	return cxx.String()
+	cpp.WriteString(cppTraits(p.Defs))
+	return cpp.String()
 }
 
 func cxxStructs(dm *Defmap) string {
-	var cxx strings.Builder
+	var cpp strings.Builder
 	for _, s := range dm.Structs {
 		if s.Used && s.Ast.Tok.Id != tokens.NA {
-			cxx.WriteString(s.String())
-			cxx.WriteString("\n\n")
+			cpp.WriteString(s.String())
+			cpp.WriteString("\n\n")
 		}
 	}
-	return cxx.String()
+	return cpp.String()
 }
 
-func (p *Parser) CxxStructs() string {
-	var cxx strings.Builder
+func (p *Parser) CppStructs() string {
+	var cpp strings.Builder
 	for _, use := range used {
-		cxx.WriteString(cxxStructs(use.defs))
+		cpp.WriteString(cxxStructs(use.defs))
 	}
-	cxx.WriteString(cxxStructs(p.Defs))
-	return cxx.String()
+	cpp.WriteString(cxxStructs(p.Defs))
+	return cpp.String()
 }
 
-func cxxStructPrototypes(dm *Defmap) string {
-	var cxx strings.Builder
+func cppStructPrototypes(dm *Defmap) string {
+	var cpp strings.Builder
 	for _, s := range dm.Structs {
 		if s.Used && s.Ast.Tok.Id != tokens.NA {
-			cxx.WriteString(s.prototype())
-			cxx.WriteByte('\n')
+			cpp.WriteString(s.prototype())
+			cpp.WriteByte('\n')
 		}
 	}
-	return cxx.String()
+	return cpp.String()
 }
 
-func cxxFuncPrototypes(dm *Defmap) string {
-	var cxx strings.Builder
+func cppFuncPrototypes(dm *Defmap) string {
+	var cpp strings.Builder
 	for _, f := range dm.Funcs {
 		if f.used && f.Ast.Tok.Id != tokens.NA {
-			cxx.WriteString(f.Prototype())
-			cxx.WriteByte('\n')
+			cpp.WriteString(f.Prototype())
+			cpp.WriteByte('\n')
 		}
 	}
-	return cxx.String()
+	return cpp.String()
 }
 
-func (p *Parser) CxxPrototypes() string {
-	var cxx strings.Builder
+func (p *Parser) CppPrototypes() string {
+	var cpp strings.Builder
 	for _, use := range used {
-		cxx.WriteString(cxxStructPrototypes(use.defs))
+		cpp.WriteString(cppStructPrototypes(use.defs))
 	}
-	cxx.WriteString(cxxStructPrototypes(p.Defs))
+	cpp.WriteString(cppStructPrototypes(p.Defs))
 	for _, use := range used {
-		cxx.WriteString(cxxFuncPrototypes(use.defs))
+		cpp.WriteString(cppFuncPrototypes(use.defs))
 	}
-	cxx.WriteString(cxxFuncPrototypes(p.Defs))
-	return cxx.String()
+	cpp.WriteString(cppFuncPrototypes(p.Defs))
+	return cpp.String()
 }
 
-func cxxGlobals(dm *Defmap) string {
-	var cxx strings.Builder
+func cppGlobals(dm *Defmap) string {
+	var cpp strings.Builder
 	for _, g := range dm.Globals {
 		if !g.Const && g.Used && g.IdTok.Id != tokens.NA {
-			cxx.WriteString(g.String())
-			cxx.WriteByte('\n')
+			cpp.WriteString(g.String())
+			cpp.WriteByte('\n')
 		}
 	}
-	return cxx.String()
+	return cpp.String()
 }
 
-func (p *Parser) CxxGlobals() string {
-	var cxx strings.Builder
+func (p *Parser) CppGlobals() string {
+	var cpp strings.Builder
 	for _, use := range used {
-		cxx.WriteString(cxxGlobals(use.defs))
+		cpp.WriteString(cppGlobals(use.defs))
 	}
-	cxx.WriteString(cxxGlobals(p.Defs))
-	return cxx.String()
+	cpp.WriteString(cppGlobals(p.Defs))
+	return cpp.String()
 }
 
 func cxxFuncs(dm *Defmap) string {
-	var cxx strings.Builder
+	var cpp strings.Builder
 	for _, f := range dm.Funcs {
 		if f.used && f.Ast.Tok.Id != tokens.NA {
-			cxx.WriteString(f.String())
-			cxx.WriteString("\n\n")
+			cpp.WriteString(f.String())
+			cpp.WriteString("\n\n")
 		}
 	}
-	return cxx.String()
+	return cpp.String()
 }
 
-func (p *Parser) CxxFuncs() string {
-	var cxx strings.Builder
+func (p *Parser) CppFuncs() string {
+	var cpp strings.Builder
 	for _, use := range used {
-		cxx.WriteString(cxxFuncs(use.defs))
+		cpp.WriteString(cxxFuncs(use.defs))
 	}
-	cxx.WriteString(cxxFuncs(p.Defs))
-	return cxx.String()
+	cpp.WriteString(cxxFuncs(p.Defs))
+	return cpp.String()
 }
 
-func (p *Parser) CxxInitializerCaller() string {
-	var cxx strings.Builder
-	cxx.WriteString("void ")
-	cxx.WriteString(jnapi.InitializerCaller)
-	cxx.WriteString("(void) {")
+func (p *Parser) CppInitializerCaller() string {
+	var cpp strings.Builder
+	cpp.WriteString("void ")
+	cpp.WriteString(jnapi.InitializerCaller)
+	cpp.WriteString("(void) {")
 	models.AddIndent()
 	indent := models.IndentString()
 	models.DoneIndent()
@@ -305,35 +297,33 @@ func (p *Parser) CxxInitializerCaller() string {
 		if f == nil {
 			return
 		}
-		cxx.WriteByte('\n')
-		cxx.WriteString(indent)
-		cxx.WriteString(f.outId())
-		cxx.WriteString("();")
+		cpp.WriteByte('\n')
+		cpp.WriteString(indent)
+		cpp.WriteString(f.outId())
+		cpp.WriteString("();")
 	}
 	for _, use := range used {
 		pushInit(use.defs)
 	}
 	pushInit(p.Defs)
-	cxx.WriteString("\n}")
-	return cxx.String()
+	cpp.WriteString("\n}")
+	return cpp.String()
 }
 
-func (p *Parser) Cxx() string {
-	var cxx strings.Builder
-	cxx.WriteString(p.CxxEmbeds())
-	cxx.WriteString("\n\n")
-	cxx.WriteString(p.Cxjntypes())
-	cxx.WriteByte('\n')
-	cxx.WriteString(p.CxxEnums())
-	cxx.WriteString(p.CxxTraits())
-	cxx.WriteString(p.CxxPrototypes())
-	cxx.WriteString(p.CxxStructs())
-	cxx.WriteString("\n\n")
-	cxx.WriteString(p.CxxGlobals())
-	cxx.WriteString("\n\n")
-	cxx.WriteString(p.CxxFuncs())
-	cxx.WriteString(p.CxxInitializerCaller())
-	return cxx.String()
+func (p *Parser) Cpp() string {
+	var cpp strings.Builder
+	cpp.WriteString(p.CppTypes())
+	cpp.WriteByte('\n')
+	cpp.WriteString(p.CppEnums())
+	cpp.WriteString(p.CppTraits())
+	cpp.WriteString(p.CppPrototypes())
+	cpp.WriteString(p.CppStructs())
+	cpp.WriteString("\n\n")
+	cpp.WriteString(p.CppGlobals())
+	cpp.WriteString("\n\n")
+	cpp.WriteString(p.CppFuncs())
+	cpp.WriteString(p.CppInitializerCaller())
+	return cpp.String()
 }
 
 func getTree(toks Toks) ([]models.Object, []jnlog.CompilerLog) {
@@ -344,9 +334,16 @@ func getTree(toks Toks) ([]models.Object, []jnlog.CompilerLog) {
 
 func (p *Parser) checkUsePath(use *models.Use) bool {
 	info, err := os.Stat(use.Path)
-	if err != nil || !info.IsDir() {
-		p.pusherrtok(use.Tok, "use_not_found", use.Path)
-		return false
+	if use.Cpp {
+		if err != nil || info.IsDir() {
+			p.pusherrtok(use.Tok, "use_not_found", use.Path)
+			return false
+		}
+	} else {
+		if err != nil || !info.IsDir() {
+			p.pusherrtok(use.Tok, "use_not_found", use.Path)
+			return false
+		}
 	}
 	for _, puse := range p.Uses {
 		if use.Path == puse.Path {
@@ -448,7 +445,6 @@ func (p *Parser) compileUse(useAST *models.Use) (_ *use, hasErr bool) {
 		use.fullUse = useAST.FullUse
 		p.pusherrs(psub.Errors...)
 		p.Warnings = append(p.Warnings, psub.Warnings...)
-		p.embeds.WriteString(psub.embeds.String())
 		p.pushDefs(use.defs, psub.Defs)
 		p.pushUse(use, useAST.Selectors)
 		if psub.Errors != nil {
@@ -521,9 +517,7 @@ func (p *Parser) parseSrcTreeObj(obj models.Object) {
 	case models.Trait:
 		p.Trait(t)
 	case models.Impl:
-	case models.CxxEmbed:
-		p.embeds.WriteString(t.String())
-		p.embeds.WriteByte('\n')
+		// Parse at end
 	case models.Comment:
 		p.Comment(t)
 	case models.Use:
@@ -1046,17 +1040,17 @@ func (p *Parser) PushAttribute(attribute Attribute) {
 	p.attributes = append(p.attributes, attribute)
 }
 
-func genericsToCxx(generics []*GenericType) string {
+func genericsToCpp(generics []*GenericType) string {
 	if len(generics) == 0 {
 		return ""
 	}
-	var cxx strings.Builder
-	cxx.WriteString("template<")
+	var cpp strings.Builder
+	cpp.WriteString("template<")
 	for _, generic := range generics {
-		cxx.WriteString(generic.String())
-		cxx.WriteByte(',')
+		cpp.WriteString(generic.String())
+		cpp.WriteByte(',')
 	}
-	return cxx.String()[:cxx.Len()-1] + ">"
+	return cpp.String()[:cpp.Len()-1] + ">"
 }
 
 func (p *Parser) Statement(s models.Statement) {
@@ -2367,9 +2361,6 @@ func (p *Parser) statement(s *models.Statement, recover bool) bool {
 	case models.Match:
 		p.matchcase(&t)
 		s.Data = t
-	case models.CxxEmbed:
-		p.cxxEmbed(&t)
-		s.Data = t
 	case models.Comment:
 	default:
 		return false
@@ -2508,50 +2499,6 @@ func (p *Parser) matchcase(t *models.Match) {
 	p.cases(t.Cases, t.ExprType)
 	if t.Default != nil {
 		p.parseCase(t.Default, t.ExprType)
-	}
-}
-
-func isCxxReturn(s string) bool {
-	return strings.HasPrefix(s, "return")
-}
-
-func (p *Parser) cxxEmbed(cxx *models.CxxEmbed) {
-	rexpr := regexp.MustCompile(`@[\p{L}|_]([\p{L}0-9_]+)?`)
-	match := rexpr.FindStringIndex(cxx.Content)
-	for match != nil {
-		start := match[0]
-		end := match[1]
-		id := cxx.Content[start+1 : end]
-		def, tok := p.blockDefById(id)
-		if def != nil {
-			switch t := def.(type) {
-			case *Var:
-				t.Used = true
-			case *Type:
-				t.Used = true
-			}
-		}
-		cxx.Content = cxx.Content[:start] + jnapi.OutId(id, tok.File) + cxx.Content[end:]
-		match = rexpr.FindStringIndex(cxx.Content)
-	}
-	cxxcode := strings.TrimLeftFunc(cxx.Content, unicode.IsSpace)
-	if isCxxReturn(cxxcode) {
-		p.embedReturn(cxxcode, cxx.Tok)
-	}
-}
-
-func (p *Parser) embedReturn(cxx string, errTok Tok) {
-	returnKwLen := 6
-	cxx = cxx[returnKwLen:]
-	cxx = strings.TrimLeftFunc(cxx, unicode.IsSpace)
-	if cxx[len(cxx)-1] == ';' {
-		cxx = cxx[:len(cxx)-1]
-	}
-	f := p.rootBlock.Func
-	if len(cxx) == 0 && !typeIsVoid(f.RetType.Type) {
-		p.pusherrtok(errTok, "require_return_value")
-	} else if len(cxx) > 0 && typeIsVoid(f.RetType.Type) {
-		p.pusherrtok(errTok, "void_function_return_value")
 	}
 }
 
@@ -2699,14 +2646,9 @@ func (p *Parser) checkLabelNGoto() {
 func (p *Parser) checkRets(f *Func) {
 	if f.Block != nil {
 		for _, s := range f.Block.Tree {
-			switch t := s.Data.(type) {
+			switch s.Data.(type) {
 			case models.Ret:
 				return
-			case models.CxxEmbed:
-				cxx := strings.TrimLeftFunc(t.Content, unicode.IsSpace)
-				if isCxxReturn(cxx) {
-					return
-				}
 			}
 		}
 	}

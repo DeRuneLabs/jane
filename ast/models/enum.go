@@ -13,11 +13,11 @@ type EnumItem struct {
 }
 
 func (ei EnumItem) String() string {
-	var cxx strings.Builder
-	cxx.WriteString(jnapi.OutId(ei.Id, ei.Tok.File))
-	cxx.WriteString(" = ")
-	cxx.WriteString(ei.Expr.String())
-	return cxx.String()
+	var cpp strings.Builder
+	cpp.WriteString(jnapi.OutId(ei.Id, ei.Tok.File))
+	cpp.WriteString(" = ")
+	cpp.WriteString(ei.Expr.String())
+	return cpp.String()
 }
 
 type Enum struct {
@@ -40,19 +40,19 @@ func (e *Enum) ItemById(id string) *EnumItem {
 }
 
 func (e Enum) String() string {
-	var cxx strings.Builder
-	cxx.WriteString("enum ")
-	cxx.WriteString(jnapi.OutId(e.Id, e.Tok.File))
-	cxx.WriteByte(':')
-	cxx.WriteString(e.Type.String())
-	cxx.WriteString(" {\n")
+	var cpp strings.Builder
+	cpp.WriteString("enum ")
+	cpp.WriteString(jnapi.OutId(e.Id, e.Tok.File))
+	cpp.WriteByte(':')
+	cpp.WriteString(e.Type.String())
+	cpp.WriteString(" {\n")
 	AddIndent()
 	for _, item := range e.Items {
-		cxx.WriteString(IndentString())
-		cxx.WriteString(item.String())
-		cxx.WriteString(",\n")
+		cpp.WriteString(IndentString())
+		cpp.WriteString(item.String())
+		cpp.WriteString(",\n")
 	}
 	DoneIndent()
-	cxx.WriteString("};")
-	return cxx.String()
+	cpp.WriteString("};")
+	return cpp.String()
 }

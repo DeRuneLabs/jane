@@ -30,7 +30,7 @@ impl Voidptr {
   type[T]
   pub &cast() *T {
     ptr: *T
-    //cxx: @ptr = (@T*)(this->@ptr);
+    //cpp: @ptr = (@T*)(this->@ptr);
     ret ptr
   }
 

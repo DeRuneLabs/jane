@@ -25,9 +25,9 @@ type Goto struct {
 }
 
 func (gt Goto) String() string {
-	var cxx strings.Builder
-	cxx.WriteString("goto ")
-	cxx.WriteString(gt.Label)
-	cxx.WriteByte(';')
-	return cxx.String()
+	var cpp strings.Builder
+	cpp.WriteString("goto ")
+	cpp.WriteString(gt.Label)
+	cpp.WriteByte(';')
+	return cpp.String()
 }

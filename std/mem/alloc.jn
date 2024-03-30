@@ -25,7 +25,7 @@
 type[T]
 pub new() *T {
   ptr: *T
-  //cxx: @ptr._ptr = new(std::nothrow) @T;
+  //cpp: @ptr._ptr = new(std::nothrow) @T;
   if (ptr == nil) {
     panic(std::errors::new("memory allocation failed"))
   }

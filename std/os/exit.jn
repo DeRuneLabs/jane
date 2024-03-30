@@ -30,5 +30,5 @@ pub const EXIT_FAILURE: = 1
 // conventionally, code zero mean are success, non-zero is an error
 @inline
 pub exit(code int) {
-  //cxx: std::exit(@code)
+  //cpp: std::exit(@code)
 }
