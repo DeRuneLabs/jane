@@ -45,43 +45,13 @@ main() {
 - type constant
 - argument targettting
 
-| name      | description                   |
-| --------- | ----------------------------- |
-| `ast`     | abstact syntax tree builder   |
-| `command` | main and compile files        |
-| `parser`  | interpreter                   |
-| `package` | uitlity package jane          |
-| `janelib` | builtin jane standard library |
+## memory on jane
 
-operator
+memory safety and memory management. a significant problem in C, C++, or comparable programming langauges. jane use reference counting to control memory and ensure memory safety. an account allotment is immediately withdrawn when the reference count approaches zero. there are no hanging pointers, and accessing null pointer will plainly result in an error.
 
-| operator | description | support type                |
-| -------- | ----------- | --------------------------- |
-| `+`      | sum         | integer, float, string      |
-| `-`      | difference  | integer, float              |
-| `*`      | product     | integer, float              |
-| `/`      | quotient    | integer, float              |
-| `%`      | remainder   | integer                     |
-| `~`      | bitwise NOT | integer                     |
-| `&`      | bitwise AND | integer                     |
-| `^`      | bitwise XOR | integer                     |
-| `!`      | logical NOT | bool                        |
-| `&&`     | logical AND | bool                        |
-| `!=`     | LOGICAL XOR | bool                        |
-| `<<`     | left shift  | integer << unsigned integer |
-| `>>`     | right shift | integer >> unsigned integer |
+## information
 
-precedence
-
-```
-| precedence | operator               |
-| ---------- | ---------------------- |
-| 5          | `*  /  %  <<  >>  &`   |
-| 4          | `+ - || ^`             |
-| 3          | `==  !=  <  <=  >  >=` |
-| 2          | `&&`                   |
-| 1          | `||`                   |
-```
+the project structure, including its lexical and syntactic structure, has now revealed. however, if there reference compiler is rewritten in jane, it is expected that AST, Lexer, and certain packages will be included in the standard library. this a modification that need official compiler project structure to be rebuilt. reference compiler is likely to make extensive use of standard library. this will also allow dev create language specific utilities using jn std library.
 
 ## Build
 
