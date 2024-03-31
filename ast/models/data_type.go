@@ -5,10 +5,17 @@ import (
 	"unicode"
 
 	"github.com/DeRuneLabs/jane/lexer/tokens"
-	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
+
+type Size = int
+
+type TypeSize struct {
+	N         Size
+	Expr      Expr
+	AutoSized bool
+}
 
 type DataType struct {
 	Tok             Tok
@@ -16,6 +23,8 @@ type DataType struct {
 	Original        any
 	Kind            string
 	MultiTyped      bool
+	ComponentType   *DataType
+	Size            TypeSize
 	Tag             any
 	DontUseOriginal bool
 }
@@ -86,9 +95,6 @@ func (dt *DataType) SetToOriginal() {
 	*dt = dt.Original.(DataType)
 	dt.Kind = kind
 	dt.Tok = tok
-	if strings.HasPrefix(dt.Kind, jn.Prefix_Array) {
-		dt.Tag = tag
-	}
 }
 
 func (dt *DataType) Pointers() string {
@@ -123,15 +129,13 @@ func (dt DataType) String() (s string) {
 		s = cpp.String()
 	}()
 	dt.Kind = dt.Kind[len(pointers):]
-	if dt.Kind != "" {
-		switch {
-		case strings.HasPrefix(dt.Kind, jn.Prefix_Slice):
-			return dt.SliceString()
-		case strings.HasPrefix(dt.Kind, jn.Prefix_Array):
-			return dt.ArrayString()
-		case dt.Id == jntype.Map && dt.Kind[0] == '[' && dt.Kind[len(dt.Kind)-1] == ']':
-			return dt.MapString()
-		}
+	switch dt.Id {
+	case jntype.Slice:
+		return dt.SliceString()
+	case jntype.Array:
+		return dt.ArrayString()
+	case jntype.Map:
+		return dt.MapString()
 	}
 	switch dt.Tag.(type) {
 	case CompiledStruct:
@@ -151,30 +155,20 @@ func (dt DataType) String() (s string) {
 	}
 }
 
-func (dt DataType) SliceString() string {
+func (dt *DataType) SliceString() string {
 	var cpp strings.Builder
 	cpp.WriteString("slice<")
-	dt.Kind = dt.Kind[len(jn.Prefix_Slice):]
-	cpp.WriteString(dt.String())
+	cpp.WriteString(dt.ComponentType.String())
 	cpp.WriteByte('>')
 	return cpp.String()
 }
 
-func (dt DataType) ArrayComponent() DataType {
-	dt.Kind = dt.Kind[len(jn.Prefix_Array):]
-	exprs := dt.Tag.([][]any)[1:]
-	dt.Tag = exprs
-	return dt
-}
-
-func (dt DataType) ArrayString() string {
+func (dt *DataType) ArrayString() string {
 	var cpp strings.Builder
 	cpp.WriteString("array<")
-	exprs := dt.Tag.([][]any)
-	expr := exprs[0][1].(Expr)
-	cpp.WriteString(dt.ArrayComponent().String())
+	cpp.WriteString(dt.ComponentType.String())
 	cpp.WriteByte(',')
-	cpp.WriteString(expr.String())
+	cpp.WriteString(dt.Size.Expr.String())
 	cpp.WriteByte('>')
 	return cpp.String()
 }

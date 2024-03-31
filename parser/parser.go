@@ -1384,35 +1384,6 @@ func (p *Parser) Global(vast Var) {
 	p.Defs.Globals = append(p.Defs.Globals, v)
 }
 
-func (p *Parser) checkArrayType(t *DataType) {
-	exprs := t.Tag.([][]any)
-	for i := range exprs {
-		exprSlice := exprs[i]
-		expr := exprSlice[1].(models.Expr)
-		if expr.Model != nil {
-			continue
-		}
-		if arrayExprIsAutoSized(expr) {
-			continue
-		}
-		val, model := p.evalExpr(expr)
-		expr.Model = model
-		exprSlice[1] = expr
-		if val.constExpr {
-			exprSlice[0] = tonumu(val.expr)
-		} else {
-			p.eval.pusherrtok(t.Tok, "expr_not_const")
-		}
-		p.wg.Add(1)
-		go assignChecker{
-			p:      p,
-			t:      DataType{Id: jntype.UInt, Kind: jntype.TypeMap[jntype.UInt]},
-			v:      val,
-			errtok: expr.Toks[0],
-		}.checkAssignType()
-	}
-}
-
 func (p *Parser) Var(v Var) *Var {
 	if jnapi.IsIgnoreId(v.Id) {
 		p.pusherrtok(v.IdTok, "ignore_id")
@@ -3227,6 +3198,34 @@ func (p *Parser) tokenizeDataType(id string) []Tok {
 	return toks
 }
 
+func (p *Parser) typeSourceIsArrayType(t *DataType) (ok bool) {
+	ok = true
+	t.Original = nil
+	t.DontUseOriginal = true
+	*t.ComponentType, ok = p.realType(*t.ComponentType, true)
+	if !ok {
+		return
+	}
+	if t.Size.AutoSized || t.Size.Expr.Model != nil {
+		return
+	}
+	val, model := p.evalExpr(t.Size.Expr)
+	t.Size.Expr.Model = model
+	if val.constExpr {
+		t.Size.N = models.Size(tonumu(val.expr))
+	} else {
+		p.eval.pusherrtok(t.Tok, "expr_not_const")
+	}
+	p.wg.Add(1)
+	go assignChecker{
+		p:      p,
+		t:      DataType{Id: jntype.UInt, Kind: jntype.TypeMap[jntype.UInt]},
+		v:      val,
+		errtok: t.Size.Expr.Toks[0],
+	}.checkAssignType()
+	return
+}
+
 func (p *Parser) typeSource(dt DataType, err bool) (ret DataType, ok bool) {
 	if dt.Kind == "" {
 		return dt, true
@@ -3244,7 +3243,8 @@ func (p *Parser) typeSource(dt DataType, err bool) (ret DataType, ok bool) {
 		return p.typeSourceIsMap(dt, err)
 	}
 	if typeIsArray(dt) {
-		p.checkArrayType(&dt)
+		ok = p.typeSourceIsArrayType(&dt)
+		return dt, ok
 	}
 	switch dt.Id {
 	case jntype.Struct:

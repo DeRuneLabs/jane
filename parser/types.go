@@ -1,11 +1,7 @@
 package parser
 
 import (
-	"strings"
-
-	"github.com/DeRuneLabs/jane/ast/models"
 	"github.com/DeRuneLabs/jane/lexer/tokens"
-	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
@@ -16,10 +12,6 @@ func findGeneric(id string, generics []*GenericType) *GenericType {
 		}
 	}
 	return nil
-}
-
-func arrayIsAutoSized(t DataType) bool {
-	return arrayExprIsAutoSized(t.Tag.([][]any)[0][1].(models.Expr))
 }
 
 func typeIsVoid(t DataType) bool {
@@ -102,15 +94,6 @@ func typeIsGeneric(generics []*GenericType, t DataType) bool {
 	return false
 }
 
-func typeOfSliceComponents(t DataType) DataType {
-	t.Kind = t.Kind[len(jn.Prefix_Slice):]
-	return t
-}
-
-func typeOfArrayComponents(t DataType) DataType {
-	return t.ArrayComponent()
-}
-
 func typeIsExplicitPtr(t DataType) bool {
 	if t.Kind == "" {
 		return false
@@ -123,11 +106,11 @@ func typeIsPtr(t DataType) bool {
 }
 
 func typeIsSlice(t DataType) bool {
-	return strings.HasPrefix(t.Kind, jn.Prefix_Slice)
+	return t.Id == jntype.Slice
 }
 
 func typeIsArray(t DataType) bool {
-	return strings.HasPrefix(t.Kind, jn.Prefix_Array)
+	return t.Id == jntype.Array
 }
 
 func typeIsMap(t DataType) bool {

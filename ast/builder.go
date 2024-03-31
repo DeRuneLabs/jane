@@ -1065,8 +1065,8 @@ func (b *Builder) idDataTypePartEnd(t *models.DataType, dtv *strings.Builder, to
 	t.Tag = generics
 }
 
-func (b *Builder) DataType(toks Toks, i *int, arrays, err bool) (t models.DataType, ok bool) {
-	defer func() { t.Original = t }()
+func (b *Builder) datatype(t *models.DataType, toks Toks, i *int, arrays, err bool) (ok bool) {
+	defer func() { t.Original = *t }()
 	first := *i
 	var dtv strings.Builder
 	for ; *i < len(toks); *i++ {
@@ -1085,7 +1085,7 @@ func (b *Builder) DataType(toks Toks, i *int, arrays, err bool) (t models.DataTy
 			}
 			t.Id = jntype.Id
 			t.Tok = tok
-			b.idDataTypePartEnd(&t, &dtv, toks, i)
+			b.idDataTypePartEnd(t, &dtv, toks, i)
 			ok = true
 			goto ret
 		case tokens.DoubleColon:
@@ -1126,13 +1126,18 @@ func (b *Builder) DataType(toks Toks, i *int, arrays, err bool) (t models.DataTy
 				if tok.Id == tokens.Brace && tok.Kind == tokens.RBRACKET {
 					arrays = false
 					dtv.WriteString(jn.Prefix_Slice)
-					continue
+					t.ComponentType = new(models.DataType)
+					t.Id = jntype.Slice
+					*i++
+					ok = b.datatype(t.ComponentType, toks, i, arrays, err)
+					dtv.WriteString(t.ComponentType.Kind)
+					goto ret
 				}
 				*i--
 				if arrays {
-					t = b.MapOrArrayDataType(toks, i, err)
+					b.MapOrArrayDataType(t, toks, i, err)
 				} else {
-					t = b.MapDataType(toks, i, err)
+					b.MapDataType(t, toks, i, err)
 				}
 				if t.Id == jntype.Void {
 					if err {
@@ -1160,52 +1165,52 @@ ret:
 	return
 }
 
-func (b *Builder) arrayDataType(toks Toks, i *int, err bool) (t models.DataType) {
-	defer func() { t.Original = t }()
+func (b *Builder) DataType(toks Toks, i *int, arrays, err bool) (t models.DataType, ok bool) {
+	ok = b.datatype(&t, toks, i, arrays, err)
+	return
+}
+
+func (b *Builder) arrayDataType(t *models.DataType, toks Toks, i *int, err bool) {
+	defer func() { t.Original = *t }()
 	if *i+1 >= len(toks) {
 		return
 	}
+	t.Id = jntype.Array
 	*i++
 	exprI := *i
-	t, ok := b.DataType(toks, i, true, err)
+	t.ComponentType = new(models.DataType)
+	ok := b.datatype(t.ComponentType, toks, i, true, err)
 	if !ok {
 		return
-	}
-	var exprs [][]any
-	if t.Tag != nil {
-		exprs = t.Tag.([][]any)
 	}
 	_, exprToks := RangeLast(toks[:exprI])
 	exprToks = exprToks[1 : len(exprToks)-1]
 	tok := exprToks[0]
 	if len(exprToks) == 1 && tok.Id == tokens.Operator && tok.Kind == tokens.TRIPLE_DOT {
-		exprs = append([][]any{{uint64(0), models.Expr{}}}, exprs...)
+		t.Size.AutoSized = true
 	} else {
-		exprs = append([][]any{{uint64(0), b.Expr(exprToks)}}, exprs...)
+		t.Size.Expr = b.Expr(exprToks)
 	}
-	t.Tag = exprs
-	t.Kind = jn.Prefix_Array + t.Kind
-	return t
+	t.Kind = jn.Prefix_Array + t.ComponentType.Kind
 }
 
-func (b *Builder) MapOrArrayDataType(toks Toks, i *int, err bool) models.DataType {
-	t := b.MapDataType(toks, i, err)
+func (b *Builder) MapOrArrayDataType(t *models.DataType, toks Toks, i *int, err bool) {
+	b.MapDataType(t, toks, i, err)
 	if t.Id == jntype.Void {
-		return b.arrayDataType(toks, i, err)
+		b.arrayDataType(t, toks, i, err)
 	}
-	return t
 }
 
-func (b *Builder) MapDataType(toks Toks, i *int, err bool) (t models.DataType) {
+func (b *Builder) MapDataType(t *models.DataType, toks Toks, i *int, err bool) {
 	typeToks, colon := SplitColon(toks, i)
 	if typeToks == nil || colon == -1 {
 		return
 	}
-	return b.mapDataType(toks, typeToks, colon, err)
+	b.mapDataType(t, toks, typeToks, colon, err)
 }
 
-func (b *Builder) mapDataType(toks, typeToks Toks, colon int, err bool) (t models.DataType) {
-	defer func() { t.Original = t }()
+func (b *Builder) mapDataType(t *models.DataType, toks, typeToks Toks, colon int, err bool) {
+	defer func() { t.Original = *t }()
 	t.Id = jntype.Map
 	t.Tok = toks[0]
 	colonTok := toks[colon]
@@ -1213,7 +1218,7 @@ func (b *Builder) mapDataType(toks, typeToks Toks, colon int, err bool) (t model
 		if err {
 			b.pusherr(colonTok, "missing_expr")
 		}
-		return t
+		return
 	}
 	keyTypeToks := typeToks[:colon]
 	valueTypeToks := typeToks[colon+1:]
@@ -1224,7 +1229,6 @@ func (b *Builder) mapDataType(toks, typeToks Toks, colon int, err bool) (t model
 	types[1], _ = b.DataType(valueTypeToks, &j, true, err)
 	t.Tag = types
 	t.Kind = t.MapKind()
-	return t
 }
 
 func (b *Builder) FuncDataTypeHead(toks Toks, i *int) models.Func {

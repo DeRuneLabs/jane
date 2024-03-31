@@ -27,6 +27,8 @@ const (
 	Enum    uint8 = 21
 	Struct  uint8 = 22
 	Trait   uint8 = 23
+	Slice   uint8 = 24
+	Array   uint8 = 25
 )
 
 var TypeMap = map[uint8]string{

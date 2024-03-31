@@ -9,10 +9,6 @@ import (
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
-func arrayExprIsAutoSized(expr models.Expr) bool {
-	return len(expr.Processes) == 0 || len(expr.Toks) == 0
-}
-
 func isstr(s string) bool {
 	return s != "" && (s[0] == '"' || israwstr(s))
 }

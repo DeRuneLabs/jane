@@ -17,7 +17,7 @@ func (fc *foreachChecker) array() {
 	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
 		return
 	}
-	componentType := typeOfArrayComponents(fc.profile.ExprType)
+	componentType := *fc.profile.ExprType.ComponentType
 	keyB := &fc.profile.KeyB
 	if keyB.Type.Id == jntype.Void {
 		keyB.Type = componentType
@@ -32,7 +32,7 @@ func (fc *foreachChecker) slice() {
 	if jnapi.IsIgnoreId(fc.profile.KeyB.Id) {
 		return
 	}
-	componentType := typeOfSliceComponents(fc.profile.ExprType)
+	componentType := *fc.profile.ExprType.ComponentType
 	keyB := &fc.profile.KeyB
 	if keyB.Type.Id == jntype.Void {
 		keyB.Type = componentType
