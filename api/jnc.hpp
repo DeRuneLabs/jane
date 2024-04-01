@@ -21,21 +21,18 @@
 #ifndef __JNC_HPP
 #define __JNC_HPP
 
-#include "array.hpp"
-#include "jn_util.hpp"
-#include "slice.hpp"
-#include "trait.hpp"
-
 #include "any.hpp"
+#include "array.hpp"
 #include "builtin.hpp"
 #include "defer.hpp"
+#include "jn_util.hpp"
 #include "map.hpp"
 #include "ptr.hpp"
+#include "slice.hpp"
 #include "str.hpp"
 #include "tracer.hpp"
-#include <cstdlib>
-#include <exception>
-#include <ios>
+#include "trait.hpp"
+#include "typedef.hpp"
 
 template <typename _Enum_t, typename _Index_t, typename _Item_t>
 static inline void foreach (const _Enum_t _Enum,
@@ -79,11 +76,20 @@ void _jnc___call_initializers(void);
 int main(void);
 
 template <typename _Enum_t, typename _Index_t, typename _Item_t>
-static inline void foreac(const _Enum_t _Enum,
-                          const std::function<void(_Index_t, _Item_t)> _Body) {
+static inline void foreach (
+    const _Enum_t _Enum, const std::function<void(_Index_t, _Item_t)> _Body) {
   _Index_t _index{0};
   for (auto _item : _Enum) {
     _Body(_index++, _item);
+  }
+}
+
+template <typename _Enum_t, typename _Index_t>
+static inline void foreach (const _Enum_t _Enum,
+                            const std::function<void(_Index_t)> _Body) {
+  _Index_t _index{0};
+  for (auto begin = _Enum.begin(), end = _Enum.end(); begin < end; ++begin) {
+    _Body(_index++);
   }
 }
 
