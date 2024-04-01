@@ -1,5 +1,5 @@
 testing_looping() {
-  iter index:i32 in "Khairanabilla" {
+  for index: i32 in "Khairanabilla" {
     println(index)
   }
 }

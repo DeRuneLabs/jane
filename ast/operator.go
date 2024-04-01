@@ -39,7 +39,7 @@ func IsSolidOperator(kind string) bool {
 	return existOperator(kind, SolidOperators[:])
 }
 
-func IsExpressionOperator(kind string) bool {
+func IsExprOperator(kind string) bool {
 	return existOperator(kind, ExpressionOperators[:])
 }
 

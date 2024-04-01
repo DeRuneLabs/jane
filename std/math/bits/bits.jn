@@ -325,6 +325,30 @@ pub add64(x, y, carry u64) [sum, carryout u64] {
 }
 
 //doc:
+// return the differnce of x, y and borrow, diff = x - y - borrow
+// borrow input must 0 or 1, otherwise behaviour is undefined,
+// borrowout output is guaranted to 0 or 1
+pub sub32(x, y borrow u32) [diff, borrowout u32] {
+  diff = x - y - borrow
+  // differnce will underflow if the top bit of x is not set and top
+  // bit of y is set (^x & y) or if are the same (^(x ^ y)) and borrow
+  // from lower place happens, if borrow happens, default will be
+  // 1 - 1 - 1 = 0 - 0 - 1 = 1 (& diff)
+  borrowout = ((~x & y) | (~(x ^ y) & diff)) >> 31
+	ret
+}
+
+//doc:
+// return the differnce of x, y and borrow, diff = x - y - borrow
+// borrow input must 0 or 1, otherwise behaviour is undefined,
+// borrowout output is guaranted to 0 or 1
+pub sub64(x, y, borrow u64) [diff, borrowout u64] {
+  diff = x - y - borrow
+  borrowout = ((~x & y) | (~(x ^ y) & diff)) >> 63
+	ret
+}
+
+//doc:
 // return 64-bit product of x and y, (hi, lo) = x * y
 // with prod bits upper half return in hi and the lower half return in lo
 // below the function execution does not depend on inputs
