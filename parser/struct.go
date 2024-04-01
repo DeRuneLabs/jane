@@ -117,6 +117,7 @@ func (s *jnstruct) cppConstructor() string {
 		for i, g := range s.Defs.Globals {
 			cpp.WriteByte('\n')
 			cpp.WriteString(models.IndentString())
+			cpp.WriteString("this->")
 			cpp.WriteString(g.OutId())
 			cpp.WriteString(" = ")
 			cpp.WriteString(s.constructor.Params[i].OutId())

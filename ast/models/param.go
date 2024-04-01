@@ -32,7 +32,7 @@ func (p *Param) TypeString() string {
 }
 
 func (p *Param) OutId() string {
-	return jnapi.OutId(p.Id, p.Tok.File)
+	return jnapi.AsId(p.Id)
 }
 
 func (p Param) String() string {

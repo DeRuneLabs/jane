@@ -1,8 +1,10 @@
 testing_casting_variable() {
-  _ = (*i32)(100)
+  _ = (*int)(100)
 	_ = (f32)(5000)
 	println("welcome")
-	println((str)("wassup folks"))
+  bytes: = ([]byte)("test bytes")
+  println(bytes)
+  println((str)(bytes))
 }
 
 main() {

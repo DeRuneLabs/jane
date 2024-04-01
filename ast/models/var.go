@@ -20,10 +20,16 @@ type Var struct {
 	ExprTag   any
 	Desc      string
 	Used      bool
+	IsField   bool
 }
 
 func (v *Var) OutId() string {
-	return jnapi.OutId(v.Id, v.IdTok.File)
+	switch {
+	case v.IsField:
+		return jnapi.AsId(v.Id)
+	default:
+		return jnapi.OutId(v.Id, v.IdTok.File)
+	}
 }
 
 func (v Var) String() string {

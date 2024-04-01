@@ -1482,6 +1482,7 @@ func (p *Parser) varsFromParams(params []Param) []*Var {
 	vars := make([]*Var, length)
 	for i, param := range params {
 		v := new(models.Var)
+		v.IsField = true
 		v.Id = param.Id
 		v.IdTok = param.Tok
 		v.Type = param.Type
@@ -2746,6 +2747,7 @@ func (p *Parser) varStatement(v *Var, noParse bool) {
 	if !noParse {
 		*v = *p.Var(*v)
 	}
+	v.IsField = true
 	p.blockVars = append(p.blockVars, v)
 }
 

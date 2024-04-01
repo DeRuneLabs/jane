@@ -15,8 +15,7 @@ type AssignLeft struct {
 func (as AssignLeft) String() string {
 	switch {
 	case as.Var.New:
-		tok := as.Expr.Toks[0]
-		return jnapi.OutId(tok.Kind, tok.File)
+		return as.Var.OutId()
 	case as.Ignore:
 		return jnapi.CppIgnore
 	}
