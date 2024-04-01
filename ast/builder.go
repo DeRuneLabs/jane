@@ -787,7 +787,7 @@ func (b *Builder) funcPrototype(toks *Toks, anon bool) (f models.Func, ok bool) 
 	f.RetType.Type.Kind = jntype.TypeMap[f.RetType.Type.Id]
 	paramToks := b.getrange(&i, tokens.LPARENTHESES, tokens.RPARENTHESES, toks)
 	if len(paramToks) > 0 {
-		b.Params(&f, paramToks)
+		f.Params = b.Params(paramToks, false)
 	}
 	t, retok := b.FuncRetDataType(*toks, &i)
 	if retok {
@@ -893,31 +893,32 @@ func (b *Builder) GlobalVar(toks Toks) {
 	})
 }
 
-func (b *Builder) Params(f *models.Func, toks Toks) {
+func (b *Builder) Params(toks Toks, mustPure bool) []models.Param {
 	parts, errs := Parts(toks, tokens.Comma, true)
 	b.Errors = append(b.Errors, errs...)
+	var params []models.Param
 	for _, part := range parts {
-		b.pushParam(f, part)
+		b.pushParam(&params, part, mustPure)
 	}
-	b.wg.Add(1)
-	b.checkParams(f)
+	b.checkParams(&params)
+	return params
 }
 
-func (b *Builder) checkParams(f *models.Func) {
-	defer b.wg.Done()
-	for i := range f.Params {
-		p := &f.Params[i]
-		if p.Type.Tok.Id == tokens.NA {
-			if p.Tok.Id == tokens.NA {
-				b.pusherr(p.Tok, "missing_type")
-			} else {
-				p.Type.Tok = p.Tok
-				p.Type.Id = jntype.Id
-				p.Type.Kind = p.Type.Tok.Kind
-				p.Type.Original = p.Type
-				p.Id = jn.Anonymous
-				p.Tok = lexer.Tok{}
-			}
+func (b *Builder) checkParams(params *[]models.Param) {
+	for i := range *params {
+		p := &(*params)[i]
+		if p.Type.Tok.Id != tokens.NA {
+			continue
+		}
+		if p.Tok.Id == tokens.NA {
+			b.pusherr(p.Tok, "missing_type")
+		} else {
+			p.Type.Tok = p.Tok
+			p.Type.Id = jntype.Id
+			p.Type.Kind = p.Type.Tok.Kind
+			p.Type.Original = p.Type
+			p.Id = jn.Anonymous
+			p.Tok = lexer.Tok{}
 		}
 	}
 }
@@ -949,30 +950,24 @@ func (b *Builder) paramBegin(p *models.Param, i *int, toks Toks) {
 	}
 }
 
-func (b *Builder) paramBodyId(f *models.Func, p *models.Param, tok Tok) {
+func (b *Builder) paramBodyId(p *models.Param, tok Tok) {
 	if jnapi.IsIgnoreId(tok.Kind) {
 		p.Id = jn.Anonymous
 		return
 	}
-	for _, param := range f.Params {
-		if param.Id == tok.Kind {
-			b.pusherr(tok, "parameter_exist", tok.Kind)
-			break
-		}
-	}
 	p.Id = tok.Kind
 }
 
-func (b *Builder) paramBodyDataType(f *models.Func, p *models.Param, toks Toks) {
+func (b *Builder) paramBodyDataType(params *[]models.Param, p *models.Param, toks Toks) {
 	i := 0
 	p.Type, _ = b.DataType(toks, &i, false, true)
 	i++
 	if i < len(toks) {
 		b.pusherr(toks[i], "invalid_syntax")
 	}
-	i = len(f.Params) - 1
+	i = len(*params) - 1
 	for ; i >= 0; i-- {
-		param := &f.Params[i]
+		param := &(*params)[i]
 		if param.Type.Tok.Id != tokens.NA {
 			break
 		}
@@ -980,38 +975,40 @@ func (b *Builder) paramBodyDataType(f *models.Func, p *models.Param, toks Toks) 
 	}
 }
 
-func (b *Builder) paramBody(f *models.Func, p *models.Param, i *int, toks Toks) {
-	b.paramBodyId(f, p, toks[*i])
+func (b *Builder) paramBody(params *[]models.Param, p *models.Param, i *int, toks Toks) {
+	b.paramBodyId(p, toks[*i])
 	toks = toks[*i+1:]
 	if len(toks) == 0 {
 		return
 	}
 	if len(toks) > 0 {
-		b.paramBodyDataType(f, p, toks)
+		b.paramBodyDataType(params, p, toks)
 	}
 }
 
-func (b *Builder) pushParam(f *models.Func, toks Toks) {
-	var p models.Param
+func (b *Builder) pushParam(params *[]models.Param, toks Toks, mustPure bool) {
+	var param models.Param
 	i := 0
-	b.paramBegin(&p, &i, toks)
-	if i >= len(toks) {
-		return
+	if !mustPure {
+		b.paramBegin(&param, &i, toks)
+		if i >= len(toks) {
+			return
+		}
 	}
 	tok := toks[i]
-	p.Tok = tok
+	param.Tok = tok
 	if tok.Id != tokens.Id {
-		p.Id = jn.Anonymous
+		param.Id = jn.Anonymous
 		if t, ok := b.DataType(toks, &i, false, true); ok {
 			if i+1 == len(toks) {
-				p.Type = t
+				param.Type = t
 			}
 		}
 		goto end
 	}
-	b.paramBody(f, &p, &i, toks)
+	b.paramBody(params, &param, &i, toks)
 end:
-	f.Params = append(f.Params, p)
+	*params = append(*params, param)
 }
 
 func (b *Builder) idGenericsParts(toks Toks, i *int) []Toks {
@@ -1250,7 +1247,7 @@ func (b *Builder) FuncDataTypeHead(toks Toks, i *int) models.Func {
 			}
 		}
 		if brace == 0 {
-			b.Params(&f, toks[firstIndex+1:*i])
+			f.Params = b.Params(toks[firstIndex+1:*i], false)
 			return f
 		}
 	}
@@ -1281,7 +1278,6 @@ func (b *Builder) pushTypeToTypes(ids *Toks, types *[]models.DataType, toks Toks
 }
 
 func (b *Builder) funcMultiTypeRet(toks Toks, i *int) (t models.RetType, ok bool) {
-	defer func() { t.Type.Original = t.Type }()
 	start := *i
 	tok := toks[*i]
 	t.Type.Kind += tok.Kind
@@ -1297,42 +1293,24 @@ func (b *Builder) funcMultiTypeRet(toks Toks, i *int) (t models.RetType, ok bool
 		t.Type, ok = b.DataType(toks, i, false, false)
 		return
 	}
-	var types []models.DataType
-	braceCount := 1
-	last := *i
-	for ; *i < len(toks); *i++ {
-		tok := toks[*i]
-		t.Type.Kind += tok.Kind
-		if tok.Id == tokens.Brace {
-			switch tok.Kind {
-			case tokens.LBRACE, tokens.LBRACKET, tokens.LPARENTHESES:
-				braceCount++
-			default:
-				braceCount--
-			}
+	_, colon := SplitColon(toks, i)
+	if colon != -1 {
+		*i = start
+		t.Type, ok = b.DataType(toks, i, false, false)
+		return
+	}
+	*i--
+	rang := Range(i, tokens.LBRACKET, tokens.RBRACKET, toks)
+	params := b.Params(rang, true)
+	types := make([]models.DataType, len(params))
+	for i, param := range params {
+		types[i] = param.Type
+		if param.Id != jn.Anonymous {
+			param.Tok.Kind = param.Id
+		} else {
+			param.Tok.Kind = jnapi.Ignore
 		}
-		if braceCount == 0 {
-			if tok.Id == tokens.Colon {
-				*i = start
-				t.Type, ok = b.DataType(toks, i, false, false)
-				return
-			}
-			b.pushTypeToTypes(&t.Identifiers, &types, toks[last:*i], toks[last-1])
-			break
-		} else if braceCount > 1 {
-			continue
-		}
-		switch tok.Id {
-		case tokens.Comma:
-		case tokens.Colon:
-			*i = start
-			t.Type, ok = b.DataType(toks, i, false, false)
-			return
-		default:
-			continue
-		}
-		b.pushTypeToTypes(&t.Identifiers, &types, toks[last:*i], toks[*i-1])
-		last = *i + 1
+		t.Identifiers = append(t.Identifiers, param.Tok)
 	}
 	if len(types) > 1 {
 		t.Type.MultiTyped = true
@@ -1340,12 +1318,12 @@ func (b *Builder) funcMultiTypeRet(toks Toks, i *int) (t models.RetType, ok bool
 	} else {
 		t.Type = types[0]
 	}
+	*i--
 	ok = true
 	return
 }
 
 func (b *Builder) FuncRetDataType(toks Toks, i *int) (t models.RetType, ok bool) {
-	defer func() { t.Type.Original = t.Type }()
 	t.Type.Id = jntype.Void
 	t.Type.Kind = jntype.TypeMap[t.Type.Id]
 	if *i >= len(toks) {

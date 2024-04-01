@@ -152,11 +152,99 @@ pub ones_count64(x u64) int {
 
 //doc:
 // return value of x rotated left by (k mod 8) bits,
-// to rotate x right by k bits, call RotateLeft8(x, -k)
+// to rotate x right by k bits, call rotate_left8(x, -k)
 pub rotate_left8(x u8, k int) u8 {
   const n: = 8
-  s := uint(k) & (n - 1)
+  s: = uint(k) & (n - 1)
   ret x << s | x >> (n-s)
+}
+
+//doc:
+// return value of x rotated left by (k mod 16) bits
+// to rotate x right by k bits, call rotate_left16(x, -k)
+pub rotate_left16(x u16, k int) u16 {
+  const n: = 16
+  s: = uint(k) & (n - 1)
+  ret x << s | x >> (n - s)
+}
+
+//doc:
+// return value of x rotate left by (k mod 32) bits
+// to rotate  x right by k bits, call rotate_left32(x, -k)
+pub rotate_left32(x u32, k int) u32 {
+  const n: = 32
+  s: = uint(k) & (n - 1)
+  ret x << s | x >> (n - s)
+}
+
+//doc:
+// return value of x rotate left by (k mod 64) bits
+// to rotate x right by k bits, call rotate_left64(x, -k)
+pub rotate_left64(x u64, k int) u64 {
+  const n: = 64
+  s: = uint(k) & (n - 1)
+  ret x << s | x >> (n - s)
+}
+
+//doc:
+// return the value of x with its bits in reversed order
+@inline
+pub reverse8(x u8) u8 {
+  ret rev8tab[x]
+}
+
+//doc:
+// return the value of x with its bits in reversed order
+@inline
+pub reverse16(x u16) u16 {
+  ret u16(rev8tab[x>>8]) | u16(rev8tab[x&0xff])<<8
+}
+
+//doc:
+// return the value of x with its bits in reversed order
+pub reverse32(x u32) u32 {
+  const m: = 1 << 32 - 1
+	x = x >> 1&(m0&m) | x&(m0&m) << 1
+	x = x >> 2&(m1&m) | x&(m1&m) << 2
+	x = x >> 4&(m2&m) | x&(m2&m) << 4
+	ret reverse_bytes32(x)
+}
+
+//doc:
+// return the value of x with its bits in reversed order
+pub reverse64(x u64) u64 {
+  const m: = 1 << 64 - 1
+  x = x >> 1&(m0&m) | x&(m0&m) << 1
+	x = x >> 2&(m1&m) | x&(m1&m) << 2
+	x = x >> 4&(m2&m) | x&(m2&m) << 4
+	ret reverse_bytes64(x)
+}
+
+//doc:
+// return value of x with its bytes in reversed order
+// function to execution time does not depend on the inputs
+@inline
+pub reverse_bytes16(x u16) u16 {
+  ret x >> 8 | x << 8
+}
+
+//doc:
+// return value of x with its bytes in reversed order
+// function to execution time does not depend on the inputs
+pub reverse_bytes32(x u32) u32 {
+  const m: = 1 << 32 - 1
+  x = x>>8&(m3&m) | x&(m3&m)<<8
+  ret x >> 16 | x << 16
+}
+
+//doc:
+// return value of x with its bytes in reversed order
+// function to execution time does not depend on the inputs
+pub reverse_bytes64(x u64) u64 {
+  const m: = 1 << 64 - 1
+	x = x >> 8&(m3&m) | x&(m3&m) << 8
+	x = x >> 16&(m4&m) | x&(m4&m) << 16
+	ret x >> 32 | x << 32
 }
 
 //doc:
@@ -211,10 +299,36 @@ pub len64(x u64) [n int] {
 }
 
 //doc:
+// return the sum with carry of x, y carry: sum = x + y + carry,
+// carry input must 0 or 1, otherwise behaviour is undefined,
+// carryout output is guaranted to 0 or 1
+// function execution does not support depedn on the inputs
+pub add32(x, y, carry u32) [sum, carryout u32] {
+  sum64: = u64(x) + u64(y) + u64(carry)
+  sum = u32(sum64)
+  carryout = u32(sum64 >> 32)
+  ret
+}
+
+//doc:
+// return the sum with carry of x, y carry: sum = x + y + carry,
+// carry input must 0 or 1, otherwise behaviour is undefined,
+// carryout output is guaranted to 0 or 1
+// function execution does not support depedn on the inputs
+pub add64(x, y, carry u64) [sum, carryout u64] {
+  sum = x + y + carry
+  // sum will be overflow if both top bits are set(x & y) or if one of
+  // is (x | y), and carry from lower place happened, if such carry
+  // happens, the top bit will be 1 + 0 + 1 = 0 (& ~sum)
+  carryout = ((x & y) | ((x | y) & ~sum)) >> 63
+  ret
+}
+
+//doc:
 // return 64-bit product of x and y, (hi, lo) = x * y
 // with prod bits upper half return in hi and the lower half return in lo
 // below the function execution does not depend on inputs
-pub mul32(x, y u32) [hi u32, lo u32] {
+pub mul32(x, y u32) [hi, lo u32] {
 	tmp: = u64(x) * u64(y)
 	hi, lo = u32(tmp>>32), u32(tmp)
 	ret
@@ -224,7 +338,7 @@ pub mul32(x, y u32) [hi u32, lo u32] {
 // return the 128-bit product of x and y, (hi, lo) = x * y
 // with product bits upper half return in and the lower
 // half return in lo
-pub mul64(x, y u64) [hi u64, lo u64] {
+pub mul64(x, y u64) [hi, lo u64] {
   const mask32: = 1<<32 - 1
 	x0 := x & mask32
 	x1 := x >> 32

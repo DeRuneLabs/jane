@@ -158,6 +158,7 @@ func (dt DataType) String() (s string) {
 func (dt *DataType) SliceString() string {
 	var cpp strings.Builder
 	cpp.WriteString("slice<")
+	dt.ComponentType.DontUseOriginal = dt.DontUseOriginal
 	cpp.WriteString(dt.ComponentType.String())
 	cpp.WriteByte('>')
 	return cpp.String()
@@ -166,6 +167,7 @@ func (dt *DataType) SliceString() string {
 func (dt *DataType) ArrayString() string {
 	var cpp strings.Builder
 	cpp.WriteString("array<")
+	dt.ComponentType.DontUseOriginal = dt.DontUseOriginal
 	cpp.WriteString(dt.ComponentType.String())
 	cpp.WriteByte(',')
 	cpp.WriteString(dt.Size.Expr.String())

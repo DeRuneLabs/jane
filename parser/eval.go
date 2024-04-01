@@ -141,16 +141,16 @@ func (e *eval) nextOperator(processes []Toks) int {
 		switch process[0].Kind {
 		case tokens.STAR, tokens.PERCENT, tokens.SOLIDUS,
 			tokens.RSHIFT, tokens.LSHIFT, tokens.AMPER:
-			prec.set(1, i)
+			prec.set(5, i)
 		case tokens.PLUS, tokens.MINUS, tokens.VLINE, tokens.CARET:
-			prec.set(2, i)
+			prec.set(4, i)
 		case tokens.EQUALS, tokens.NOT_EQUALS, tokens.LESS,
 			tokens.LESS_EQUAL, tokens.GREAT, tokens.GREAT_EQUAL:
 			prec.set(3, i)
 		case tokens.AND:
-			prec.set(4, i)
+			prec.set(2, i)
 		case tokens.OR:
-			prec.set(5, i)
+			prec.set(1, i)
 		default:
 			e.pusherrtok(process[0], "invalid_operator")
 		}
@@ -500,7 +500,7 @@ func (e *eval) tryCast(toks Toks, m *exprModel) (v value, _ bool) {
 		if tok.Id != tokens.Brace || tok.Kind != tokens.LPARENTHESES {
 			return
 		}
-		exprToks, ok = e.p.getRange(tokens.LPARENTHESES, tokens.RPARENTHESES, exprToks)
+		exprToks, ok = e.p.getrange(tokens.LPARENTHESES, tokens.RPARENTHESES, exprToks)
 		if !ok {
 			return
 		}
@@ -763,7 +763,11 @@ func (e *eval) xObjSubId(dm *Defmap, val value, idTok Tok, m *exprModel) (v valu
 		v.data.Type = g.Type
 		v.lvalue = true
 		v.constExpr = g.Const
-		m.appendSubNode(exprNode{g.OutId()})
+		if g.Tag != nil {
+			m.appendSubNode(exprNode{g.Tag.(string)})
+		} else {
+			m.appendSubNode(exprNode{g.OutId()})
+		}
 	case 'f':
 		f := dm.Funcs[i]
 		f.used = true

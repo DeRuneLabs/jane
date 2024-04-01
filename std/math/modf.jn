@@ -21,7 +21,7 @@
 //doc:
 // return integer and frac float-point number that sum to f,
 // both value have the same sign as f
-pub modf(f f64) [integer f64, frac f64] {
+pub modf(f f64) [integer, frac f64] {
   if f < 1 {
     match {
       case f < 0:

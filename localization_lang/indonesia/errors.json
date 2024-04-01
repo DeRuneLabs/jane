@@ -24,7 +24,6 @@
     "operator_notfor_uint": "operator %s tidak didefinisikan untuk tipe integer tidak bertanda",
     "id_noexist": "identifier tidak ada: %s",
     "not_function_call": "nilai bukanlah fungsi",
-    "parameter_exist": "parameter sudah ada dalam identifier ini: %s",
     "argument_overflow": "overflow argumen",
     "entrypoint_have_return": "titik masuk tidak boleh memiliki tipe pengembalian",
     "entrypoint_have_parameters": "titik masuk tidak boleh memiliki parameter",

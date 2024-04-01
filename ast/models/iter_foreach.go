@@ -3,9 +3,8 @@ package models
 import (
 	"strings"
 
-	"github.com/DeRuneLabs/jane/lexer/tokens"
-	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jnapi"
+	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
 type IterForeach struct {
@@ -38,12 +37,12 @@ func (f *IterForeach) ClassicString(iter Iter) string {
 	cpp.WriteString(", [&](")
 	cpp.WriteString(f.KeyA.Type.String())
 	cpp.WriteByte(' ')
-	cpp.WriteString(jnapi.OutId(f.KeyA.Id, f.KeyA.IdTok.File))
+	cpp.WriteString(f.KeyA.OutId())
 	if !jnapi.IsIgnoreId(f.KeyB.Id) {
 		cpp.WriteByte(',')
 		cpp.WriteString(f.KeyB.Type.String())
 		cpp.WriteByte(' ')
-		cpp.WriteString(jnapi.OutId(f.KeyB.Id, f.KeyB.IdTok.File))
+		cpp.WriteString(f.KeyB.OutId())
 	}
 	cpp.WriteString(") -> void ")
 	cpp.WriteString(iter.Block.String())
@@ -63,12 +62,12 @@ func (f *IterForeach) MapString(iter Iter) string {
 	cpp.WriteString(", [&](")
 	cpp.WriteString(f.KeyA.Type.String())
 	cpp.WriteByte(' ')
-	cpp.WriteString(jnapi.OutId(f.KeyA.Id, f.KeyA.IdTok.File))
+	cpp.WriteString(f.KeyA.OutId())
 	if !jnapi.IsIgnoreId(f.KeyB.Id) {
 		cpp.WriteByte(',')
 		cpp.WriteString(f.KeyB.Type.String())
 		cpp.WriteByte(' ')
-		cpp.WriteString(jnapi.OutId(f.KeyB.Id, f.KeyB.IdTok.File))
+		cpp.WriteString(f.KeyB.OutId())
 	}
 	cpp.WriteString(") -> void ")
 	cpp.WriteString(iter.Block.String())
@@ -77,12 +76,10 @@ func (f *IterForeach) MapString(iter Iter) string {
 }
 
 func (f *IterForeach) ForeachString(iter Iter) string {
-	switch {
-	case f.ExprType.Kind == tokens.STR,
-		strings.HasPrefix(f.ExprType.Kind, jn.Prefix_Slice),
-		strings.HasPrefix(f.ExprType.Kind, jn.Prefix_Array):
+	switch f.ExprType.Id {
+	case jntype.Str, jntype.Slice, jntype.Array:
 		return f.ClassicString(iter)
-	case f.ExprType.Kind[0] == '[':
+	case jntype.Map:
 		return f.MapString(iter)
 	}
 	return ""
@@ -91,7 +88,7 @@ func (f *IterForeach) ForeachString(iter Iter) string {
 func (f IterForeach) IterationString(iter Iter) string {
 	var cpp strings.Builder
 	cpp.WriteString("for (auto ")
-	cpp.WriteString(jnapi.OutId(f.KeyB.Id, f.KeyB.IdTok.File))
+	cpp.WriteString(f.KeyB.OutId())
 	cpp.WriteString(" : ")
 	cpp.WriteString(f.Expr.String())
 	cpp.WriteString(") ")
