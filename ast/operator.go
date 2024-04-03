@@ -5,7 +5,7 @@ import "github.com/DeRuneLabs/jane/lexer/tokens"
 var UnaryOperators = [...]string{
 	0: tokens.MINUS,
 	1: tokens.PLUS,
-	2: tokens.TILDE,
+	2: tokens.CARET,
 	3: tokens.EXCLAMATION,
 	4: tokens.STAR,
 	5: tokens.AMPER,
