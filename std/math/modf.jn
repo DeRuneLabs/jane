@@ -36,7 +36,7 @@ pub modf(f f64) [integer, frac f64] {
 	e: = uint(x>>SHIFT)&MASK - BIAS
 
   if e < 64-12 {
-		x &= ~(1<<uint(64-12-e) - 1)
+		x &= ^(1<<uint(64-12-e) - 1)
 	}
 	integer = f64_from_bits(x)
 	frac = f - integer

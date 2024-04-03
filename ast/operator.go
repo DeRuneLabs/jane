@@ -22,8 +22,7 @@ var SolidOperators = [...]string{
 	7:  tokens.CARET,
 	8:  tokens.LESS,
 	9:  tokens.GREAT,
-	10: tokens.TILDE,
-	11: tokens.EXCLAMATION,
+	10: tokens.EXCLAMATION,
 }
 
 var ExpressionOperators = [...]string{

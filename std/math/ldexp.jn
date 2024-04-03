@@ -32,4 +32,11 @@ pub ldexp(frac f64, exp int) f64 {
     ret inf(1)
   }
   m:f64 = 1
+  if exp < -1022 {
+    exp += 53
+    m = 1.0 / (1 << 43) // 2**-53
+  }
+  x &= ^(MASK << SHIFT)
+	x |= u64(exp+BIAS) << SHIFT
+	ret m * f64_from_bits(x)
 }

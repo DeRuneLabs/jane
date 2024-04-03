@@ -34,7 +34,6 @@ const (
 	STAR                = "*"
 	SOLIDUS             = "/"
 	PERCENT             = "%"
-	TILDE               = "~"
 	AMPER               = "&"
 	VLINE               = "|"
 	CARET               = "^"

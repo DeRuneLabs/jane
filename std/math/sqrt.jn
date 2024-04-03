@@ -87,7 +87,7 @@ pub sqrt(const x f64) f64 {
   }
   // unbias exponent
   exp -= bias
-  ix &= ~(mask << shift)
+  ix &= ^(mask << shift)
   ix |= 1 << shift
   if exp&1 == 1 {
     ix <<= 1
