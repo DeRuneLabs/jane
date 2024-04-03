@@ -1,0 +1,99 @@
+// Copyright (c) 2024 - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+use std::math::bits
+
+//doc:
+// the highest value of x that can be reduced using PI / 4 in 3 f64 pieces and still
+// get accurate result. the threshold is esthablished when y * C can be represented
+// as f64 without errors, where y = floor(x * (4 / PI)) and C is the leading partial
+// terms of 4 / PI. the leading terms PI4A and PI4 in ``sin.go`` contain 30 and
+// 32 trailing zero bits, implying y should have less than 30 significantly bits
+//
+// y < 1<<30 -> floor(x*4/Pi) < 1<<30 -> x < (1<<30 - 1) * Pi/4
+// above this limit, payne-hanek range reduction must be applied
+const reduce_threshold: = 1 << 29
+
+//doc:
+// implement payne-hanek range reduction by Pi/4 for x > 0, return the integer part mod
+// 8 (j) and the fractional part (z) of x / (pi/4)
+trig_reduce(x f64) [j u64, z f64] {
+  const PI4: = PI / 4
+  if x < PI4 {
+    ret 0, x
+  }
+  ix: = f64_bits(x)
+	exp: = int(ix>>SHIFT&MASK) - BIAS - SHIFT
+	ix &= ^(MASK << SHIFT)
+	ix |= 1 << SHIFT
+  // using exponent to extract 3 approriate u64 digit from mPi4,
+  // B ~ (z0, z1, z2), such that product leading digit has exponent -61
+  digit:, bitshift: = uint(exp+61)/64, uint(exp+61)%64
+	z0 := (mPi4[digit] << bitshift) | (mPi4[digit+1] >> (64 - bitshift))
+	z1 := (mPi4[digit+1] << bitshift) | (mPi4[digit+2] >> (64 - bitshift))
+	z2 := (mPi4[digit+2] << bitshift) | (mPi4[digit+3] >> (64 - bitshift))
+  z2hi:, _ = std::math::bits::mul64(z2, ix)
+	z1hi:, z1lo: = std::math::bits::mul64(z1, ix)
+	z0lo: = z0 * ix
+	lo:, c: = std::math::bits::add64(z1lo, z2hi, 0)
+	hi:, _ = std::math::bits::add64(z0lo, z1hi, c)
+  j = hi >> 61
+  hi = hi<<3 | lo>>61
+	lz: = uint(std::math::bits::leading_zeros64(hi))
+	e: = u64(BIAS - (lz + 1))
+  hi = (hi << (lz + 1)) | (lo >> (64 - (lz + 1)))
+	hi >>= 64 - SHIFT
+  hi |= e << SHIFT
+	z = f64_from_bits(hi)
+	// Map zeros to origin.
+	if j&1 == 1 {
+		j++
+		j &= 7
+		z--
+	}
+  ret j, z * PI4
+}
+
+//doc:
+// binary digit of 4/pi as u64 array
+//
+// 4/pi = Sum mPi4[i]*2^(-64*i)
+mPi4: = [...]u64{
+	0x0000000000000001,
+	0x45f306dc9c882a53,
+	0xf84eafa3ea69bb81,
+	0xb6c52b3278872083,
+	0xfca2c757bd778ac3,
+	0x6e48dc74849ba5c0,
+	0x0c925dd413a32439,
+	0xfc3bd63962534e7d,
+	0xd1046bea5d768909,
+	0xd338e04d68befc82,
+	0x7323ac7306a673e9,
+	0x3908bf177bf25076,
+	0x3ff12fffbc0b301f,
+	0xde5e2316b414da3e,
+	0xda6cfd9e4f96136e,
+	0x9e8c7ecd3cbfd45a,
+	0xea4f758fd7cbe2f6,
+	0x7a0e73ef14a525d4,
+	0xd7f6bf623f1aba10,
+	0xac06608df8f6d757,
+}
