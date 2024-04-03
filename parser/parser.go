@@ -272,7 +272,7 @@ func (p *Parser) CppPrototypes() string {
 func cppGlobals(dm *Defmap) string {
 	var cpp strings.Builder
 	for _, g := range dm.Globals {
-		if !g.Const && g.Used && g.IdTok.Id != tokens.NA {
+		if !g.Const && g.Used && g.Token.Id != tokens.NA {
 			cpp.WriteString(g.String())
 			cpp.WriteByte('\n')
 		}
@@ -856,7 +856,7 @@ func (p *Parser) pushField(s *jnstruct, f *Var, i int) {
 			break
 		}
 		if f.Id == cf.Id {
-			p.pusherrtok(f.IdTok, "exist_id", f.Id)
+			p.pusherrtok(f.Token, "exist_id", f.Id)
 			break
 		}
 	}
@@ -1378,12 +1378,12 @@ func (p *Parser) Func(fast Func) {
 func (p *Parser) Global(vast Var) {
 	def, _, _ := p.defById(vast.Id)
 	if def != nil {
-		p.pusherrtok(vast.IdTok, "exist_id", vast.Id)
+		p.pusherrtok(vast.Token, "exist_id", vast.Id)
 		return
 	} else {
 		for _, g := range p.waitingGlobals {
 			if vast.Id == g.Var.Id {
-				p.pusherrtok(vast.IdTok, "exist_id", vast.Id)
+				p.pusherrtok(vast.Token, "exist_id", vast.Id)
 				return
 			}
 		}
@@ -1399,7 +1399,7 @@ func (p *Parser) Global(vast Var) {
 
 func (p *Parser) Var(v Var) *Var {
 	if jnapi.IsIgnoreId(v.Id) {
-		p.pusherrtok(v.IdTok, "ignore_id")
+		p.pusherrtok(v.Token, "ignore_id")
 	}
 	var val value
 	switch t := v.Tag.(type) {
@@ -1420,13 +1420,13 @@ func (p *Parser) Var(v Var) *Var {
 					p:      p,
 					t:      v.Type,
 					v:      val,
-					errtok: v.IdTok,
+					errtok: v.Token,
 				}.checkAssignType()
 			}
 		}
 	} else {
 		if v.SetterTok.Id == tokens.NA {
-			p.pusherrtok(v.IdTok, "missing_autotype_value")
+			p.pusherrtok(v.Token, "missing_autotype_value")
 		} else {
 			p.eval.hasError = p.eval.hasError || val.data.Value == ""
 			v.Type = val.data.Type
@@ -1456,13 +1456,13 @@ func (p *Parser) Var(v Var) *Var {
 	if v.Const {
 		v.ExprTag = val.expr
 		if !typeIsAllowForConst(v.Type) {
-			p.pusherrtok(v.IdTok, "invalid_type_for_const", v.Type.Kind)
+			p.pusherrtok(v.Token, "invalid_type_for_const", v.Type.Kind)
 		}
 		if v.SetterTok.Id == tokens.NA {
-			p.pusherrtok(v.IdTok, "missing_const_value")
+			p.pusherrtok(v.Token, "missing_const_value")
 		} else {
 			if !validExprForConst(val) {
-				p.eval.pusherrtok(v.IdTok, "expr_not_const")
+				p.eval.pusherrtok(v.Token, "expr_not_const")
 			}
 		}
 	}
@@ -1497,7 +1497,7 @@ func (p *Parser) varsFromParams(params []Param) []*Var {
 		v := new(models.Var)
 		v.IsField = true
 		v.Id = param.Id
-		v.IdTok = param.Tok
+		v.Token = param.Tok
 		v.Type = param.Type
 		if param.Variadic {
 			if length-i > 1 {
@@ -1630,11 +1630,11 @@ func (p *Parser) defById(id string) (def any, tok Tok, canshadow bool) {
 		return f, f.Ast.Tok, canshadow
 	}
 	if bv := p.blockVarById(id); bv != nil {
-		return bv, bv.IdTok, false
+		return bv, bv.Token, false
 	}
 	g, _, canshadow := p.globalById(id)
 	if g != nil {
-		return g, g.IdTok, canshadow
+		return g, g.Token, canshadow
 	}
 	return
 }
@@ -1642,7 +1642,7 @@ func (p *Parser) defById(id string) (def any, tok Tok, canshadow bool) {
 func (p *Parser) blockDefById(id string) (def any, tok Tok) {
 	bv := p.blockVarById(id)
 	if bv != nil {
-		return bv, bv.IdTok
+		return bv, bv.Token
 	}
 	t := p.blockTypeById(id)
 	if t != nil {
@@ -2404,7 +2404,7 @@ func (p *Parser) checkNewBlockCustom(b *models.Block, oldBlockVars []*Var) {
 	types := p.blockTypes[len(blockTypes):]
 	for _, v := range vars {
 		if !v.Used {
-			p.pusherrtok(v.IdTok, "declared_but_not_used", v.Id)
+			p.pusherrtok(v.Token, "declared_but_not_used", v.Id)
 		}
 	}
 	for _, t := range types {
@@ -2775,7 +2775,7 @@ always:
 
 func (p *Parser) varStatement(v *Var, noParse bool) {
 	if _, tok := p.blockDefById(v.Id); tok.Id != tokens.NA {
-		p.pusherrtok(v.IdTok, "exist_id", v.Id)
+		p.pusherrtok(v.Token, "exist_id", v.Id)
 	}
 	if !noParse {
 		*v = *p.Var(*v)
@@ -2980,13 +2980,13 @@ func (p *Parser) foreachProfile(iter *models.Iter) {
 	blockVars := p.blockVars
 	if profile.KeyA.New {
 		if jnapi.IsIgnoreId(profile.KeyA.Id) {
-			p.pusherrtok(profile.KeyA.IdTok, "ignore_id")
+			p.pusherrtok(profile.KeyA.Token, "ignore_id")
 		}
 		p.varStatement(&profile.KeyA, true)
 	}
 	if profile.KeyB.New {
 		if jnapi.IsIgnoreId(profile.KeyB.Id) {
-			p.pusherrtok(profile.KeyB.IdTok, "ignore_id")
+			p.pusherrtok(profile.KeyB.Token, "ignore_id")
 		}
 		p.varStatement(&profile.KeyB, true)
 	}

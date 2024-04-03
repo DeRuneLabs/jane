@@ -246,7 +246,7 @@ func (s *jnstruct) SetGenerics(generics []DataType) {
 
 func (s *jnstruct) selfVar(receiver DataType) *Var {
 	v := new(models.Var)
-	v.IdTok = s.Ast.Tok
+	v.Token = s.Ast.Tok
 	v.Type = receiver
 	v.Type.Id = jntype.Struct
 	v.Id = tokens.SELF

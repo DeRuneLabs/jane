@@ -8,8 +8,7 @@ import (
 
 type Var struct {
 	Pub       bool
-	DefTok    Tok
-	IdTok     Tok
+	Token     Tok
 	SetterTok Tok
 	Id        string
 	Type      DataType
@@ -28,7 +27,7 @@ func (v *Var) OutId() string {
 	case v.IsField:
 		return jnapi.AsId(v.Id)
 	default:
-		return jnapi.OutId(v.Id, v.IdTok.File)
+		return jnapi.OutId(v.Id, v.Token.File)
 	}
 }
 

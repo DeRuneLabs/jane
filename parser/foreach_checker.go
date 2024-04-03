@@ -61,7 +61,7 @@ func (fc *foreachChecker) checkKeyASize() {
 	keyA.Type, ok = fc.p.realType(keyA.Type, true)
 	if ok {
 		if !typeIsPure(keyA.Type) || !jntype.IsNumeric(keyA.Type.Id) {
-			fc.p.pusherrtok(keyA.IdTok, "incompatible_datatype",
+			fc.p.pusherrtok(keyA.Token, "incompatible_datatype",
 				keyA.Type.Kind, jntype.NumericTypeStr)
 		}
 	}
