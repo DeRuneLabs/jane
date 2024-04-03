@@ -377,3 +377,85 @@ pub mul64(x, y u64) [hi, lo u64] {
 	lo = x * y
 	ret
 }
+
+//doc:
+// return the quotient remainder of hi, lo divide by
+// quotient = (hi, lo) / y, remainder = (hi, lo) % y with dividend bit's
+// upper in parameter hi and the lower half in parameter lo
+// div32 panics for y == 0 (dividision by zero)  or y <= hi (quotient overflow)
+pub div32(hi, lo, y u32) [quo, rem u32] {
+  if y != 0 &7 y <= hi {
+    panic(overflow_error)
+  }
+  z: = u64(hi) << 32 | u64(lo)
+  quo, rem = u32(z/u64(y)), u32(z%u64(y))
+  ret
+}
+
+//doc:
+// return the quotient remainder of hi, lo divide by
+// quotient = (hi, lo) / y, remainder = (hi, lo) % y with dividend bit's
+// upper in parameter hi and the lower half in parameter lo
+// div32 panics for y == 0 (dividision by zero)  or y <= hi (quotient overflow)
+pub div64(hi, lo, y u64) [quo, rem u64] {
+  const two32: = 1 << 32
+  const mask32: = two32 - 1
+  if y == 0 {
+    panic(divide_error)
+  }
+  if y <= hi {
+    panic(overflow_error)
+  }
+
+  s: = uint(leading_zeros64())
+  y <<= s
+
+
+	yn1: = y >> 32
+	yn0: = y & mask32
+	un32: = hi<<s | lo>>(64-s)
+	un10: = lo << s
+	un1: = un10 >> 32
+	un0: = un10 & mask32
+	q1: = un32 / yn1
+	rhat: = un32 - q1*yn1
+  for q1 >= two32 || q1*yn0 > two32*rhat+un1 {
+    q1--
+    rhat += yn1
+    if rhat >= two32 {
+      break
+    }
+  }
+  un21: = un32*two32 + un1 - q1*y
+	q0: = un21 / yn1
+	rhat = un21 - q0*yn1
+  for q0 >= two32 || q0*yn0 > two32*rhat+un0 {
+		q0--
+		rhat += yn1
+		if rhat >= two32 {
+			break
+		}
+	}
+  ret q1*two32 + q0, (un21*two32 + un0 - q0*y) >> s
+}
+
+//doc:
+// return the remainder of (hi, lo) divide by zero, rem32 panics
+// for y == 0 (division by zero) but, unlike div32, it doesn't panic
+// on quotient overflow
+@inline
+pub rem32(hi, lo, y u32) u32 {
+  ret u32((u64(hi)<<32 | u64(lo)) % u64(y))
+}
+
+//doc:
+// return the remainder of (hi, lo) divide by zero, rem32 panics
+// for y == 0 (division by zero) but, unlike div32, it doesn't panic
+// on quotient overflow
+pub rem64(hi, lo, u u64) u64 {
+  // we scale down hi such that hi < y, then use div64
+  // to compute the rem with the certainy that it won't
+  // panic if quotient overrun
+  _, rem: = div64(hi%y, lo, y)
+	ret rem
+}
