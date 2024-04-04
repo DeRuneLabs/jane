@@ -122,5 +122,7 @@
 	"variadic_reference_param":                 "referencing cannot combined with variadic parameters",
 	"pointer_reference":                        "referencing cannot combined with pointer",
 	"func_must_have_generics_if_has_attribute": "function is must be have minimum one generic type if has @%s attribute",
-	"func_cant_have_params_if_has_attribute":   "function is cannot have parameter(s) if has @%s attribute"
+	"func_cant_have_params_if_has_attribute":   "function is cannot have parameter(s) if has @%s attribute",
+  "fallthrough_wrong_use":                    "fallthrough keyword can only useable at end of the case scopes",
+	"fallthrough_into_final_case":              "fallthrough cannot useable at final case"
 }
