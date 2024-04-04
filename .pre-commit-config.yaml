@@ -14,3 +14,8 @@ repos:
         name: format golang code
       - id: go-mod-tidy
         name: golang mod tidy
+
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.17
+    hooks:
+      - id: mdformat

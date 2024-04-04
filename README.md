@@ -1,10 +1,8 @@
 ![jane](.github/jane.png)
 
-
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/DeRuneLabs/jane/workflow_go_linux.yml?style=flat-square&logo=github&label=Build%20Linux)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/DeRuneLabs/jane/workflow_go_macos.yml?style=flat-square&logo=github&label=Build%20MacOS)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/DeRuneLabs/jane/workflow_go_windows.yml?style=flat-square&logo=github&label=Build%20Windows)
-
 
 Jane is early experimental compiled programming language, static type, fast, modern and simple. the
 flow of jane source compiled, its to translate to C++ code and compiled it from
@@ -56,12 +54,13 @@ the project structure, including its lexical and syntactic structure, has now re
 ## Build
 
 **powershell**
+
 ```psh
 go build -o jane.exe -v command/jn/main.go
 ```
 
 **bash**
+
 ```sh
 go build -o jane -v command/jn/main.go
 ```
-
