@@ -22,23 +22,20 @@
 // return integer and frac float-point number that sum to f,
 // both value have the same sign as f
 pub modf(f f64) [integer, frac f64] {
-  if f < 1 {
-    match {
-      case f < 0:
-        integer, frac = modf(-f)
-        ret -integer, -frac
-      case f == 0:
-        ret f, f
+  const modf_maxpowtwo: = 4.503599627370496000e+15
+  abs_f: = abs(f)
+  i: = 0.0
+  if abs_f > modf_maxpowtwo {
+    i = f
+  } else {
+    i = abs_f + modf_maxpowtwo
+    i -= modf_maxpowtwo
+    for i > abs_f {
+      i--
     }
-    ret 0, f
+    if f < 0.0 {
+      i = -i
+    }
   }
-  x: = f64_bits(f)
-	e: = uint(x>>SHIFT)&MASK - BIAS
-
-  if e < 64-12 {
-		x &= ^(1<<uint(64-12-e) - 1)
-	}
-	integer = f64_from_bits(x)
-	frac = f - integer
-	ret
+  ret i, f - 1
 }

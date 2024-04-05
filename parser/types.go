@@ -1,7 +1,10 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/DeRuneLabs/jane/lexer/tokens"
+	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
@@ -108,11 +111,11 @@ func typeIsPtr(t DataType) bool {
 }
 
 func typeIsSlice(t DataType) bool {
-	return t.Id == jntype.Slice
+	return t.Id == jntype.Slice && strings.HasPrefix(t.Kind, jn.Prefix_Slice)
 }
 
 func typeIsArray(t DataType) bool {
-	return t.Id == jntype.Array
+	return t.Id == jntype.Array && strings.HasPrefix(t.Kind, jn.Prefix_Array)
 }
 
 func typeIsMap(t DataType) bool {
