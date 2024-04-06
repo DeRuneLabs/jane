@@ -1282,7 +1282,7 @@ func (e *eval) braceRange(toks Toks, m *exprModel) (v value) {
 			v.data.Type.Tag = &f
 			v.data.Type.Id = jntype.Func
 			v.data.Type.Kind = f.DataTypeString()
-			m.appendSubNode(anonFuncExpr{f, jnapi.LambdaByCopy})
+			m.appendSubNode(anonFuncExpr{&f})
 			return
 		default:
 			e.pusherrtok(exprToks[0], "invalid_syntax")

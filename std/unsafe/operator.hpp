@@ -18,15 +18,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use cpp "type.hpp"
+#ifndef __JNC_STD_MEM_TYPE_HPP
+#define __JNC_STD_MEM_TYPE_HPP
 
-type[T]
-cpp __jnc_sizeof() uint
+#include "../../api/typedef.hpp"
 
-//doc:
-// return size fo data type in bytes
-@inline @typearg
-type[T]
-pub sizeof() uint {
-  ret cpp.__jnc_sizeof[T]()
+template <typename T> inline uint_jnt __jnc_sizeof(const T &_Expr) noexcept;
+template <typename T> inline uint_jnt __jnc_sizeof_t(void) noexcept;
+template <typename T> inline uint_jnt __jnc_alignof(const T &_Expr) noexcept;
+
+template  <typename T>
+inline uint_jnt __jnc_sizeof(const T &_Expr) noexcept {
+  return sizeof(_Expr);
 }
+
+template <typename T>
+inline uint_jnt __jnc_sizeof_t(void) noexcept {
+  return sizeof(T);
+}
+
+template <typename T>
+inline uint_jnt __jnc_alignof(const T &_Expr) noexcept {
+  return alignof(_Expr);
+}
+
+#endif // !__JNC_STD_MEM_TYPE_HPP

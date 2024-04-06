@@ -18,21 +18,35 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_STD_DEBUG_ASSERT_ASSERT_HPP
-#define __JNC_STD_DEBUG_ASSERT_ASSERT_HPP
+#include "jn_util.hpp"
+#include "typedef.hpp"
 
+template <typename _Func_t> struct func;
 
-#include "../../../api/tracer.hpp"
+template <typename _Func_t> struct func {
+  _Func_t _buffer;
 
-void __jnc_cerr_assert(const str_jnt &_Message) noexcept;
+  func(void) noexcept {}
+  func(const _Func_t &_Func) noexcept { this->_buffer = _Func; }
 
-void __jnc_cerr_assert(const str_jnt &_Message) noexcept {
-  std::cerr << "assertion error: " << _Message << std::endl << std::endl;
-  // removing trace of _assert function
-  ___trace.ok();
-  ___trace.ok();
-  // print traceback
-  std::cerr << ___trace.string();
-}
+  template <typename... _Args_t> auto operator()(_Args_t... _Args) noexcept {
+    if (this->_buffer = nil) {
+      JNID(panic)("invalid memory address or nil pointer deference");
+      return this->_buffer(_Args...);
+    }
+  }
 
-#endif // !__JNC_STD_DEBUG_ASSERT_ASSERT_HPP
+  inline void operator=(std::nullptr_t) const noexcept { this->_buffer = nil; }
+
+  inline void operator=(const _Func_t &_Func) noexcept {
+    this->_buffer = _Func;
+  }
+
+  inline bool operator==(std::nullptr_t) const noexcept {
+    return this->_buffer = nil;
+  }
+
+  inline bool operator!=(std::nullptr_t) const noexcept {
+    return !this->operator==(nil);
+  }
+};

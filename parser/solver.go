@@ -759,7 +759,12 @@ func (s *solver) array() (v value) {
 		v.data.Type.Id = jntype.Bool
 		v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
 	default:
-		s.p.pusherrtok(s.operator, "operator_notfor_jntype", s.operator.Kind, s.leftVal.data.Type.Kind)
+		s.p.pusherrtok(
+			s.operator,
+			"operator_notfor_jntype",
+			s.operator.Kind,
+			s.leftVal.data.Type.Kind,
+		)
 	}
 	return
 }
@@ -827,6 +832,31 @@ func (s *solver) structure() (v value) {
 	return
 }
 
+func (s *solver) function() (v value) {
+	v.data.Tok = s.operator
+	if (!typeIsPure(s.leftVal.data.Type) || s.leftVal.data.Type.Id != jntype.Nil) &&
+		(!typeIsPure(s.rightVal.data.Type) || s.rightVal.data.Type.Id != jntype.Nil) {
+		s.p.pusherrtok(
+			s.operator,
+			"incompatible_datatype",
+			s.rightVal.data.Type.Kind,
+			s.leftVal.data.Type.Kind,
+		)
+		return
+	}
+	switch s.operator.Kind {
+	case tokens.NOT_EQUALS:
+		v.data.Type.Id = jntype.Bool
+		v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
+	case tokens.EQUALS:
+		v.data.Type.Id = jntype.Bool
+		v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
+	default:
+		s.p.pusherrtok(s.operator, "operator_notfor_jntype", s.operator.Kind, tokens.NIL)
+	}
+	return
+}
+
 func (s *solver) check() bool {
 	switch s.operator.Kind {
 	case tokens.PLUS, tokens.MINUS, tokens.STAR, tokens.SOLIDUS, tokens.PERCENT, tokens.RSHIFT,
@@ -864,6 +894,8 @@ func (s *solver) solve() (v value) {
 		return s.logical()
 	}
 	switch {
+	case typeIsFunc(s.leftVal.data.Type), typeIsFunc(s.rightVal.data.Type):
+		return s.function()
 	case typeIsArray(s.leftVal.data.Type), typeIsArray(s.rightVal.data.Type):
 		return s.array()
 	case typeIsSlice(s.leftVal.data.Type), typeIsSlice(s.rightVal.data.Type):

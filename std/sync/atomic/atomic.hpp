@@ -34,15 +34,15 @@
 #define __jnc_atomic_store(ADDR, VAL)                                          \
   __jnc_atomic_store_explicit(ADDR, VAL, __ATOMIC_SEQ_CST)
 
-#define atomic_load_explicit(PTR, MO)                                          \
+#define __jnc_atomic_load_explicit(ADDR, MO)                                          \
   __extension__({                                                              \
-    auto __atomic_load_ptr = (PTR);                                            \
+    auto __atomic_load_ptr = (ADDR);                                            \
     __typeof__((void)0, *__atomic_load_ptr) __atomic_load_tmp;                 \
     __atomic_load(__atomic_load_ptr, &__atomic_load_tmp, (MO));                \
     __atomic_load_tmp;                                                         \
   })
 
-#define __jnc_atomic_load(PTR) atomic_load_explicit(PTR, __ATOMIC_SEQ_CST)
+#define __jnc_atomic_load(ADDR) __jnc_atomic_load_explicit(ADDR, __ATOMIC_SEQ_CST)
 
 #define __jnc_atomic_swap_explicit(ADDR, NEW, MO)                              \
   __extension__({                                                              \

@@ -24,13 +24,13 @@
 #include "any.hpp"
 #include "array.hpp"
 #include "builtin.hpp"
+#include "func.hpp"
 #include "defer.hpp"
 #include "jn_util.hpp"
 #include "map.hpp"
 #include "ptr.hpp"
 #include "slice.hpp"
 #include "str.hpp"
-#include "tracer.hpp"
 #include "trait.hpp"
 #include "typedef.hpp"
 
@@ -160,8 +160,7 @@ void jn_terminate_handler(void) noexcept {
   try {
     std::rethrow_exception(std::current_exception());
   } catch (trait<JNID(Error)> _error) {
-    std::cout << "panic: " << _error.get().error() << std::endl << std::endl;
-    std::cout << ___trace.string();
+    std::cout << "panic: " << _error.get().error() << std::endl;
     std::exit(JN_EXIT_PANIC);
   }
 }

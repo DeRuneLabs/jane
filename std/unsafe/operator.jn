@@ -18,49 +18,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_TRACER_HPP
-#define __JNC_TRACER_HPP
+use cpp "operator.hpp"
 
-#include "jn_util.hpp"
-#include "str.hpp"
-#include "typedef.hpp"
+type[T]
+cpp __jnc_sizeof(expr T) uint
 
-struct tracer;
+type[T]
+cpp __jnc_sizeof_t(expr T) uint
 
-struct tracer {
-  static constexpr uint_jnt _n{20};
+type[T]
+cpp __jnc_alignof(expr T) uint
 
-  std::array<str_jnt, _n> _traces;
+//doc:
+// return size of data type in bytes
+@inline @typearg
+type[T]
+pub sizeof_t() uint {
+  ret cpp.__jnc_sizeof_t[T]()
+}
 
-  void push(const str_jnt &_Src) {
-    for (int_jnt _index{_n - 1}; _index > 0; _index--) {
-      this->_traces[_index] = this->_traces[_index - 1];
-    }
-    this->_traces[0] = _Src;
-  }
+//doc:
+// return size of expression in bytes
+@inline
+type[T]
+pub sizeof(expr T) uint {
+  ret cpp.__jnc_sizeof(expr)
+}
 
-  str_jnt string(void) noexcept {
-    str_jnt _traces{};
-    for (const str_jnt &_trace : this->_traces) {
-      if (_trace.empty()) {
-        break;
-      }
-      _traces += _trace;
-      _traces += "\n";
-    }
-    return _traces;
-  }
-
-  void ok(void) noexcept {
-    for (int_jnt _index{0}; _index < _n; _index++) {
-      this->_traces[_index] = this->_traces[_index + 1];
-      if (this->_traces[_index + 1].empty()) {
-        break;
-      }
-    }
-  }
-};
-
-tracer ___trace{};
-
-#endif // !_JNC_TRACER_HPP
+//doc
+// return alignment, in bytes, required for any instance of type
+// indicate by type-id, which is either complete object type
+@inline
+type[T]
+pub alignof(expr T) uint {
+  ret cpp.__jnc_alignof(expr)
+}

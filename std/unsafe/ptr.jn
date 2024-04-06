@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::mem
-
 use cpp "unsafe.hpp"
 
 type [T]
@@ -46,7 +44,7 @@ impl Ptr {
   // and moving forward require positive expression
   @inline
   pub &move(n int) {
-    .ptr += n * std::mem::sizeof(T)
+    .ptr += n * sizeof_t(T)
   }
 
   //doc: rerturn data of pointer
