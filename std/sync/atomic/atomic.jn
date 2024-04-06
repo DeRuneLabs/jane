@@ -1,0 +1,204 @@
+// Copyright (c) 2024 - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+use cpp "atomic.cpp"
+
+cpp __jnc_atomic_swap_i32(addr *i32, new i32) [old i32]
+cpp __jnc_atomic_swap_i64(addr *i64, new i64) [old i64]
+cpp __jnc_atomic_swap_u32(addr *u32, new u32) [old u32]
+cpp __jnc_atomic_swap_u64(addr *u64, new u64) [old u64]
+cpp __jnc_atomic_swap_uintptr(addr *uintptr, new uintptr) [old uintptr]
+cpp __jnc_atomic_compare_swap_i32(addr *i32, old, new i32) [swapped bool]
+cpp __jnc_atomic_compare_swap_i64(addr *i64, old, new i64) [swapped bool]
+cpp __jnc_atomic_compare_swap_u32(addr *u32, old, new u32) [swapped bool]
+cpp __jnc_atomic_compare_swap_u64(addr *u64, old, new u64) [swapped bool]
+cpp __jnc_atomic_compare_swap_uintptr(addr *uintptr, old, new uintptr) [swapped bool]
+cpp __jnc_atomic_add_i32(addr *i32, delta i32) [old i32]
+cpp __jnc_atomic_add_i64(addr *i64, delta i64) [old i64]
+cpp __jnc_atomic_add_u32(addr *u32, delta u32) [old u32]
+cpp __jnc_atomic_add_u64(addr *u64, delta u64) [old u64]
+cpp __jnc_atomic_add_uintptr(addr *uintptr, delta uintptr) [old uintptr]
+cpp __jnc_atomic_load_i32(addr *i32) i32
+cpp __jnc_atomic_load_i64(addr *i64) i64
+cpp __jnc_atomic_load_u32(addr *u32) u32
+cpp __jnc_atomic_load_u64(addr *u64) u64
+cpp __jnc_atomic_load_uintptr(addr *uintptr) uintptr
+cpp __jnc_atomic_store_i32(addr *i32, val i32)
+cpp __jnc_atomic_store_i64(addr *i64, val i64)
+cpp __jnc_atomic_store_u32(addr *u32, val u32)
+cpp __jnc_atomic_store_u64(addr *u64, val u64)
+cpp __jnc_atomic_store_uintptr(addr *uintptr, val uintptr)
+
+//doc:
+// atomatically stores new into *addr and return the previous *addr value
+pub swap_i32(addr *i32, new i32) [old i32] {
+  ret cpp.__jnc_atomic_swap_i32(addr, new)
+}
+
+//doc:
+// atomatically stores new into *addr and return the previous *addr value
+@inline
+pub swap_i64(addr *i64, new i64) [old i64] {
+  ret cpp.__jnc_atomic_swap_i64(addr, new)
+}
+
+//doc:
+// atomatically stores new into *addr and return the previous *addr value
+@inline
+pub swap_u32(addr *u32, new u32) [old u32] {
+  ret cpp.__jnc_atomic_swap_u32(addr, new)
+}
+
+//doc:
+// atomatically stores new into *addr and return the previous *addr value
+@inline
+pub swap_u64(addr *u64, new u64) [old u64] {
+  ret cpp.__jnc_atomic_swap_u64(addr, new)
+}
+
+//doc:
+// atomatically stores new into *addr and return the previous *addr value
+@inline
+pub swap_uintptr(addr *uintptr, new uintptr) [old uintptr] {
+  ret cpp.__jnc_atomic_setup_swap_uintptr(addr, new)
+}
+
+//doc:
+// execute the compare and swap operation for i32 value
+@inline
+pub compare_swap_i32(addr *i32, old, new i32) [swapped bool] {
+  ret cpp.__jnc_atomic_compare_swap_i32(addr, old, new)
+}
+
+//doc:
+// execute the compare and swap operation for i32 value
+@inline
+pub compare_swap_i64(addr *i64, old, new i64) [swapped bool] {
+  ret cpp.__jnc_atomic_compare_swap_i64(addr, old, new)
+}
+
+//doc:
+// execute compare and swap operation for an u32 value
+@inline
+pub compare_swap_u32(addr *u32, old, new u32) [swapped bool] {
+  ret cpp.__jnc_atomic_compare_swap_u32(addr, old, new)
+}
+
+//doc:
+// execute compare and swap operation for u64 value
+@inline
+pub compare_swap_u64(addr *u64, old, new u64) [swapped bool] {
+  ret cpp.__jnc_atomic_compare_swap_u64(addr, old, new)
+}
+
+//doc:
+// execute the compare and swap operation for uintptr value
+@inline
+pub compare_swap_uintptr(addr *uintptr, old, new uintptr) [swapped bool] {
+  ret cpp.__jnc_atomic_compare_swap_uintptr(addr, old, new)
+}
+
+//doc:
+// atomatically add delta to *addr and returns the old value
+@inline
+pub add_i32(addr *i32, delta i32) [old i32] {
+  ret cpp.__jnc_atomic_add_i32(addr, delta)
+}
+
+//doc:
+// atomatically adds delta to *addr and return the old value
+@inline
+pub add i64(addr *i64, delta i64) [old i64] {
+  ret cpp.__jnc_atomic_add_i64(addr, delta)
+}
+
+//doc:
+// atomatically adds delta to *addr and return the old value
+@inline
+pub add_u32(addr *u32, delta u32) [old u32] {
+  ret cpp.__jnc_atomic_add_u32(addr, delta)
+}
+
+//doc:
+// atomatically adds delta to *addr and returns old value
+@inline
+pub add_u64(addr *u64, delta u64) [old u64] {
+  ret cpp.__jnc_atomic_add_u64(addr, delta)
+}
+
+//doc:
+// atomatically adds delta to *addr and returns the old value
+@inline
+pub add_uintptr(addr *uintptr, delta uintptr) [old uintptr] {
+  ret cpp.__jnc_atomic_add_uintptr(addr, delta)
+}
+
+//doc:
+// atomatically loads *addr
+@inline
+pub load_i32(addr *i32) i32 {
+  ret cpp.__jnc_atomic_load_i32(addr)
+}
+
+//doc:
+// atomatically loads *addr
+@inline
+pub load_i64(addr *i64) i64 {
+  ret cpp.__jnc_atomic_load_i64(addr)
+}
+
+//doc:
+// atomatically loads *addr
+@inline
+pub load_u32(addr *u32) u32 {
+  ret cpp.__jnc_atomic_load_u32(addr)
+}
+
+//doc:
+// atomatically loads *addr
+@inline
+pub load_uintptr(addr *uintptr) uintptr {
+  ret cpp.__jnc_atomic_load_uintptr(addr)
+}
+
+//doc:
+// atomatically stores val into *addr
+@inline
+pub store_i32(addr *i32, val i32) { cpp.__jnc_atomic_store_i32(addr, val) }
+
+//doc:
+// atomatically stores val into *addr
+@inline
+pub store_i64(addr *i64, val i64) { cpp.__jnc_atomic_store_i64(addr, val) }
+
+//doc:
+// atomatically stores val into *addr
+@inline
+pub store_u32(addr *u32, val u32) { cpp.__jnc_atomic_store_u32(addr, val) }
+
+//doc:
+// atomatically stores val into *addr
+@inline
+pub store_u64(addr *u64, val u64) { cpp.__jnc_atomic_store_u64(addr, val) }
+
+//doc:
+// atomatically stores val into *addr
+@inline
+pub store_uinptr(addr *uintptr, val uintptr) { cpp.__jnc_atomic_store_uintptr(addr, val) }

@@ -64,3 +64,12 @@ go build -o jane.exe -v command/jn/main.go
 ```sh
 go build -o jane -v command/jn/main.go
 ```
+
+using makefile
+
+```sh
+# to build all
+make all
+# to clean binary files after make
+make clean
+```
