@@ -44,6 +44,17 @@ template <typename T> struct ptr {
     }
   }
 
+  void __alloc(void) noexcept {
+    this->_ptr = new (std::nothrow) T;
+    if (!this->ptr) {
+      JNID(panic)("memory allocation failed");
+    }
+    this->_ref = new (std::nothrow) uint_jnt{1};
+    if (!this->_ref) {
+      JNID(panic)("memory allocation failed");
+    }
+  }
+
   void __dealloc(void) noexcept {
     if (!this->_ref) {
       return;
