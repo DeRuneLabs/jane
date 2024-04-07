@@ -1,10 +1,9 @@
 array_testing() {
-  derune_new: = new[][]str
-  *derune_new = [][]str{
+  derune_new: = [][]str{
     []str{"arul", "saut"},
     []str{"pace", "ibal"},
   };
-  println((*derune_new)[0])
+  println((derune_new)[0])
 }
 
 main() {

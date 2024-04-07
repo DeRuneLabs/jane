@@ -18,18 +18,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_STD_UNSAFE_UNSAFE_HPP
-#define __JNC_STD_UNSAFE_UNSAFE_HPP
+// the circumtances, the test ensure that RUNE_ERROR == std::unicode::REPLACEMENT_CHAR
+// AND MAX_RUNE == std::unicode::MAX_RUNE are valid
+// defining the locally removes the depedency on package std::unicode
 
-#include "../../api/ptr.hpp"
-#include "../../api/typedef.hpp"
+//doc:
+// "error" rune or "unicode replacement char"
+pub const RUNE_ERROR: = '\uFFFD'
 
-template <typename T>
-inline ptr<T> __jnc_uintptr_cast_to_raw(const uintptr_jnt &_Addr) noexcept;
+//doc:
+// character below RUNE_SELF are represented as themselves in a single bytes
+pub const RUNE_SELF = 0x80
 
-template <typename T>
-inline ptr<T> __jnc_uintptr_cast_to_raw(const uintptr_jnt &_Addr) noexcept {
-  return __jnc_not_heap_ptr_of((T *)(_Addr));
+//doc:
+// max valid unicode code point
+pub const MAX_RUNE: = '\U0010FFFF'
+
+//doc:
+// max number of bytes of a UTF-8 encode unicode character
+pub const UTF_MAX: = 4
+
+// code point in the surrogate range are not valid for UTF-8
+const SURROGATE_MIN: = 0xD800
+const SURROGATE_MAX: = 0xDFFF
+
+//doc:
+// report whether r can legally encode as UTF-8 code point that
+// are out of range or a surrogate half are illegal
+pub valid_rune(r rune) bool {
+  match {
+    case 0 <= r && r < SURROGATE_MIN:
+      ret true
+    case SURROGATE_MAX < r && r <= MAX_RUNE:
+      ret true
+  }
+  ret false
 }
-
-#endif // !__JNC_STD_UNSAFE_UNSAFE_HPP

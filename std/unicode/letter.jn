@@ -18,18 +18,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_STD_UNSAFE_UNSAFE_HPP
-#define __JNC_STD_UNSAFE_UNSAFE_HPP
+//doc:
+// max valid unicode code point
+pub const MAX_RUNE: = '\U0010FFFF'
 
-#include "../../api/ptr.hpp"
-#include "../../api/typedef.hpp"
+//doc:
+// represent invalid code point
+pub const REPLACEMENT_CHAR: = '\uFFFD'
 
-template <typename T>
-inline ptr<T> __jnc_uintptr_cast_to_raw(const uintptr_jnt &_Addr) noexcept;
+//doc:
+// max ASCII value
+pub const MAX_ASCII: = '\u007F'
 
-template <typename T>
-inline ptr<T> __jnc_uintptr_cast_to_raw(const uintptr_jnt &_Addr) noexcept {
-  return __jnc_not_heap_ptr_of((T *)(_Addr));
-}
-
-#endif // !__JNC_STD_UNSAFE_UNSAFE_HPP
+//doc:
+// max latin-1 value
+pub const MAX_LATIN1: = '\u00FF'

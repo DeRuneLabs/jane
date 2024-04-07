@@ -24,7 +24,12 @@
 #include "jn_util.hpp"
 #include "typedef.hpp"
 
+#define __JNC_PTR_NEVER_HEAP_ALLOCATE_REF (uintptr_jnt*)(0x0000001)
+#define __jnc_ptr_of(_PTR) _PTR
+
 template <typename T> struct ptr;
+
+template <typename T> ptr<T> __jnc_not_heap_ptr_of(T *_T) noexcept;
 
 template <typename T> struct ptr {
   T *_ptr{nil};
@@ -55,8 +60,12 @@ template <typename T> struct ptr {
     }
   }
 
+  inline bool __ref_available(void) const noexcept {
+    return this->_ref && this->_ref != __JNC_PTR_NEVER_HEAP_ALLOCATE_REF;
+  }
+
   void __dealloc(void) noexcept {
-    if (!this->_ref) {
+    if (!this->__ref_available()) {
       return;
     }
     (*this->_ref)--;
@@ -99,7 +108,7 @@ template <typename T> struct ptr {
 
   void operator=(const ptr<T> &_Ptr) noexcept {
     this->__dealloc();
-    if (_Ptr._ref) {
+    if (_Ptr.__ref_available()) {
       (*_Ptr._ref)++;
     }
     this->_ref = _Ptr._ref;
@@ -135,5 +144,12 @@ template <typename T> struct ptr {
     return _Stream << _Src._ptr;
   }
 };
+
+template <typename T> ptr<T> __jnc_not_heap_ptr_of(T *_T) noexcept {
+  ptr<T> _ptr;
+  _ptr._ptr = _T;
+  _ptr._ref = __JNC_PTR_NEVER_HEAP_ALLOCATE_REF;
+  return _ptr;
+}
 
 #endif // !__JNC_PTR_HPP
