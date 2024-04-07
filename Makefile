@@ -18,10 +18,36 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-MAIN_LOCATION=command/jn/main.go
-BIN_FILE=jane
-DIST_FOLDER=dist
-SET_FILE=jn.set
+MAIN_LOCATION = command/jn/main.go
+BIN_FILE = jane
+DIST_FOLDER = dist
+SET_FILE = jn.set
+
+HOST_SYSTEM = $(shell uname | cut -f 1 -d_)
+SYSTEM ?= $(HOST_SYSTEM)
+
+ifeq ($(SYSTEM),MSYS)
+	SYSTEM = MINGW32
+endif
+ifeq ($(SYSTEM), MINGW4)
+	SYSTEM = MINGW64
+endif
+
+HAS_GCC = $(shell which gcc > /dev/null 2> /dev/null && echo true || echo false)
+HAS_GO = $(shell which go > /dev/null 2> /dev/null && echo true || echo false)
+
+ifeq ($(HAS_GCC), true)
+	DEFAULT_CXX = g++
+else
+	@echo "please install gnu c and c++"
+endif
+
+ifeq ($(HAS_GO), true)
+	DEFAULT_GO = go
+else
+	@echo "please install go compiler"
+endif
+
 
 .PHONY: all
 all:
@@ -30,7 +56,7 @@ all:
 .PHONY: build
 build:
 	@echo "build project"
-	go build -o $(BIN_FILE) -v $(MAIN_LOCATION)
+	$(DEFAULT_GO) build -o $(BIN_FILE) -v $(MAIN_LOCATION)
 
 # NOTE: DO NOT CHANGE THIS ONE MAKEFILE
 .PHONY: clean
