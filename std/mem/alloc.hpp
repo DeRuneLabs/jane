@@ -23,13 +23,22 @@
 
 #include "../../api/ptr.hpp"
 
-template <typename T>
-ptr<T> __jnc_new_heap_ptr(void) noexcept;
+template <typename T> ptr<T> __jnc_new_heap_ptr(void) noexcept;
 
-template <typename T>
-ptr<T> __jnc_new_heap_ptr(void) noexcept {
+template <typename T> ptr<T> __jnc_new_heap_ptr(void) noexcept {
   ptr<T> _ptr;
-  _ptr.__alloc();
+  _ptr._heap = new (std::nothrow) bool *{__JNC_PTR_HEAP_TRUE};
+  if (!_ptr._heap) {
+    JNID(panic)("memory allocation failed");
+  }
+  *_ptr._ptr = new (std::nothrow) T;
+  if (!*_ptr._ptr) {
+    JNID(panic)("memory allocation failed");
+  }
+  _ptr._ref = new (std::nothrow) uintptr_jnt{1};
+  if (!_ptr._ref) {
+    JNID(panic)("memory allocation failed");
+  }
   return _ptr;
 }
 

@@ -18,15 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#pragma enofi
+//doc:
+// global variable
+GLOBAL_VARIABLE: = 10
 
-type[T]
-test_generic_func(a, b T) T {
-  a + b
-}
-
-main() {
-  test_generic_func[int](2, 30)
-  test_generic_func[uint](2, 2)
-  test_generic_func[f64](4.2, 3.14)
-}
+// global constant variable
+const GLOBAL_CONST_VARIABLE: = 300
