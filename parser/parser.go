@@ -921,6 +921,7 @@ func (p *Parser) CppLink(link models.CppLink) {
 		return
 	}
 	linkf := link.Link
+	linkf.Owner = p
 	setGenerics(linkf, p.generics)
 	p.generics = nil
 	p.cppLinks = append(p.cppLinks, &link)
@@ -1762,11 +1763,11 @@ func (p *Parser) blockVarsOfFunc(f *Func) []*Var {
 func (p *Parser) parsePureFunc(f *Func) (err bool) {
 	hasError := p.eval.hasError
 	defer func() { p.eval.hasError = hasError }()
-	err = p.params(f)
+	owner := f.Owner.(*Parser)
+	err = owner.params(f)
 	if err {
 		return
 	}
-	owner := f.Owner.(*Parser)
 	owner.blockVars = owner.blockVarsOfFunc(f)
 	owner.checkFunc(f)
 	if owner != p {
@@ -1789,6 +1790,9 @@ func (p *Parser) parseFunc(f *function) (err bool) {
 func (p *Parser) checkFuncs() {
 	err := false
 	check := func(f *function) {
+		if len(f.Ast.Generics) > 0 {
+			return
+		}
 		p.parseTypesNonGenerics(f.Ast)
 		p.wg.Add(1)
 		go p.checkFuncSpecialCases(f.Ast)
@@ -2028,37 +2032,18 @@ func itsCombined(f *Func, generics []DataType) bool {
 }
 
 func (p *Parser) parseGenericFunc(f *Func, generics []DataType, errtok Tok) {
-	if f.Block == nil {
-		return
-	}
 	owner := f.Owner.(*Parser)
-	if owner == p {
-		rootBlock := p.rootBlock
-		nodeBlock := p.nodeBlock
-		blockVars := p.blockVars
-		blockTypes := p.blockTypes
-		defer func() {
-			p.rootBlock = rootBlock
-			p.nodeBlock = nodeBlock
-			p.blockVars = blockVars
-			p.blockTypes = blockTypes
-		}()
-	}
-	owner.pushGenerics(f.Generics, generics)
 	if f.Receiver != nil {
 		s := f.Receiver.Tag.(*jnstruct)
 		owner.pushGenerics(s.Ast.Generics, s.Generics())
 	}
-	if itsCombined(f, generics) {
+	if f.Block == nil {
+		return
+	} else if itsCombined(f, generics) {
 		return
 	}
 	*f.Combines = append(*f.Combines, generics)
-	owner.parseTypesGenerics(f)
 	p.parsePureFunc(f)
-	owner.blockTypes = nil
-	owner.blockVars = nil
-	owner.rootBlock = nil
-	owner.nodeBlock = nil
 }
 
 func (p *Parser) parseGenerics(f *Func, args *models.Args, errTok Tok) bool {
@@ -2082,8 +2067,8 @@ check:
 	if !p.checkGenericsQuantity(len(f.Generics), args.Generics, errTok) {
 		return false
 	}
-	p.pushGenerics(f.Generics, args.Generics)
-	p.parseTypesGenerics(f)
+	f.Owner.(*Parser).pushGenerics(f.Generics, args.Generics)
+	f.Owner.(*Parser).parseTypesGenerics(f)
 ok:
 	return true
 }
@@ -2091,14 +2076,21 @@ ok:
 func (p *Parser) parseFuncCall(f *Func, args *models.Args, m *exprModel, errTok Tok) (v value) {
 	args.NeedsPureType = len(p.rootBlock.Func.Generics) == 0
 	if len(f.Generics) > 0 {
-		blockTypes := p.blockTypes
 		params := make([]Param, len(f.Params))
 		copy(params, f.Params)
 		f.RetType.Type.DontUseOriginal = false
 		retType := f.RetType
+		owner := f.Owner.(*Parser)
+		rootBlock := owner.rootBlock
+		nodeBlock := owner.nodeBlock
+		blockVars := owner.blockVars
+		blockTypes := owner.blockTypes
 		defer func() {
+			owner.rootBlock = rootBlock
+			owner.nodeBlock = nodeBlock
+			owner.blockVars = blockVars
+			owner.blockTypes = blockTypes
 			f.Params, f.RetType = params, retType
-			p.blockTypes = blockTypes
 		}()
 		if !p.parseGenerics(f, args, errTok) {
 			return
@@ -2122,7 +2114,7 @@ func (p *Parser) parseFuncCall(f *Func, args *models.Args, m *exprModel, errTok 
 	}
 	p.parseArgs(f, args, m, errTok)
 	callExpr := callExpr{
-		generics: genericsExpr{args.Generics[:len(f.Generics)]},
+		generics: genericsExpr{args.Generics},
 		args:     argsExpr{args.Src},
 	}
 	if len(args.Generics) > 0 {
@@ -2251,7 +2243,7 @@ func (p *Parser) pushGenericByMultiTyped(
 	for _, t := range types {
 		for _, generic := range f.Generics {
 			if typeHasThisGeneric(generic, pair.param.Type) {
-				p.pushGenericByType(generic, args, t)
+				p.pushGenericByType(f, generic, args, t)
 				break
 			}
 		}
@@ -2267,17 +2259,17 @@ func (p *Parser) pushGenericByCommonArg(
 ) bool {
 	for _, generic := range f.Generics {
 		if typeIsThisGeneric(generic, pair.param.Type) {
-			p.pushGenericByType(generic, args, t)
+			p.pushGenericByType(f, generic, args, t)
 			return true
 		}
 	}
 	return false
 }
 
-func (p *Parser) pushGenericByType(generic *GenericType, args *models.Args, t DataType) {
+func (p *Parser) pushGenericByType(f *Func, generic *GenericType, args *models.Args, t DataType) {
 	id, _ := t.KindId()
 	t.Kind = id
-	p.pushGeneric(generic, t)
+	f.Owner.(*Parser).pushGeneric(generic, t)
 	args.Generics = append(args.Generics, t)
 }
 
@@ -2324,9 +2316,7 @@ func (p *Parser) parseArg(f *Func, pair *paramMapPair, args *models.Args, variad
 	}
 	if args.DynamicGenericAnnotation && typeHasGenerics(f.Generics, pair.param.Type) {
 		ok := p.pushGenericByArg(f, pair, args, value.data.Type)
-		if ok {
-			p.parseGenericType(f.Generics, &pair.param.Type)
-		} else {
+		if !ok {
 			p.pusherrtok(pair.arg.Tok, "dynamic_generic_annotation_failed")
 		}
 		return
