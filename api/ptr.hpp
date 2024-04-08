@@ -38,6 +38,7 @@ template <typename T> struct ptr {
   mutable bool **_heap{nil};
 
   ptr<T>(void) noexcept {}
+  ptr<T>(std::nullptr_t) noexcept {}
 
   ptr<T>(T *_Ptr) noexcept {
     this->_ptr = new (std::nothrow) T *;

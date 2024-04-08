@@ -2831,6 +2831,9 @@ func (p *Parser) singleAssign(assign *models.Assign, exprs []value) {
 	}
 	leftExpr, model := p.evalExpr(*left)
 	left.Model = model
+	if leftExpr.isField {
+		right.Model = exprNode{exprMustHeap(right.Model.String())}
+	}
 	if !p.assignment(leftExpr, assign.Setter) {
 		return
 	}
@@ -2889,6 +2892,10 @@ func (p *Parser) multiAssign(assign *models.Assign, right []value) {
 			}
 			leftExpr, model := p.evalExpr(left.Expr)
 			left.Expr.Model = model
+			if leftExpr.isField {
+				right := &assign.Right[i]
+				right.Model = exprNode{exprMustHeap(right.Model.String())}
+			}
 			if !p.assignment(leftExpr, assign.Setter) {
 				return
 			}

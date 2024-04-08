@@ -24,8 +24,8 @@
 #include "any.hpp"
 #include "array.hpp"
 #include "builtin.hpp"
-#include "func.hpp"
 #include "defer.hpp"
+#include "func.hpp"
 #include "jn_util.hpp"
 #include "map.hpp"
 #include "ptr.hpp"
@@ -33,6 +33,11 @@
 #include "str.hpp"
 #include "trait.hpp"
 #include "typedef.hpp"
+
+template <typename T>
+inline ptr<T> &__jnc_must_heap(const ptr<T> &_Ptr) noexcept;
+
+template <typename T> inline T __jnc_must_heap(const T &_Obj) noexcept;
 
 template <typename _Enum_t, typename _Index_t, typename _Item_t>
 static inline void foreach (const _Enum_t _Enum,
@@ -74,6 +79,15 @@ void jn_terminate_handler(void) noexcept;
 void JNID(main)(void);
 void _jnc___call_initializers(void);
 int main(void);
+
+template <typename T>
+inline ptr<T> &__jnc_must_heap(const ptr<T> &_Ptr) noexcept {
+  return ((ptr<T> &)(_Ptr)).__must_heap();
+}
+
+template <typename T> inline T __jnc_must_heap(const T &_Obj) noexcept {
+  return _Obj;
+}
 
 template <typename _Enum_t, typename _Index_t, typename _Item_t>
 static inline void foreach (

@@ -9,6 +9,14 @@ import (
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
+func exprMustHeap(expr string) string {
+	var cpp strings.Builder
+	cpp.WriteString("__jnc_must_heap(")
+	cpp.WriteString(expr)
+	cpp.WriteByte(')')
+	return cpp.String()
+}
+
 func isstr(s string) bool {
 	return s != "" && (s[0] == '"' || israwstr(s))
 }
