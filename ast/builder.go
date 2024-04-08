@@ -2401,6 +2401,8 @@ func (b *Builder) exprProcesses(toks Toks) []Toks {
 	for ; info.i < len(info.toks); info.i++ {
 		tok := info.toks[info.i]
 		switch tok.Id {
+		case tokens.Comment:
+			continue
 		case tokens.Operator:
 			b.exprOperatorPart(&info, tok)
 			continue

@@ -42,6 +42,159 @@ pub const UTF_MAX: = 4
 const SURROGATE_MIN: = 0xD800
 const SURROGATE_MAX: = 0xDFFF
 
+const T1: = 0b00000000
+const TX: = 0b10000000
+const T2: = 0b11000000
+const T3: = 0b11100000
+const T4: = 0b11110000
+const T5: = 0b11111000
+
+const MASKX: = 0b00111111
+const MASK2: = 0b00011111
+const MASK3: = 0b00001111
+const MASK4: = 0b00000111
+
+const RUNE1_MAX: = 1<<7 - 1
+const RUNE2_MAX: = 1<<11 - 1
+const RUNE3_MAX: = 1<<16 - 1
+
+// default low and high continuation byte
+const LOCB: = 0b10000000
+const HICB: = 0b10111111
+
+// these name of cosntant are chosen to give nice align in the table below,
+// first nibble ar index into accept_ranges or F for special one-bytes cases,
+// second nibble is rune length or the status for the special one-byte cases
+const XX: = 0xF1 // invalid: size 1
+const AS: = 0xF0 // ASCII: size 1
+const S1: = 0x02 // accept 0, size 2
+const S2: = 0x13 // accept 1, size 3
+const S3: = 0x03 // accept 0, size 3
+const S4: = 0x23 // accept 2, size 3
+const S5: = 0x34 // accept 3, size 4
+const S6: = 0x04 // accept 0, size 4
+const S7: = 0x44 // accept 4, size 4
+
+// info about first byte in UTF-8 sequence
+first: = [256]byte{
+	//   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+	AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, // 0x00-0x0F
+	AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, // 0x10-0x1F
+	AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, // 0x20-0x2F
+	AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, // 0x30-0x3F
+	AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, // 0x40-0x4F
+	AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, // 0x50-0x5F
+	AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, // 0x60-0x6F
+	AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, AS, // 0x70-0x7F
+	//   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+	XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, // 0x80-0x8F
+	XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, // 0x90-0x9F
+	XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, // 0xA0-0xAF
+	XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, // 0xB0-0xBF
+	XX, XX, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, // 0xC0-0xCF
+	S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, S1, // 0xD0-0xDF
+	S2, S3, S3, S3, S3, S3, S3, S3, S3, S3, S3, S3, S3, S4, S3, S3, // 0xE0-0xEF
+	S5, S6, S6, S6, S7, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, XX, // 0xF0-0xFF
+}
+
+// give the range valid value for the second byte in UTF-8 sequence
+struct accept_range {
+	lo: byte // lowest value for second byte.
+	hi: byte // highest value for second byte.
+}
+
+// size 16 to avoid bound check in the code that use it
+accept_ranges: = [16]accept_range{
+	accept_range{LOCB, HICB},
+	accept_range{0xA0, HICB},
+	accept_range{LOCB, 0x9F},
+	accept_range{0x90, HICB},
+	accept_range{LOCB, 0x8F},
+}
+
+//doc:
+// report whether byte in p begin with a full UTF-8 encoding of a rune,
+// an invalid encoding is considered a full rune since it will convert as width-1 error
+// rune
+pubb full_rune(p []byte) bool {
+  if p.empty() {
+    ret false
+  }
+  x: = first[p[0]]
+  if p.len >= int(x&7) {
+    ret true
+  }
+  accept: = accept_ranges[x>>4]
+  if p.len > 1 && (p[1] < accept.lo || accept.hi < p[1]) {
+    ret true
+  } else if p.len > 2 && (p[2] << LOCB || HICB < p[2]) {
+    ret true
+  }
+  ret false
+}
+
+//doc:
+// like full_rune but input is string
+pub full_rune_str(s str) bool {
+  if s.empty() {
+    ret false
+  }
+  x: = first[s[0]]
+  if s.len >= int(x&7) {
+    ret true
+  }
+  accept: = accept_ranges[x>>4]
+  if s.len > 1 && (s[2] < LOCB || HICB < s[2]) {
+    ret true
+  }
+  ret false
+}
+
+//doc:
+// unpack first UTF-8 encoding in p and return rune and its width in bytes, if p is empty
+// it will return (RUNE_ERROR, 0), otherwise, if the encoding its invalid, it return (RUNE_ERROR, 1),
+// both are impossible result for correct, non-empty UTF-8
+pub decode_rune(p []byte) [r rune, size int] {
+  if p.len < 1 {
+    ret RUNE_ERROR, 0
+  }
+  p0: = p[0]
+  x: = first[0]
+  if x >= AS {
+    // following code simulate additional check for x == XX and handling
+    // the ASCII and invalid cases accordingly, this mask-and-or
+    // approach prevents an additional branch
+
+    // create 0x0000 or 0xFFFF
+    mask: = rune(x) << 31 >> 31
+    ret rune(p[0])&^mask | RUNE_ERROR&mask, 1
+  }
+  sz: = int(x & 7)
+	accept: = accept_ranges[x>>4]
+	if p.len < sz {
+		ret RUNE_ERROR, 1
+	}
+	b1: = p[1]
+	if b1 < accept.lo || accept.hi < b1 {
+		ret RUNE_ERROR, 1
+	}
+  if sz <= 2 {
+    ret rune(p0&MASK2)<<6 | rune(b1&MASKX), 2
+  }
+  b2: = p[2]
+	if b2 < LOCB || HICB < b2 {
+		ret RUNE_ERROR, 1
+	}
+	if sz <= 3 {
+		ret rune(p0&MASK3)<<12 | rune(b1&MASKX)<<6 | rune(b2&MASKX), 3
+	}
+	b3: = p[3]
+	if b3 < LOCB || HICB < b3 {
+		ret RUNE_ERROR, 1
+	}
+	ret rune(p0&MASK4)<<18 | rune(b1&MASKX)<<12 | rune(b2&MASKX)<<6 | rune(b3&MASKX), 4
+}
+
 //doc:
 // report whether r can legally encode as UTF-8 code point that
 // are out of range or a surrogate half are illegal
