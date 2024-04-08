@@ -1,9 +1,0 @@
-tambah() {
-  angka:i32 = 10;
-  println(angka + 20);
-}
-
-main() {
-  tambah();
-  println("khairanabilla " + "are awesome");
-}

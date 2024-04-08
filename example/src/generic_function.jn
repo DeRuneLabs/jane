@@ -1,4 +1,3 @@
-#ifndef __JNC_UTIL_LIBS_HPP
 // Copyright (c) 2024 - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,46 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#define __JNC_UTIL_LIBS_HPP
+type[T]
+test_generic_func(a, b T) T {
+  a + b
+}
 
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-#ifndef _WINDOWS
-#define _WINDOWS
-#endif // !_WINDOWS
-#endif // defined(WIN32) || defined(_WIN32) || defined(__WIN32__) ||
-       // defined(__NT__)
-
-#include <cstddef>
-#include <cstdint>
-#include <functional>
-#include <sstream>
-#include <type_traits>
-#include <ostream>
-
-#include <any>
-#include <cstring>
-#include <functional>
-#include <iostream>
-#include <map>
-#include <sstream>
-#include <string>
-#include <thread>
-#include <typeinfo>
-#include <valarray>
-#include <vector>
-#ifdef _WINDOWS
-#include <codecvt>
-#include <fcntl.h>
-#include <windows.h>
-#endif // _WINDOWS
-
-#define JN_EXIT_PANIC 2
-#define _CONCAT(_A, _B) _A##_B
-#define CONCAT(_A, _B) _CONCAT(_A, _B)
-#define JNID(_Identifier) CONCAT(_, _Identifier)
-#define nil nullptr
-#define CO(_Expr) std::thread{[&](void) mutable -> void { _Expr; }}.detach()
-
-void JNID(panic)(const char *_Message);
-
-#endif // !__JNC_UTIL_LIBS_HPP
+main() {
+  test_generic_func[int](2, 30)
+  test_generic_func[uint](2, 2)
+  test_generic_func[f64](4.2, 3.14)
+}
