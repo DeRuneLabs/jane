@@ -269,10 +269,10 @@ var errorTrait = &trait{
 }
 
 var errorType = DataType{
-	Id:              jntype.Trait,
-	Kind:            errorTrait.Ast.Id,
-	Tag:             errorTrait,
-	DontUseOriginal: true,
+	Id:   jntype.Trait,
+	Kind: errorTrait.Ast.Id,
+	Tag:  errorTrait,
+	Pure: true,
 }
 
 var panicFunc = &function{

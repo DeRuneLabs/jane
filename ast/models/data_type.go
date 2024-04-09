@@ -18,15 +18,25 @@ type TypeSize struct {
 }
 
 type DataType struct {
-	Tok             Tok
-	Id              uint8
-	Original        any
-	Kind            string
-	MultiTyped      bool
-	ComponentType   *DataType
-	Size            TypeSize
-	Tag             any
-	DontUseOriginal bool
+	Tok           Tok
+	Id            uint8
+	Original      any
+	Kind          string
+	MultiTyped    bool
+	ComponentType *DataType
+	Size          TypeSize
+	Tag           any
+	Pure          bool
+	Generic       bool
+}
+
+func (dt *DataType) Copy() DataType {
+	copy := *dt
+	if dt.ComponentType != nil {
+		copy.ComponentType = new(DataType)
+		*copy.ComponentType = dt.ComponentType.Copy()
+	}
+	return copy
 }
 
 func (dt *DataType) KindWithOriginalId() string {
@@ -82,7 +92,7 @@ func (dt *DataType) KindId() (id, prefix string) {
 }
 
 func (dt *DataType) SetToOriginal() {
-	if dt.DontUseOriginal || dt.Original == nil {
+	if dt.Pure || dt.Original == nil {
 		return
 	}
 	tag := dt.Tag
@@ -92,9 +102,11 @@ func (dt *DataType) SetToOriginal() {
 	}
 	kind := dt.KindWithOriginalId()
 	tok := dt.Tok
+	generic := dt.Generic
 	*dt = dt.Original.(DataType)
 	dt.Kind = kind
 	dt.Tok = tok
+	dt.Generic = generic
 }
 
 func (dt *DataType) Pointers() string {
@@ -142,8 +154,13 @@ func (dt DataType) String() (s string) {
 		return dt.StructString()
 	}
 	switch dt.Id {
-	case jntype.Id, jntype.Enum:
+	case jntype.Id:
+		if dt.Generic {
+			return jnapi.AsId(dt.Kind)
+		}
 		return jnapi.OutId(dt.Kind, dt.Tok.File)
+	case jntype.Enum:
+		return
 	case jntype.Trait:
 		return dt.TraitString()
 	case jntype.Struct:
@@ -158,7 +175,7 @@ func (dt DataType) String() (s string) {
 func (dt *DataType) SliceString() string {
 	var cpp strings.Builder
 	cpp.WriteString("slice<")
-	dt.ComponentType.DontUseOriginal = dt.DontUseOriginal
+	dt.ComponentType.Pure = dt.Pure
 	cpp.WriteString(dt.ComponentType.String())
 	cpp.WriteByte('>')
 	return cpp.String()
@@ -167,7 +184,7 @@ func (dt *DataType) SliceString() string {
 func (dt *DataType) ArrayString() string {
 	var cpp strings.Builder
 	cpp.WriteString("array<")
-	dt.ComponentType.DontUseOriginal = dt.DontUseOriginal
+	dt.ComponentType.Pure = dt.Pure
 	cpp.WriteString(dt.ComponentType.String())
 	cpp.WriteByte(',')
 	cpp.WriteString(dt.Size.Expr.String())
@@ -180,11 +197,11 @@ func (dt *DataType) MapString() string {
 	types := dt.Tag.([]DataType)
 	cpp.WriteString("map<")
 	key := types[0]
-	key.DontUseOriginal = dt.DontUseOriginal
+	key.Pure = dt.Pure
 	cpp.WriteString(key.String())
 	cpp.WriteByte(',')
 	value := types[1]
-	value.DontUseOriginal = dt.DontUseOriginal
+	value.Pure = dt.Pure
 	cpp.WriteString(value.String())
 	cpp.WriteByte('>')
 	return cpp.String()
@@ -209,7 +226,7 @@ func (dt *DataType) StructString() string {
 	}
 	cpp.WriteByte('<')
 	for _, t := range types {
-		t.DontUseOriginal = dt.DontUseOriginal
+		t.Pure = dt.Pure
 		cpp.WriteString(t.String())
 		cpp.WriteByte(',')
 	}
@@ -220,12 +237,12 @@ func (dt *DataType) FuncString() string {
 	var cpp strings.Builder
 	cpp.WriteString("func<std::function<")
 	f := dt.Tag.(*Func)
-	f.RetType.Type.DontUseOriginal = dt.DontUseOriginal
+	f.RetType.Type.Pure = dt.Pure
 	cpp.WriteString(f.RetType.String())
 	cpp.WriteByte('(')
 	if len(f.Params) > 0 {
 		for _, param := range f.Params {
-			param.Type.DontUseOriginal = dt.DontUseOriginal
+			param.Type.Pure = dt.Pure
 			cpp.WriteString(param.Prototype())
 			cpp.WriteByte(',')
 		}
@@ -244,7 +261,7 @@ func (dt *DataType) MultiTypeString() string {
 	var cpp strings.Builder
 	cpp.WriteString("std::tuple<")
 	for _, t := range types {
-		t.DontUseOriginal = dt.DontUseOriginal
+		t.Pure = dt.Pure
 		cpp.WriteString(t.String())
 		cpp.WriteByte(',')
 	}
