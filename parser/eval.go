@@ -887,13 +887,16 @@ func (e *eval) nsSubId(toks Toks, m *exprModel) (v value) {
 	if defs == nil {
 		return
 	}
+	blockTypes := e.p.blockTypes
+	blockVars := e.p.blockVars
+	e.p.blockTypes = nil
+	e.p.blockVars = nil
 	pdefs := e.p.Defs
 	e.p.Defs = defs
-	e.p.allowBuiltin = false
-	defer func() {
-		e.p.Defs = pdefs
-		e.p.allowBuiltin = true
-	}()
+	v, _ = e.single(toks[0], m)
+	e.p.blockTypes = blockTypes
+	e.p.blockVars = blockVars
+	e.p.Defs = pdefs
 	return e.process(toks, m)
 }
 
