@@ -920,7 +920,7 @@ func (p *Parser) CppLink(link models.CppLink) {
 		return
 	}
 	linkf := link.Link
-	linkf.Owner = p
+  linkf.Owner = p
 	setGenerics(linkf, p.generics)
 	p.generics = nil
 	p.cppLinks = append(p.cppLinks, &link)
@@ -1240,6 +1240,77 @@ func (p *Parser) parseTypesNonGenerics(f *Func) {
 		p.parseNonGenericType(f.Generics, &f.Params[i].Type)
 	}
 	p.parseNonGenericType(f.Generics, &f.RetType.Type)
+}
+
+func (p *Parser) parseFuncGenericType(generics []*GenericType, t *DataType) {
+	f := t.Tag.(*Func)
+	for i := range f.Params {
+		p.parseGenericType(generics, &f.Params[i].Type)
+	}
+	p.parseGenericType(generics, &f.RetType.Type)
+}
+
+func (p *Parser) parseMultiGenericType(generics []*GenericType, t *DataType) {
+	types := t.Tag.([]DataType)
+	for i := range types {
+		mt := &types[i]
+		p.parseGenericType(generics, mt)
+	}
+}
+
+func (p *Parser) parseMapGenericType(generics []*GenericType, t *DataType) {
+	p.parseMultiGenericType(generics, t)
+}
+
+func (p *Parser) parseCommonGenericType(generics []*GenericType, t *DataType) {
+	if !typeIsGeneric(generics, *t) {
+		if t.Tag != nil {
+			switch t := t.Tag.(type) {
+			case *jnstruct:
+				sgenerics := t.Generics()
+				for _, ct := range sgenerics {
+					if typeIsGeneric(generics, ct) {
+						goto parse
+					}
+				}
+			case []DataType:
+				for _, ct := range t {
+					if typeIsGeneric(generics, ct) {
+						goto parse
+					}
+				}
+			}
+		}
+		return
+	}
+parse:
+	*t, _ = p.realType(*t, true)
+}
+
+func (p *Parser) parseGenericType(generics []*GenericType, t *DataType) {
+	switch {
+	case t.MultiTyped:
+		p.parseMultiNonGenericType(generics, t)
+	case typeIsFunc(*t):
+		p.parseFuncNonGenericType(generics, t)
+	case typeIsMap(*t):
+		p.parseMapNonGenericType(generics, t)
+	case typeIsArray(*t):
+		p.parseGenericType(generics, t.ComponentType)
+		t.Kind = jn.Prefix_Array + t.ComponentType.Kind
+	case typeIsSlice(*t):
+		p.parseGenericType(generics, t.ComponentType)
+		t.Kind = jn.Prefix_Slice + t.ComponentType.Kind
+	default:
+		p.parseCommonNonGenericType(generics, t)
+	}
+}
+
+func (p *Parser) parseTypesGenerics(f *Func) {
+	for i := range f.Params {
+		p.parseGenericType(f.Generics, &f.Params[i].Type)
+	}
+	p.parseGenericType(f.Generics, &f.RetType.Type)
 }
 
 func (p *Parser) checkRetVars(f *function) {
@@ -1989,7 +2060,7 @@ check:
 		return false
 	}
 	f.Owner.(*Parser).pushGenerics(f.Generics, args.Generics)
-	f.Owner.(*Parser).reloadFuncTypes(f)
+	f.Owner.(*Parser).parseTypesGenerics(f)
 ok:
 	return true
 }
