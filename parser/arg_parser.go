@@ -2,6 +2,7 @@ package parser
 
 import (
 	"github.com/DeRuneLabs/jane/ast/models"
+	"github.com/DeRuneLabs/jane/lexer/tokens"
 	"github.com/DeRuneLabs/jane/package/jn"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
@@ -52,34 +53,26 @@ func (pap *pureArgParser) buildArgs() {
 }
 
 func (pap *pureArgParser) pushVariadicArgs(pair *paramMapPair) {
-	var model sliceExpr
+	var model serieExpr
 	variadiced := false
 	pap.p.parseArg(pap.f, pair, pap.args, &variadiced)
-	model.expr = append(model.expr, pair.arg.Expr.Model.(iExpr))
+	model.exprs = append(model.exprs, pair.arg.Expr.Model.(iExpr))
 	once := false
 	for pap.i++; pap.i < len(pap.args.Src); pap.i++ {
 		pair.arg = &pap.args.Src[pap.i]
 		once = true
 		pap.p.parseArg(pap.f, pair, pap.args, &variadiced)
-		model.expr = append(model.expr, pair.arg.Expr.Model.(iExpr))
+		model.exprs = append(model.exprs, exprNode{tokens.COMMA})
+		model.exprs = append(model.exprs, pair.arg.Expr.Model.(iExpr))
 	}
-	model.dataType.Id = jntype.Slice
-	model.dataType.Kind = jn.Prefix_Slice + model.dataType.Kind
-	model.dataType.ComponentType = new(DataType)
-	*model.dataType.ComponentType = pair.param.Type
-	model.dataType.Original = nil
-	model.dataType.Pure = true
-	if pap.args.NeedsPureType {
-		model.dataType.ComponentType.Pure = true
-		model.dataType.ComponentType.Original = nil
-	}
+  model.exprs = append(model.exprs, exprNode{tokens.RBRACE})
+  pair.arg.Expr.Model = model
 	if !once {
 		return
 	}
 	if variadiced {
 		pap.p.pusherrtok(pap.errTok, "more_args_with_variadiced")
 	}
-	pair.arg.Expr.Model = model
 }
 
 func (pap *pureArgParser) checkPasses() {

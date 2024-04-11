@@ -19,7 +19,9 @@ var i8statics = &Defmap{
 			Type:    DataType{Id: jntype.I8, Kind: tokens.I8},
 			ExprTag: int64(math.MaxInt8),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.I8) + "{" + strconv.FormatInt(math.MaxInt8, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.I8) + "{" + strconv.FormatInt(math.MaxInt8, 10) + "}",
+				},
 			},
 		},
 		{
@@ -29,7 +31,9 @@ var i8statics = &Defmap{
 			Type:    DataType{Id: jntype.I8, Kind: tokens.I8},
 			ExprTag: int64(math.MinInt8),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.I8) + "{" + strconv.FormatInt(math.MinInt8, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.I8) + "{" + strconv.FormatInt(math.MinInt8, 10) + "}",
+				},
 			},
 		},
 	},
@@ -44,7 +48,9 @@ var i16statics = &Defmap{
 			Type:    DataType{Id: jntype.I16, Kind: tokens.I16},
 			ExprTag: int64(math.MaxInt16),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.I16) + "{" + strconv.FormatInt(math.MaxInt16, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.I16) + "{" + strconv.FormatInt(math.MaxInt16, 10) + "}",
+				},
 			},
 		},
 		{
@@ -54,7 +60,9 @@ var i16statics = &Defmap{
 			Type:    DataType{Id: jntype.I16, Kind: tokens.I16},
 			ExprTag: int64(math.MinInt16),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.I16) + "{" + strconv.FormatInt(math.MinInt16, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.I16) + "{" + strconv.FormatInt(math.MinInt16, 10) + "}",
+				},
 			},
 		},
 	},
@@ -69,7 +77,9 @@ var i32statics = &Defmap{
 			Type:    DataType{Id: jntype.I32, Kind: tokens.I32},
 			ExprTag: int64(math.MaxInt32),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.I32) + "{" + strconv.FormatInt(math.MaxInt32, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.I32) + "{" + strconv.FormatInt(math.MaxInt32, 10) + "}",
+				},
 			},
 		},
 		{
@@ -79,7 +89,9 @@ var i32statics = &Defmap{
 			Type:    DataType{Id: jntype.I32, Kind: tokens.I32},
 			ExprTag: int64(math.MinInt32),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.I32) + "{" + strconv.FormatInt(math.MinInt32, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.I32) + "{" + strconv.FormatInt(math.MinInt32, 10) + "}",
+				},
 			},
 		},
 	},
@@ -94,7 +106,9 @@ var i64statics = &Defmap{
 			Type:    DataType{Id: jntype.I64, Kind: tokens.I64},
 			ExprTag: int64(math.MaxInt64),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.I64) + "{" + strconv.FormatInt(math.MaxInt64, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.I64) + "{" + strconv.FormatInt(math.MaxInt64, 10) + "}",
+				},
 			},
 		},
 		{
@@ -104,7 +118,9 @@ var i64statics = &Defmap{
 			Type:    DataType{Id: jntype.I64, Kind: tokens.I64},
 			ExprTag: int64(math.MinInt64),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.I64) + "{" + strconv.FormatInt(math.MinInt64, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.I64) + "{" + strconv.FormatInt(math.MinInt64, 10) + "}",
+				},
 			},
 		},
 	},
@@ -119,7 +135,9 @@ var u8statics = &Defmap{
 			Type:    DataType{Id: jntype.U8, Kind: tokens.U8},
 			ExprTag: uint64(math.MaxUint8),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.U8) + "{" + strconv.FormatUint(math.MaxUint8, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.U8) + "{" + strconv.FormatUint(math.MaxUint8, 10) + "}",
+				},
 			},
 		},
 	},
@@ -134,7 +152,9 @@ var u16statics = &Defmap{
 			Type:    DataType{Id: jntype.U16, Kind: tokens.U16},
 			ExprTag: uint64(math.MaxUint16),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.U16) + "{" + strconv.FormatUint(math.MaxUint16, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.U16) + "{" + strconv.FormatUint(math.MaxUint16, 10) + "}",
+				},
 			},
 		},
 	},
@@ -149,7 +169,9 @@ var u32statics = &Defmap{
 			Type:    DataType{Id: jntype.U32, Kind: tokens.U32},
 			ExprTag: uint64(math.MaxUint32),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.U32) + "{" + strconv.FormatUint(math.MaxUint32, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.U32) + "{" + strconv.FormatUint(math.MaxUint32, 10) + "}",
+				},
 			},
 		},
 	},
@@ -164,7 +186,9 @@ var u64statics = &Defmap{
 			Type:    DataType{Id: jntype.U64, Kind: tokens.U64},
 			ExprTag: uint64(math.MaxUint64),
 			Expr: models.Expr{
-				Model: exprNode{jntype.CppId(jntype.U64) + "{" + strconv.FormatUint(math.MaxUint64, 10) + "}"},
+				Model: exprNode{
+					jntype.CppId(jntype.U64) + "{" + strconv.FormatUint(math.MaxUint64, 10) + "}",
+				},
 			},
 		},
 	},
@@ -198,7 +222,9 @@ var intStatics = &Defmap{
 
 const f32min = float64(1.17549435082228750796873653722224568e-38)
 
-var f32min_model = exprNode{jntype.CppId(jntype.F32) + "{1.17549435082228750796873653722224568e-38F}"}
+var f32min_model = exprNode{
+	jntype.CppId(jntype.F32) + "{1.17549435082228750796873653722224568e-38F}",
+}
 
 var f32statics = &Defmap{
 	Globals: []*Var{
@@ -208,7 +234,9 @@ var f32statics = &Defmap{
 			Id:      "max",
 			Type:    DataType{Id: jntype.F32, Kind: tokens.F32},
 			ExprTag: float64(math.MaxFloat32),
-			Expr:    models.Expr{Model: exprNode{strconv.FormatFloat(math.MaxFloat32, 'e', -1, 32) + "F"}},
+			Expr: models.Expr{
+				Model: exprNode{strconv.FormatFloat(math.MaxFloat32, 'e', -1, 32) + "F"},
+			},
 		},
 		{
 			Pub:     true,
@@ -223,7 +251,9 @@ var f32statics = &Defmap{
 
 const f64min = float64(2.22507385850720138309023271733240406e-308)
 
-var f64min_model = exprNode{jntype.CppId(jntype.F64) + "{2.22507385850720138309023271733240406e-308}"}
+var f64min_model = exprNode{
+	jntype.CppId(jntype.F64) + "{2.22507385850720138309023271733240406e-308}",
+}
 
 var f64statics = &Defmap{
 	Globals: []*Var{
@@ -233,7 +263,9 @@ var f64statics = &Defmap{
 			Id:      "max",
 			Type:    DataType{Id: jntype.F64, Kind: tokens.F64},
 			ExprTag: float64(math.MaxFloat64),
-			Expr:    models.Expr{Model: exprNode{strconv.FormatFloat(math.MaxFloat64, 'e', -1, 64)}},
+			Expr: models.Expr{
+				Model: exprNode{strconv.FormatFloat(math.MaxFloat64, 'e', -1, 64)},
+			},
 		},
 		{
 			Pub:     true,
@@ -321,6 +353,8 @@ var recoverFunc = &function{
 	},
 }
 
+var genericFile = &Parser{}
+
 var Builtin = &Defmap{
 	Types: []*models.Type{
 		{
@@ -337,32 +371,112 @@ var Builtin = &Defmap{
 	Funcs: []*function{
 		panicFunc,
 		recoverFunc,
-		{
-			Ast: &Func{
-				Pub: true,
-				Id:  "print",
-				RetType: RetType{
-					Type: DataType{Id: jntype.Void, Kind: jntype.TypeMap[jntype.Void]},
-				},
-				Params: []Param{{
-					Id:   "expr",
-					Type: DataType{Id: jntype.Any, Kind: tokens.ANY},
-				}},
+		{Ast: &Func{
+			Pub: true,
+			Id:  "print",
+			RetType: RetType{
+				Type: DataType{Id: jntype.Void, Kind: jntype.TypeMap[jntype.Void]},
 			},
-		},
-		{
-			Ast: &Func{
-				Pub: true,
-				Id:  "println",
-				RetType: RetType{
-					Type: DataType{Id: jntype.Void, Kind: jntype.TypeMap[jntype.Void]},
-				},
-				Params: []Param{{
-					Id:   "expr",
-					Type: DataType{Id: jntype.Any, Kind: tokens.ANY},
-				}},
+			Params: []Param{{
+				Id:   "expr",
+				Type: DataType{Id: jntype.Any, Kind: tokens.ANY},
+			}},
+		}},
+		{Ast: &Func{
+			Pub:   true,
+			Id:    "make",
+			Owner: genericFile,
+			Generics: []*GenericType{
+				{Id: "Item"},
 			},
-		},
+			RetType: models.RetType{
+				Type: DataType{
+					Id:   jntype.Slice,
+					Kind: jn.Prefix_Slice + "Item",
+					ComponentType: &DataType{
+						Id:   jntype.Id,
+						Kind: "Item",
+					},
+				},
+			},
+			Params: []models.Param{
+				{
+					Id:   "n",
+					Type: DataType{Id: jntype.Int, Kind: jntype.TypeMap[jntype.Int]},
+				},
+			},
+		}},
+		{Ast: &Func{
+			Pub:   true,
+			Id:    "copy",
+			Owner: genericFile,
+			Generics: []*GenericType{
+				{Id: "Item"},
+			},
+			RetType: models.RetType{
+				Type: DataType{Id: jntype.Int, Kind: jntype.TypeMap[jntype.Int]},
+			},
+			Params: []models.Param{
+				{
+					Id: "dest",
+					Type: DataType{
+						Id:   jntype.Slice,
+						Kind: jn.Prefix_Slice + "Item",
+						ComponentType: &DataType{
+							Id:   jntype.Id,
+							Kind: "Item",
+						},
+					},
+				},
+				{
+					Id: "src",
+					Type: DataType{
+						Id:   jntype.Slice,
+						Kind: jn.Prefix_Slice + "Item",
+						ComponentType: &DataType{
+							Id:   jntype.Id,
+							Kind: "Item",
+						},
+					},
+				},
+			},
+		}},
+		{Ast: &Func{
+			Pub:   true,
+			Id:    "append",
+			Owner: genericFile,
+			Generics: []*GenericType{
+				{Id: "Item"},
+			},
+			RetType: models.RetType{
+				Type: DataType{
+					Id:   jntype.Slice,
+					Kind: jn.Prefix_Slice + "Item",
+					ComponentType: &DataType{
+						Id:   jntype.Id,
+						Kind: "Item",
+					},
+				},
+			},
+			Params: []models.Param{
+				{
+					Id: "src",
+					Type: DataType{
+						Id:   jntype.Slice,
+						Kind: jn.Prefix_Slice + "Item",
+						ComponentType: &DataType{
+							Id:   jntype.Id,
+							Kind: "Item",
+						},
+					},
+				},
+				{
+					Id:       "components",
+					Type:     DataType{Id: jntype.Id, Kind: "Item"},
+					Variadic: true,
+				},
+			},
+		}},
 	},
 	Traits: []*trait{
 		errorTrait,
@@ -546,6 +660,14 @@ func readyMapDefs(mapt DataType) {
 }
 
 func init() {
+  printFunc, _, _ := Builtin.funcById("print", nil)
+  printlnFunc := new(function)
+  *printlnFunc = *printFunc
+  printlnFunc.Ast = new(models.Func)
+  *printlnFunc.Ast = *printFunc.Ast
+  printlnFunc.Ast.Id = "println"
+  Builtin.Funcs = append(Builtin.Funcs, printlnFunc)
+
 	intMax := intStatics.Globals[0]
 	intMin := intStatics.Globals[1]
 	uintMax := uintStatics.Globals[0]

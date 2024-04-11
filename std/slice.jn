@@ -19,24 +19,18 @@
 // SOFTWARE.
 
 //doc:
-// copy component of source slice to destination slice
+// allocate new n size slice for given data type
 type[Item]
-pub copy(destination, source []Item) {
-  if source.empty() || destination.empty() {
-    ret
-  }
+make(n int) []Item
 
-  len: int
-  match {
-    case destination.len > source.len:
-      len = source.len
-    case source.len > destination.len:
-      len = destination.len
-    default:
-      len = source.len
-  }
+//doc:
+// copy component of source slice to destination slice
+// return number of copied component
+type[Item]
+copy(dest, src []Item) int
 
-  for i: = 0, i < len, i++ {
-    destination[i] = source[i]
-  }
-}
+//doc:
+// create new require size slice, copy all component of given source slice and append
+// given component to end of new slice, return new slice, not changhe given source slice,
+type[Item]
+append(src []Item, ...components Item) []Item

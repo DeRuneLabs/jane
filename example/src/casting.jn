@@ -23,8 +23,8 @@ casting_function() {
   _ = (uintptr)(a)
 	_ = (f32)(5000)
 	bytes: = ([]byte)("Khairanabilla")
-	outln(bytes)
-	outln((str)(bytes))
+	println(bytes)
+	println((str)(bytes))
 }
 
 main() {

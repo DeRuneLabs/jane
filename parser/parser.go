@@ -1511,6 +1511,15 @@ func (p *Parser) varsFromParams(params []Param) []*Var {
 	return vars
 }
 
+func (p *Parser) linkById(id string) *models.CppLink {
+  for _, link := range p.cppLinks {
+    if link.Link.Id == id {
+      return link
+    }
+  }
+  return nil
+}
+
 func (p *Parser) FuncById(id string) (*function, *Defmap, bool) {
 	f, _, _ := Builtin.funcById(id, nil)
 	if f != nil {
@@ -2253,6 +2262,10 @@ func (p *Parser) pushGenericByCommonArg(
 }
 
 func (p *Parser) pushGenericByType(f *Func, generic *GenericType, args *models.Args, t DataType) {
+  owner := f.Owner.(*Parser)
+  if owner.blockTypeById(generic.Id) != nil {
+    return
+  }
 	id, _ := t.KindId()
 	t.Kind = id
 	f.Owner.(*Parser).pushGeneric(generic, t)
