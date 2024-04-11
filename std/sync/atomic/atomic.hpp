@@ -137,27 +137,27 @@ inline void __jnc_atomic_store_uintptr(const ptr<uintptr_jnt> &_Addr,
 
 inline i32_jnt __jnc_atomic_swap_i32(const ptr<i32_jnt> &_Addr,
                                      const i32_jnt &_New) noexcept {
-  return __jnc_atomic_swap(_Addr._ptr, _New);
+  return __jnc_atomic_swap(*_Addr._ptr, _New);
 }
 
 inline i64_jnt __jnc_atomic_swap_i64(const ptr<i64_jnt> &_Addr,
                                      const i64_jnt &_New) noexcept {
-  return __jnc_atomic_swap(_Addr._ptr, _New);
+  return __jnc_atomic_swap(*_Addr._ptr, _New);
 }
 
 inline u32_jnt __jnc_atomic_swap_u32(const ptr<u32_jnt> &_Addr,
                                      const u32_jnt &_New) noexcept {
-  return __jnc_atomic_swap(_Addr._ptr, _New);
+  return __jnc_atomic_swap(*_Addr._ptr, _New);
 }
 
 inline u64_jnt __jnc_atomic_swap_u64(const ptr<u64_jnt> &_Addr,
                                      const u64_jnt &_New) noexcept {
-  return __jnc_atomic_swap(_Addr._ptr, _New);
+  return __jnc_atomic_swap(*_Addr._ptr, _New);
 }
 
 inline uintptr_jnt __jnc_atomic_swap_uintptr(const ptr<uintptr_jnt> &_Addr,
                                              const uintptr_jnt &_New) noexcept {
-  return __jnc_atomic_swap(_Addr._ptr, _New);
+  return __jnc_atomic_swap(*_Addr._ptr, _New);
 }
 
 inline bool __jnc_atomic_compare_swap_i32(const ptr<i32_jnt> &_Addr,
@@ -198,74 +198,74 @@ __jnc_atomic_compare_swap_uintptr(const ptr<uintptr_jnt> &_Addr,
 
 inline i32_jnt __jnc_atomic_add_i32(const ptr<i32_jnt> &_Addr,
                                     const i32_jnt &_Delta) noexcept {
-  return __jnc_atomic_add(_Addr._ptr, _Delta);
+  return __jnc_atomic_add(*_Addr._ptr, _Delta);
 }
 
 inline i64_jnt __jnc_atomic_add_i64(const ptr<i64_jnt> &_Addr,
                                     const i64_jnt &_Delta) noexcept {
-  return __jnc_atomic_add(_Addr._ptr, _Delta);
+  return __jnc_atomic_add(*_Addr._ptr, _Delta);
 }
 
 inline u32_jnt __jnc_atomic_add_u32(const ptr<u32_jnt> &_Addr,
                                     const u32_jnt &_Delta) noexcept {
-  return __jnc_atomic_add(_Addr._ptr, _Delta);
+  return __jnc_atomic_add(*_Addr._ptr, _Delta);
 }
 
 inline u64_jnt __jnc_atomic_add_u64(const ptr<u64_jnt> &_Addr,
                                     const u64_jnt &_Delta) noexcept {
-  return __jnc_atomic_add(_Addr._ptr, _Delta);
+  return __jnc_atomic_add(*_Addr._ptr, _Delta);
 }
 
 inline uintptr_jnt
 __jnc_atomic_add_uintptr(const ptr<uintptr_jnt> &_Addr,
                          const uintptr_jnt &_Delta) noexcept {
-  return __jnc_atomic_add(_Addr._ptr, _Delta);
+  return __jnc_atomic_add(*_Addr._ptr, _Delta);
 }
 
 inline i32_jnt __jnc_atomic_load_i32(const ptr<i32_jnt> &_Addr) noexcept {
-  return __jnc_atomic_load(_Addr._ptr);
+  return __jnc_atomic_load(*_Addr._ptr);
 }
 
 inline i64_jnt __jnc_atomic_load_i64(const ptr<i64_jnt> &_Addr) noexcept {
-  return __jnc_atomic_load(_Addr._ptr);
+  return __jnc_atomic_load(*_Addr._ptr);
 }
 
 inline u32_jnt __jnc_atomic_load_u32(const ptr<u32_jnt> &_Addr) noexcept {
-  return __jnc_atomic_load(_Addr._ptr);
+  return __jnc_atomic_load(*_Addr._ptr);
 }
 
 inline u64_jnt __jnc_atomic_load_u64(const ptr<u64_jnt> &_Addr) noexcept {
-  return __jnc_atomic_load(_Addr._ptr);
+  return __jnc_atomic_load(*_Addr._ptr);
 }
 
 inline uintptr_jnt
 __jnc_atomic_load_uintptr(const ptr<uintptr_jnt> &_Addr) noexcept {
-  return __jnc_atomic_load(_Addr._ptr);
+  return __jnc_atomic_load(*_Addr._ptr);
 }
 
 inline void __jnc_atomic_store_i32(const ptr<i32_jnt> &_Addr,
                                    const i32_jnt &_Val) noexcept {
-  __jnc_atomic_store(_Addr._ptr, _Val);
+  __jnc_atomic_store(*_Addr._ptr, _Val);
 }
 
 inline void __jnc_atomic_store_i64(const ptr<i64_jnt> &_Addr,
                                    const i64_jnt &_Val) noexcept {
-  __jnc_atomic_store(_Addr._ptr, _Val);
+  __jnc_atomic_store(*_Addr._ptr, _Val);
 }
 
 inline void __jnc_atomic_store_u32(const ptr<u32_jnt> &_Addr,
                                    const u32_jnt &_Val) noexcept {
-  __jnc_atomic_store(_Addr._ptr, _Val);
+  __jnc_atomic_store(*_Addr._ptr, _Val);
 }
 
 inline void __jnc_atomic_store_u64(const ptr<u64_jnt> &_Addr,
                                    const u64_jnt &_Val) noexcept {
-  __jnc_atomic_store(_Addr._ptr, _Val);
+  __jnc_atomic_store(*_Addr._ptr, _Val);
 }
 
 inline void __jnc_atomic_store_uintptr(const ptr<uintptr_jnt> &_Addr,
                                        const uintptr_jnt &_Val) noexcept {
-  __jnc_atomic_store(_Addr._ptr, _Val);
+  __jnc_atomic_store(*_Addr._ptr, _Val);
 }
 
 #endif // !__JNC_STD_SYNC_ATOMIC_ATOMIC_HPP

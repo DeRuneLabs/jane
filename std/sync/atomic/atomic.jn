@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use std::errors
+
 use cpp "atomic.cpp"
 
 cpp __jnc_atomic_swap_i32(addr *i32, new i32) [old i32]
@@ -46,9 +48,14 @@ cpp __jnc_atomic_store_u32(addr *u32, val u32)
 cpp __jnc_atomic_store_u64(addr *u64, val u64)
 cpp __jnc_atomic_store_uintptr(addr *uintptr, val uintptr)
 
+invalid_ptr_error: = std::errors::new("invalid memory address or nil pointer defernce for atomic operation")
+
 //doc:
 // atomatically stores new into *addr and return the previous *addr value
 pub swap_i32(addr *i32, new i32) [old i32] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_swap_i32(addr, new)
 }
 
@@ -56,6 +63,9 @@ pub swap_i32(addr *i32, new i32) [old i32] {
 // atomatically stores new into *addr and return the previous *addr value
 @inline
 pub swap_i64(addr *i64, new i64) [old i64] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_swap_i64(addr, new)
 }
 
@@ -63,6 +73,9 @@ pub swap_i64(addr *i64, new i64) [old i64] {
 // atomatically stores new into *addr and return the previous *addr value
 @inline
 pub swap_u32(addr *u32, new u32) [old u32] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_swap_u32(addr, new)
 }
 
@@ -70,6 +83,9 @@ pub swap_u32(addr *u32, new u32) [old u32] {
 // atomatically stores new into *addr and return the previous *addr value
 @inline
 pub swap_u64(addr *u64, new u64) [old u64] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_swap_u64(addr, new)
 }
 
@@ -77,6 +93,9 @@ pub swap_u64(addr *u64, new u64) [old u64] {
 // atomatically stores new into *addr and return the previous *addr value
 @inline
 pub swap_uintptr(addr *uintptr, new uintptr) [old uintptr] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_setup_swap_uintptr(addr, new)
 }
 
@@ -84,6 +103,9 @@ pub swap_uintptr(addr *uintptr, new uintptr) [old uintptr] {
 // execute the compare and swap operation for i32 value
 @inline
 pub compare_swap_i32(addr *i32, old, new i32) [swapped bool] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_compare_swap_i32(addr, old, new)
 }
 
@@ -91,6 +113,9 @@ pub compare_swap_i32(addr *i32, old, new i32) [swapped bool] {
 // execute the compare and swap operation for i32 value
 @inline
 pub compare_swap_i64(addr *i64, old, new i64) [swapped bool] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_compare_swap_i64(addr, old, new)
 }
 
@@ -98,6 +123,9 @@ pub compare_swap_i64(addr *i64, old, new i64) [swapped bool] {
 // execute compare and swap operation for an u32 value
 @inline
 pub compare_swap_u32(addr *u32, old, new u32) [swapped bool] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_compare_swap_u32(addr, old, new)
 }
 
@@ -105,6 +133,9 @@ pub compare_swap_u32(addr *u32, old, new u32) [swapped bool] {
 // execute compare and swap operation for u64 value
 @inline
 pub compare_swap_u64(addr *u64, old, new u64) [swapped bool] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_compare_swap_u64(addr, old, new)
 }
 
@@ -112,6 +143,9 @@ pub compare_swap_u64(addr *u64, old, new u64) [swapped bool] {
 // execute the compare and swap operation for uintptr value
 @inline
 pub compare_swap_uintptr(addr *uintptr, old, new uintptr) [swapped bool] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_compare_swap_uintptr(addr, old, new)
 }
 
@@ -119,6 +153,9 @@ pub compare_swap_uintptr(addr *uintptr, old, new uintptr) [swapped bool] {
 // atomatically add delta to *addr and returns the old value
 @inline
 pub add_i32(addr *i32, delta i32) [old i32] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_add_i32(addr, delta)
 }
 
@@ -126,6 +163,9 @@ pub add_i32(addr *i32, delta i32) [old i32] {
 // atomatically adds delta to *addr and return the old value
 @inline
 pub add i64(addr *i64, delta i64) [old i64] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_add_i64(addr, delta)
 }
 
@@ -133,6 +173,9 @@ pub add i64(addr *i64, delta i64) [old i64] {
 // atomatically adds delta to *addr and return the old value
 @inline
 pub add_u32(addr *u32, delta u32) [old u32] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_add_u32(addr, delta)
 }
 
@@ -140,6 +183,9 @@ pub add_u32(addr *u32, delta u32) [old u32] {
 // atomatically adds delta to *addr and returns old value
 @inline
 pub add_u64(addr *u64, delta u64) [old u64] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_add_u64(addr, delta)
 }
 
@@ -147,6 +193,9 @@ pub add_u64(addr *u64, delta u64) [old u64] {
 // atomatically adds delta to *addr and returns the old value
 @inline
 pub add_uintptr(addr *uintptr, delta uintptr) [old uintptr] {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_add_uintptr(addr, delta)
 }
 
@@ -154,6 +203,9 @@ pub add_uintptr(addr *uintptr, delta uintptr) [old uintptr] {
 // atomatically loads *addr
 @inline
 pub load_i32(addr *i32) i32 {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_load_i32(addr)
 }
 
@@ -161,6 +213,9 @@ pub load_i32(addr *i32) i32 {
 // atomatically loads *addr
 @inline
 pub load_i64(addr *i64) i64 {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_load_i64(addr)
 }
 
@@ -168,6 +223,9 @@ pub load_i64(addr *i64) i64 {
 // atomatically loads *addr
 @inline
 pub load_u32(addr *u32) u32 {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_load_u32(addr)
 }
 
@@ -175,30 +233,52 @@ pub load_u32(addr *u32) u32 {
 // atomatically loads *addr
 @inline
 pub load_uintptr(addr *uintptr) uintptr {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
   ret cpp.__jnc_atomic_load_uintptr(addr)
 }
 
 //doc:
 // atomatically stores val into *addr
 @inline
-pub store_i32(addr *i32, val i32) { cpp.__jnc_atomic_store_i32(addr, val) }
+pub store_i32(addr *i32, val i32) {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
+  cpp.__jnc_atomic_store_i32(addr, val) 
+}
 
 //doc:
 // atomatically stores val into *addr
 @inline
-pub store_i64(addr *i64, val i64) { cpp.__jnc_atomic_store_i64(addr, val) }
+pub store_i64(addr *i64, val i64) {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
+  cpp.__jnc_atomic_store_i64(addr, val) 
+}
 
 //doc:
 // atomatically stores val into *addr
 @inline
-pub store_u32(addr *u32, val u32) { cpp.__jnc_atomic_store_u32(addr, val) }
+pub store_u32(addr *u32, val u32) {
+  if addr == nil {
+		panic(invalid_ptr_error)
+	}
+  cpp.__jnc_atomic_store_u32(addr, val) 
+}
 
 //doc:
 // atomatically stores val into *addr
 @inline
-pub store_u64(addr *u64, val u64) { cpp.__jnc_atomic_store_u64(addr, val) }
+pub store_u64(addr *u64, val u64) { 
+  cpp.__jnc_atomic_store_u64(addr, val) 
+}
 
 //doc:
 // atomatically stores val into *addr
 @inline
-pub store_uinptr(addr *uintptr, val uintptr) { cpp.__jnc_atomic_store_uintptr(addr, val) }
+pub store_uinptr(addr *uintptr, val uintptr) { 
+  cpp.__jnc_atomic_store_uintptr(addr, val) 
+}
