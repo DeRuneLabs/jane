@@ -30,7 +30,7 @@ inline ptr<T> __jnc_uintptr_cast_to_raw(const uintptr_jnt &_Addr) noexcept;
 template <typename T>
 inline ptr<T> __jnc_uintptr_cast_to_raw(const uintptr_jnt &_Addr) noexcept {
   ptr<T> _ptr;
-  _ptr._ptr = (T **)(_Addr);
+  _ptr._ptr = (T **)(&_Addr);
   _ptr._heap = __JNC_PTR_NEVER_HEAP;
   return _ptr;
 }
