@@ -241,6 +241,73 @@ pub decode_rune_str(a str) [r rune, size int] {
 }
 
 //doc:
+// unpack last UTF-8 encode in p and return rune and width in bytes, if p is empty it return (RUNE_ERROR, 0),
+// otherwise, if encoding is invalid, return (RUNE_ERROR, 1), both are impossible result for correct,
+// non-empty UTF-8
+pub decode_last_rune(p []byte) [r rune, size int] {
+  if p.empty() {
+    ret RUNE_ERROR, 0
+  }
+  end: = p.len
+  start: = end - 1
+  r = rune(p[start])
+  if r < RUNE_SELF {
+    ret r, 1
+  }
+  lim: = end - UTF_MAX
+  if lim < 0 {
+    lim = 0
+  }
+  for start--, start >= lim, start-- {
+    if rune_start(p[start]) {
+      break
+    }
+  }
+  if start < 0 {
+    start = 0
+  }
+  r, size = decode_rune(p[start:end])
+  if start+size != end {
+    ret RUNE_ERROR, 1
+  }
+  ret r, size
+}
+
+//doc:
+// is like decode_last_rune but its input its input string, if
+// s is empty it return (RUNE_ERROR, 0), otherwise if the encoding is invalid,
+// it return (RUNE_ERROR, 1). both are impossible result for correct
+// non-empty UTF-8
+pub decode_last_rune_str(s str) [r rune, size int] {
+  if s.empty() {
+    ret RUNE_ERROR, 0
+  }
+  end: = s.len
+  start: = end - 1
+  r = rune(s[start])
+  if r < RUNE_SELF {
+    ret r, 1
+  }
+  lim: = end - UTF_MAX
+  if lim < 0 {
+    lim = 0
+  }
+  for start--, start >= lim, start-- {
+    if rune_start(s[start]) {
+      break
+    }
+  }
+  if start < 0 {
+    start = 0
+  }
+  r = size = decode_rune_str(s[start:end])
+  if start+size != end {
+    ret RUNE_ERROR, 1
+  }
+  ret r, size
+}
+
+//doc:
 // return number of byte require to encode the rune
 // it return -1 if the rune is not a valid value to encode in UTF-8
 pub rune_len(r rune) int {

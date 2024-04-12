@@ -28,6 +28,7 @@
 #include "func.hpp"
 #include "jn_util.hpp"
 #include "map.hpp"
+#include "utf8.hpp"
 #include "ptr.hpp"
 #include "slice.hpp"
 #include "str.hpp"

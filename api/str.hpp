@@ -24,6 +24,7 @@
 #include "jn_util.hpp"
 #include "slice.hpp"
 #include "typedef.hpp"
+#include "utf8.hpp"
 
 class str_jnt;
 
@@ -231,6 +232,18 @@ public:
       _slice[_index] = this->operator[](_index);
     }
     return _slice;
+  }
+
+  operator slice<i32_jnt>(void) const noexcept {
+    slice<i32_jnt> _runes;
+    const char *_str{this->cstr()};
+    for (int_jnt _index{0}; _index < this->len();) {
+      i32_jnt _rune;
+      int_jnt _n;
+      std::tie(_rune, _n) = decode_rune_str(_str+_index);
+      _index += _n;
+      _runes.__push(_rune);
+    }
   }
 
   u8_jnt &operator[](const int_jnt &_Index) {
