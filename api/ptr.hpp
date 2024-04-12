@@ -121,7 +121,7 @@ template <typename T> struct ptr {
   }
 
   inline operator uintptr_jnt(void) const noexcept {
-    return (uintptr_jnt)(this->_ptr);
+    return !this->_ptr ? 0 : (uintptr_jnt)(*this->_ptr);
   }
 
   void operator=(const ptr<T> &_Ptr) noexcept {

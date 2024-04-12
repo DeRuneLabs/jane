@@ -19,7 +19,7 @@
 // SOFTWARE.
 
 loop_for_comma_iteration() {
-  for , , {
+  for ; ; {
     break
   }
 }

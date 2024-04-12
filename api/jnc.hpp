@@ -28,12 +28,12 @@
 #include "func.hpp"
 #include "jn_util.hpp"
 #include "map.hpp"
-#include "utf8.hpp"
 #include "ptr.hpp"
 #include "slice.hpp"
 #include "str.hpp"
 #include "trait.hpp"
 #include "typedef.hpp"
+#include "utf8.hpp"
 
 template <typename T>
 inline ptr<T> &__jnc_must_heap(const ptr<T> &_Ptr) noexcept;
@@ -64,12 +64,13 @@ template <typename... Types>
 std::ostream &operator<<(std::ostream &_Stream,
                          const std::tuple<Types...> &_Tuple);
 
-template <typename _Function_t, typename _Tuple_t, size_t... _I_t>
-inline auto tuple_as_args(const _Function_t _Function, const _Tuple_t _Tuple,
+template <typename _Func_t, typename _Tuple_t, size_t... _I_t>
+inline auto tuple_as_args(const func<_Func_t> &_Function, const _Tuple_t _Tuple,
                           const std::index_sequence<_I_t...>);
 
-template <typename _Function_t, typename _Tuple_t>
-inline auto tuple_as_args(const _Function_t _Function, const _Tuple_t _Tuple);
+template <typename _Func_t, typename _Tuple_t>
+inline auto tuple_as_args(const func<_Func_t> &_Function,
+                          const _Tuple_t _Tuple);
 
 std::ostream &operator<<(std::ostream &_Stream, const i8_jnt &_Src);
 std::ostream &operator<<(std::ostream &_Stream, const u8_jnt &_Src);
@@ -147,14 +148,15 @@ std::ostream &operator<<(std::ostream &_Stream,
   return _Stream;
 }
 
-template <typename _Function_t, typename _Tuple_t, size_t... _I_t>
-inline auto tuple_as_args(const _Function_t _Function, const _Tuple_t _Tuple,
+template <typename _Func_t, typename _Tuple_t, size_t... _I_t>
+inline auto tuple_as_args(const func<_Func_t> &_Function, const _Tuple_t _Tuple,
                           const std::index_sequence<_I_t...>) {
-  return _Function(std::get<_I_t>(_Tuple)...);
+  return _Function._buffer(std::get<_I_t>(_Tuple)...);
 }
 
-template <typename _Function_t, typename _Tuple_t>
-inline auto tuple_as_args(const _Function_t _Function, const _Tuple_t _Tuple) {
+template <typename _Func_t, typename _Tuple_t>
+inline auto tuple_as_args(const func<_Func_t> &_Function,
+                          const _Tuple_t _Tuple) {
   static constexpr auto _size{std::tuple_size<_Tuple_t>::value};
   return tuple_as_args(_Function, _Tuple, std::make_index_sequence<_size>{});
 }
