@@ -64,6 +64,15 @@ public:
     this->_buffer = std::basic_string<u8_jnt>(_Src.begin(), _Src.end());
   }
 
+  str_jnt(const slice<i32_jnt> &_Src) noexcept {
+    for (const i32_jnt &_rune : _Src) {
+      const slice<u8_jnt> _bytes{__jnc_utf8_rune_to_bytes(_rune)};
+      for (const u8_jnt _byte : _bytes) {
+        this->_buffer += _byte;
+      }
+    }
+  }
+
   typedef u8_jnt *iterator;
   typedef const u8_jnt *const_iterator;
 
@@ -240,10 +249,11 @@ public:
     for (int_jnt _index{0}; _index < this->len();) {
       i32_jnt _rune;
       int_jnt _n;
-      std::tie(_rune, _n) = __jnc_decode_rune_str(_str+_index);
+      std::tie(_rune, _n) = __jnc_utf8_decode_rune_str(_str + _index);
       _index += _n;
       _runes.__push(_rune);
     }
+    return _runes;
   }
 
   u8_jnt &operator[](const int_jnt &_Index) {
