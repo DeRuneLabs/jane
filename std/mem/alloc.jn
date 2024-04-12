@@ -18,20 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use cpp "alloc.hpp"
-
-type[T]
-cpp __jnc_new_heap_ptr() *T
-
-//doc:
-// return pointer to heap-allocateion of data type if allocation
-// is success, nil if not
-@typearg
-type[T]
-pub new() *T {
-  ret cpp.__jnc_new_heap_ptr[T]()
-}
-
 //doc:
 // drop pointer from reference if include reference counting and
 // set as nil

@@ -920,7 +920,7 @@ func (p *Parser) CppLink(link models.CppLink) {
 		return
 	}
 	linkf := link.Link
-  linkf.Owner = p
+	linkf.Owner = p
 	setGenerics(linkf, p.generics)
 	p.generics = nil
 	p.cppLinks = append(p.cppLinks, &link)
@@ -1114,17 +1114,17 @@ write:
 func (p *Parser) PushAttribute(attribute Attribute) {
 	ok := false
 	for _, kind := range jn.Attributes {
-		if attribute.Tag.Kind == kind {
+		if attribute.Tag == kind {
 			ok = true
 			break
 		}
 	}
 	if !ok {
-		p.pusherrtok(attribute.Tag, "undefined_attribute")
+		p.pusherrtok(attribute.Tok, "undefined_attribute")
 	}
 	for _, attr := range p.attributes {
-		if attr.Tag.Kind == attribute.Tag.Kind {
-			p.pusherrtok(attribute.Tag, "attribute_repeat")
+		if attr.Tag == attribute.Tag {
+			p.pusherrtok(attribute.Tok, "attribute_repeat")
 			return
 		}
 	}
@@ -1477,7 +1477,7 @@ func (p *Parser) checkTypeParam(f *function) {
 
 func (p *Parser) checkFuncAttributes(f *function) {
 	for _, attribute := range f.Ast.Attributes {
-		switch attribute.Tag.Kind {
+		switch attribute.Tag {
 		case jn.Attribute_Inline:
 		case jn.Attribute_TypeArg:
 			p.checkTypeParam(f)
@@ -1512,12 +1512,12 @@ func (p *Parser) varsFromParams(params []Param) []*Var {
 }
 
 func (p *Parser) linkById(id string) *models.CppLink {
-  for _, link := range p.cppLinks {
-    if link.Link.Id == id {
-      return link
-    }
-  }
-  return nil
+	for _, link := range p.cppLinks {
+		if link.Link.Id == id {
+			return link
+		}
+	}
+	return nil
 }
 
 func (p *Parser) FuncById(id string) (*function, *Defmap, bool) {
@@ -2262,10 +2262,10 @@ func (p *Parser) pushGenericByCommonArg(
 }
 
 func (p *Parser) pushGenericByType(f *Func, generic *GenericType, args *models.Args, t DataType) {
-  owner := f.Owner.(*Parser)
-  if owner.blockTypeById(generic.Id) != nil {
-    return
-  }
+	owner := f.Owner.(*Parser)
+	if owner.blockTypeById(generic.Id) != nil {
+		return
+	}
 	id, _ := t.KindId()
 	t.Kind = id
 	f.Owner.(*Parser).pushGeneric(generic, t)

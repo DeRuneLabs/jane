@@ -25,6 +25,7 @@
 #include "str.hpp"
 #include "trait.hpp"
 #include "typedef.hpp"
+#include "ptr.hpp"
 
 typedef u8_jnt JNID(byte);
 typedef i32_jnt JNID(rune);
@@ -45,6 +46,8 @@ template <typename _Item_t>
 slice<_Item_t> JNID(append)(const slice<_Item_t> &_Src,
                             const slice<_Item_t> &_Components) noexcept;
 
+template <typename T> ptr<T> JNID(new)(void) noexcept;
+
 // definition
 template <typename _Obj_t> inline void JNID(print)(const _Obj_t _Obj) noexcept {
   std::cout << _Obj;
@@ -64,7 +67,7 @@ inline void JNID(panic)(trait<JNID(Error)> _Error) { throw _Error; }
 
 template <typename _Item_t>
 inline slice<_Item_t> JNID(make)(const int_jnt &_N) noexcept {
-  return slice<_Item_t>(_N);
+  return _N < 0 ? nil : slice<_Item_t>(_N);
 }
 
 template <typename _Item_t>
@@ -97,6 +100,24 @@ slice<_Item_t> JNID(append)(const slice<_Item_t> &_Src,
     _buffer[_Src.len() + _index] = _Components._buffer[_index];
   }
   return _buffer;
+}
+
+template <typename T>
+ptr<T> JNID(new)(void) noexcept {
+  ptr<T> _ptr;
+  _ptr._heap = new(std::nothrow) bool* {__JNC_PTR_HEAP_TRUE};
+  if (!_ptr._heap) {
+    JNID(panic)("memory allocation failed");
+  }
+  *_ptr._ptr = new(std::nothrow) T;
+  if (!*_ptr._ptr) {
+    JNID(panic)("memory allocation failed");
+  }
+  _ptr._ref = new(std::nothrow) uint_jnt{1};
+  if (!_ptr._ref) {
+    JNID(panic)("memory allocation failed");
+  }
+  return _ptr;
 }
 
 #endif // !__JNC_BUILTIN_HPP

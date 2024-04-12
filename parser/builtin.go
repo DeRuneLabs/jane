@@ -383,20 +383,25 @@ var Builtin = &Defmap{
 			}},
 		}},
 		{Ast: &Func{
-			Pub:   true,
-			Id:    "make",
-			Owner: genericFile,
-			Generics: []*GenericType{
-				{Id: "Item"},
+			Pub:      true,
+			Id:       "new",
+			Owner:    genericFile,
+			Generics: []*GenericType{{Id: "T"}},
+			Attributes: []Attribute{
+				models.Attribute{Tag: jn.Attribute_TypeArg},
 			},
+			RetType: RetType{Type: DataType{Id: jntype.Id, Kind: tokens.STAR + "T"}},
+		}},
+		{Ast: &Func{
+			Pub:      true,
+			Id:       "make",
+			Owner:    genericFile,
+			Generics: []*GenericType{{Id: "Item"}},
 			RetType: models.RetType{
 				Type: DataType{
-					Id:   jntype.Slice,
-					Kind: jn.Prefix_Slice + "Item",
-					ComponentType: &DataType{
-						Id:   jntype.Id,
-						Kind: "Item",
-					},
+					Id:            jntype.Slice,
+					Kind:          jn.Prefix_Slice + "Item",
+					ComponentType: &DataType{Id: jntype.Id, Kind: "Item"},
 				},
 			},
 			Params: []models.Param{
@@ -407,12 +412,10 @@ var Builtin = &Defmap{
 			},
 		}},
 		{Ast: &Func{
-			Pub:   true,
-			Id:    "copy",
-			Owner: genericFile,
-			Generics: []*GenericType{
-				{Id: "Item"},
-			},
+			Pub:      true,
+			Id:       "copy",
+			Owner:    genericFile,
+			Generics: []*GenericType{{Id: "Item"}},
 			RetType: models.RetType{
 				Type: DataType{Id: jntype.Int, Kind: jntype.TypeMap[jntype.Int]},
 			},
@@ -420,54 +423,40 @@ var Builtin = &Defmap{
 				{
 					Id: "dest",
 					Type: DataType{
-						Id:   jntype.Slice,
-						Kind: jn.Prefix_Slice + "Item",
-						ComponentType: &DataType{
-							Id:   jntype.Id,
-							Kind: "Item",
-						},
+						Id:            jntype.Slice,
+						Kind:          jn.Prefix_Slice + "Item",
+						ComponentType: &DataType{Id: jntype.Id, Kind: "Item"},
 					},
 				},
 				{
 					Id: "src",
 					Type: DataType{
-						Id:   jntype.Slice,
-						Kind: jn.Prefix_Slice + "Item",
-						ComponentType: &DataType{
-							Id:   jntype.Id,
-							Kind: "Item",
-						},
+						Id:            jntype.Slice,
+						Kind:          jn.Prefix_Slice + "Item",
+						ComponentType: &DataType{Id: jntype.Id, Kind: "Item"},
 					},
 				},
 			},
 		}},
 		{Ast: &Func{
-			Pub:   true,
-			Id:    "append",
-			Owner: genericFile,
-			Generics: []*GenericType{
-				{Id: "Item"},
-			},
+			Pub:      true,
+			Id:       "append",
+			Owner:    genericFile,
+			Generics: []*GenericType{{Id: "Item"}},
 			RetType: models.RetType{
 				Type: DataType{
-					Id:   jntype.Slice,
-					Kind: jn.Prefix_Slice + "Item",
-					ComponentType: &DataType{
-						Id:   jntype.Id,
-						Kind: "Item",
-					},
+					Id:            jntype.Slice,
+					Kind:          jn.Prefix_Slice + "Item",
+					ComponentType: &DataType{Id: jntype.Id, Kind: "Item"},
 				},
 			},
 			Params: []models.Param{
 				{
 					Id: "src",
 					Type: DataType{
-						Id:   jntype.Slice,
-						Kind: jn.Prefix_Slice + "Item",
-						ComponentType: &DataType{
-							Id:   jntype.Id,
-							Kind: "Item",
-						},
+						Id:            jntype.Slice,
+						Kind:          jn.Prefix_Slice + "Item",
+						ComponentType: &DataType{Id: jntype.Id, Kind: "Item"},
 					},
 				},
 				{
@@ -660,13 +649,13 @@ func readyMapDefs(mapt DataType) {
 }
 
 func init() {
-  printFunc, _, _ := Builtin.funcById("print", nil)
-  printlnFunc := new(function)
-  *printlnFunc = *printFunc
-  printlnFunc.Ast = new(models.Func)
-  *printlnFunc.Ast = *printFunc.Ast
-  printlnFunc.Ast.Id = "println"
-  Builtin.Funcs = append(Builtin.Funcs, printlnFunc)
+	printFunc, _, _ := Builtin.funcById("print", nil)
+	printlnFunc := new(function)
+	*printlnFunc = *printFunc
+	printlnFunc.Ast = new(models.Func)
+	*printlnFunc.Ast = *printFunc.Ast
+	printlnFunc.Ast.Id = "println"
+	Builtin.Funcs = append(Builtin.Funcs, printlnFunc)
 
 	intMax := intStatics.Globals[0]
 	intMin := intStatics.Globals[1]
