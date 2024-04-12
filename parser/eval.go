@@ -554,14 +554,14 @@ func (e *eval) castPure(t DataType, v *value, errtok Tok) {
 	}
 }
 
-func (e *eval) castStr(vt DataType, errtok Tok) {
-	if !typeIsSlice(vt) {
-		e.pusherrtok(errtok, "type_notsupports_casting", vt.Kind)
+func (e *eval) castStr(t DataType, errtok Tok) {
+	if !typeIsSlice(t) {
+		e.pusherrtok(errtok, "type_notsupports_casting_to", jntype.TypeMap[jntype.Str], t.Kind)
 		return
 	}
-	vt = *vt.ComponentType
-	if !typeIsPure(vt) || vt.Id != jntype.U8 {
-		e.pusherrtok(errtok, "type_notsupports_casting", vt.Kind)
+	t = *t.ComponentType
+	if !typeIsPure(t) || (t.Id != jntype.U8 && t.Id != jntype.I32) {
+		e.pusherrtok(errtok, "type_notsupports_casting_to", jntype.TypeMap[jntype.Str], t.Kind)
 	}
 }
 

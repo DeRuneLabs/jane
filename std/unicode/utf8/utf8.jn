@@ -166,7 +166,7 @@ pub decode_rune(p []byte) [r rune, size int] {
     // approach prevents an additional branch
 
     // create 0x0000 or 0xFFFF
-    mask: = rune(x) << 31 >> 31
+    mask: rune = x << 31 >> 31
     ret rune(p[0])&^mask | RUNE_ERROR&mask, 1
   }
   sz: = int(x & 7)
@@ -211,7 +211,7 @@ pub decode_rune_str(a str) [r rune, size int] {
     // prevent an additional branch
 
     // create 0x0000 or 0xFFFF
-    mask: = rune(x) << 31 >> 31
+    mask: rune = x << 31 >> 31
     ret rune(s[0])&^mask | RUNE_ERROR&mask, 1
   }
   sz: = int(x & 7)
