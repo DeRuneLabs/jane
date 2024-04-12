@@ -65,8 +65,8 @@ func (pap *pureArgParser) pushVariadicArgs(pair *paramMapPair) {
 		model.exprs = append(model.exprs, exprNode{tokens.COMMA})
 		model.exprs = append(model.exprs, pair.arg.Expr.Model.(iExpr))
 	}
-  model.exprs = append(model.exprs, exprNode{tokens.RBRACE})
-  pair.arg.Expr.Model = model
+	model.exprs = append(model.exprs, exprNode{tokens.RBRACE})
+	pair.arg.Expr.Model = model
 	if !once {
 		return
 	}

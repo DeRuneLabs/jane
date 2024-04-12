@@ -246,7 +246,7 @@ pub store_i32(addr *i32, val i32) {
   if addr == nil {
 		panic(invalid_ptr_error)
 	}
-  cpp.__jnc_atomic_store_i32(addr, val) 
+  cpp.__jnc_atomic_store_i32(addr, val)
 }
 
 //doc:
@@ -256,7 +256,7 @@ pub store_i64(addr *i64, val i64) {
   if addr == nil {
 		panic(invalid_ptr_error)
 	}
-  cpp.__jnc_atomic_store_i64(addr, val) 
+  cpp.__jnc_atomic_store_i64(addr, val)
 }
 
 //doc:
@@ -266,19 +266,19 @@ pub store_u32(addr *u32, val u32) {
   if addr == nil {
 		panic(invalid_ptr_error)
 	}
-  cpp.__jnc_atomic_store_u32(addr, val) 
+  cpp.__jnc_atomic_store_u32(addr, val)
 }
 
 //doc:
 // atomatically stores val into *addr
 @inline
-pub store_u64(addr *u64, val u64) { 
-  cpp.__jnc_atomic_store_u64(addr, val) 
+pub store_u64(addr *u64, val u64) {
+  cpp.__jnc_atomic_store_u64(addr, val)
 }
 
 //doc:
 // atomatically stores val into *addr
 @inline
-pub store_uinptr(addr *uintptr, val uintptr) { 
-  cpp.__jnc_atomic_store_uintptr(addr, val) 
+pub store_uinptr(addr *uintptr, val uintptr) {
+  cpp.__jnc_atomic_store_uintptr(addr, val)
 }
