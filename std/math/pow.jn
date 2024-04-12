@@ -93,7 +93,7 @@ pub pow(x, y f64) f64 {
   }
 
   x1:, xe: = frexp(x)
-  for i: = i64(yi), i != 0, i >>= 1 {
+  for i: = i64(yi); i != 0; i >>= 1 {
     if xe < -1 << 12 || 1 << 12 < xe {
       ae += xe
       break

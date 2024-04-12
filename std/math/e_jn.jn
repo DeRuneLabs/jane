@@ -119,7 +119,7 @@ pub e_jn(n int, x f64) f64 {
 		} else {
 			b = j1(x)
 			i:, a: = 1, j0(x)
-			for , i < n, i++ {
+			for ; i < n; i++ {
 				a, b = b, b*(f64(i+i)/x)-a // avoid underflow
 			}
 		}
@@ -134,7 +134,7 @@ pub e_jn(n int, x f64) f64 {
 				temp: = x * 0.5
 				b = temp
 				a: = 1.0
-				for i: = 2, i <= n, i++ {
+				for i: = 2; i <= n; i++ {
 					a *= f64(i) // a = n!
 					b *= temp   // b = (x/2)**n
 				}
@@ -181,7 +181,7 @@ pub e_jn(n int, x f64) f64 {
 			}
       m: = n + n
 			t: = 0.0
-			for i: = 2 * (n + k), i >= m, i -= 2 {
+			for i: = 2 * (n + k); i >= m; i -= 2 {
 				t = 1 / (f64(i)/x - t)
 			}
       a: = t
@@ -190,12 +190,12 @@ pub e_jn(n int, x f64) f64 {
 			v: = 2 / x
 			tmp = tmp * log(abs(v*tmp))
 			if tmp < 7.09782712893383973096e+02 {
-				for i: = n - 1, i > 0, i-- {
+				for i: = n - 1; i > 0; i-- {
 					di: = f64(i + i)
 					a, b = b, b*di/x-a
 				}
 			} else {
-				for i: = n - 1, i > 0, i-- {
+				for i: = n - 1; i > 0; i-- {
 					di: = f64(i + i)
 					a, b = b, b*di/x-a
 					// scale b to avoid spurious overflow
