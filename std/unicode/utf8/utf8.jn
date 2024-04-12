@@ -262,6 +262,60 @@ pub rune_len(r rune) int {
 }
 
 //doc:
+// write into p (which must be large enough) the UTF-8 encoding of the rune,
+// if the rune is out of range, it write the encoding of RUNE_ERROR,
+// return the number of byte writen
+pub encode_rune(p []byte, r rune) int {
+  i: = u32(r)
+  match {
+    case i <= RUNE1_MAX:
+      p[0] = byte(r)
+      ret 1
+    case i <= RUNE2_MAX:
+		  p[0] = T2 | byte(r>>6)
+		  p[1] = TX | byte(r)&MASKX
+		  ret 2
+	  case i > MAX_RUNE, SURROGATE_MIN <= i && i <= SURROGATE_MAX:
+		  r = RUNE_ERROR
+		  fallthrough
+	  case i <= RUNE3_MAX:
+		  p[0] = T3 | byte(r>>12)
+		  p[1] = TX | byte(r>>6)&MASKX
+		  p[2] = TX | byte(r)&MASKX
+		  ret 3
+  }
+  p[0] = T4 | byte(r>>18)
+	p[1] = TX | byte(r>>12)&MASKX
+	p[2] = TX | byte(r>>6)&MASKX
+	p[3] = TX | byte(r)&MASKX
+	ret 4
+}
+
+//doc:
+// append the UTF-8 encoding of r to the end of p and return the extended buffer,
+// if the rune is out of range, it append the encoding of RUNE_ERROR
+pub append_rune(p []byte, r rune) []byte {
+  if u32(r) <= RUNE1_MAX {
+    ret append[byte](p, byte(r))
+  }
+  ret append_rune_non_ascii(p, r)
+}
+
+append_rune_non_ascii(p []byte, r rune) []byte {
+  i: = u32(r)
+  match {
+    case i <= RUNE2_MAX:
+      ret append[byte](p T2|byte(r>>6), TX|byte(r)&MASKX)
+    case i > MAX_RUNE, SURROGATE_MIN <= i && i <= SURROGATE_MAX:
+      r = RUNE_ERROR
+      fallthrough
+    case i <= RUNE3_MAX:
+      ret append[byte](p, T3|byte(r>>12), TX|byte(r>>6)&MASKX, TX|byte(r)&MASKX)
+  }
+  ret append[byte](p, T4|byte(r>>18), TX|byte(r>>12)&MASKX, TX|byte(r>>6)&MASKX, TX|byte(r)&MASKX)
+}
+
+//doc:
 // report whether the byte could be the first byte of encode,
 // possibly invalid rune, second and subsequent bytes always the top two
 // bits set to 10
