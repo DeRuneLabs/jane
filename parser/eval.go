@@ -27,7 +27,6 @@ import (
 	"github.com/DeRuneLabs/jane/ast/models"
 	"github.com/DeRuneLabs/jane/lexer/tokens"
 	"github.com/DeRuneLabs/jane/package/jn"
-	"github.com/DeRuneLabs/jane/package/jnapi"
 	"github.com/DeRuneLabs/jane/package/jntype"
 )
 
@@ -836,15 +835,19 @@ func (e *eval) mapObjSubId(val value, idTok Tok, m *exprModel) value {
 func (e *eval) enumSubId(val value, idTok Tok, m *exprModel) (v value) {
 	enum := val.data.Type.Tag.(*Enum)
 	v = val
+	v.data.Type = enum.Type
 	v.data.Type.Tok = enum.Tok
-	v.constExpr = false
 	v.lvalue = false
 	v.isType = false
-	m.appendSubNode(exprNode{"::"})
-	m.appendSubNode(exprNode{jnapi.OutId(idTok.Kind, enum.Tok.File)})
-	if enum.ItemById(idTok.Kind) == nil {
+	item := enum.ItemById(idTok.Kind)
+	if item == nil {
 		e.pusherrtok(idTok, "obj_have_not_id", idTok.Kind)
+	} else {
+		v.expr = item.ExprTag
+		v.model = getModel(v)
 	}
+	nodes := m.nodes[m.index]
+	nodes.nodes[len(nodes.nodes)-1] = v.model
 	return
 }
 

@@ -226,8 +226,8 @@ func (ve *valueEvaluator) enumId(id string, e *Enum) (v value) {
 	e.Used = true
 	v.data.Value = id
 	v.data.Type.Id = jntype.Enum
-	v.data.Type.Tag = e
 	v.data.Type.Kind = e.Id
+	v.data.Type.Tag = e
 	v.data.Tok = e.Tok
 	v.constExpr = true
 	v.isType = true

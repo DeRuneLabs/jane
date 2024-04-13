@@ -27,9 +27,10 @@ import (
 )
 
 type EnumItem struct {
-	Tok  Tok
-	Id   string
-	Expr Expr
+	Tok     Tok
+	Id      string
+	Expr    Expr
+	ExprTag any
 }
 
 func (ei EnumItem) String() string {
