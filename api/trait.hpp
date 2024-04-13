@@ -37,12 +37,12 @@ public:
   template <typename TT> trait<T>(const TT &_Data) noexcept {
     TT *_alloc = new (std::nothrow) TT{_Data};
     if (!_alloc) {
-      JNID(panic)("memory allocation failed");
+      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
     }
     this->_data = (T *)(_alloc);
     this->_ref = new (std::nothrow) uint_jnt{1};
     if (!this->_ref) {
-      JNID(panic)("memory allocation failed");
+      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
     }
   }
 
@@ -63,8 +63,8 @@ public:
   }
 
   T &get(void) noexcept {
-    if (!this->_data) {
-      JNID(panic)("invalid memory address or nil pointer deference");
+    if (this->operator==(nil)) {
+      JNC_ID(panic)(__JNC_ERROR_INVALID_MEMORY);
     }
     return *this->_data;
   }
@@ -75,9 +75,20 @@ public:
 
   inline void operator=(const trait<T> &_Src) noexcept {
     this->__dealloc();
+    if (_Src == nil) {
+      return;
+    }
     (*_Src._ref)++;
     this->_data = _Src._data;
     this->_ref = _Src._ref;
+  }
+
+  inline bool operator==(const trait<T> &_Src) const noexcept {
+    return this->_data == this->_data;
+  }
+
+  inline bool operator!=(const trait<T> &_Src) const noexcept {
+    return !this->operator==(_Src);
   }
 
   inline bool operator==(std::nullptr_t) const noexcept { return !this->_data; }

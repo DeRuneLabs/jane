@@ -22,100 +22,79 @@
 #define __JNC_BUILTIN_HPP
 
 #include "jn_util.hpp"
+#include "ptr.hpp"
 #include "str.hpp"
 #include "trait.hpp"
 #include "typedef.hpp"
-#include "ptr.hpp"
 
-typedef u8_jnt JNID(byte);
-typedef i32_jnt JNID(rune);
+typedef u8_jnt JNC_ID(byte);
+typedef i32_jnt JNC_ID(rune);
 
-// declaration
-template <typename _Obj_t> inline void JNID(print)(const _Obj_t _Obj) noexcept;
-
-template <typename _Obj_t>
-inline void JNID(println)(const _Obj_t _Obj) noexcept;
-
-struct JNID(Error);
-inline void JNID(panic)(trait<JNID(Error)> _Error);
+struct JNC_ID(Error);
 
 template <typename _Item_t>
-int_jnt JNID(copy)(const slice<_Item_t> &_Dest,
-                   const slice<_Item_t> &_Src) noexcept;
+int_jnt JNC_ID(copy)(const slice<_Item_t> &_Dest,
+                     const slice<_Item_t> &_Src) noexcept;
+
 template <typename _Item_t>
-slice<_Item_t> JNID(append)(const slice<_Item_t> &_Src,
-                            const slice<_Item_t> &_Components) noexcept;
+slice<_Item_t> JNC_ID(append)(const slice<_Item_t> &_Src,
+                              const slice<_Item_t> &_Components) noexcept;
 
-template <typename T> ptr<T> JNID(new)(void) noexcept;
+template <typename T> ptr<T> JNC_ID(new)(void) noexcept;
 
-// definition
-template <typename _Obj_t> inline void JNID(print)(const _Obj_t _Obj) noexcept {
-  std::cout << _Obj;
-}
-
-template <typename _Obj_t>
-inline void JNID(println)(const _Obj_t _Obj) noexcept {
-  JNID(print)<_Obj_t>(_Obj);
-  std::cout << std::endl;
-}
-
-struct JNID(Error) {
+struct JNC_ID(Error) {
   virtual str_jnt error(void) = 0;
 };
 
-inline void JNID(panic)(trait<JNID(Error)> _Error) { throw _Error; }
-
 template <typename _Item_t>
-inline slice<_Item_t> JNID(make)(const int_jnt &_N) noexcept {
+inline slice<_Item_t> JNC_ID(make)(const int_jnt &_N) noexcept {
   return _N < 0 ? nil : slice<_Item_t>(_N);
 }
 
 template <typename _Item_t>
-int_jnt JNID(copy)(const slice<_Item_t> &_Dest,
-                   const slice<_Item_t> &_Src) noexcept {
+int_jnt JNC_ID(copy)(const slice<_Item_t> &_Dest,
+                     const slice<_Item_t> &_Src) noexcept {
   if (_Dest.empty() || _Src.empty()) {
     return 0;
   }
-  int_jnt _len;
-  if (_Dest.len() > _Src.len()) {
-    _len = _Src.len();
-  } else if (_Src.len() > _Dest.len()) {
-    _len = _Dest.len();
-  } else {
-    _len = _Src.len();
-  }
+  int_jnt _len = _Dest.len() > _Src.len()   ? _len = _Src.len()
+                 : _Src.len() > _Dest.len() ? _len = _Dest.len()
+                                            : _len = _Src.len();
   for (int_jnt _index{0}; _index < _len; ++_index) {
-    _Dest._buffer[_index] = _Src._buffer[_index];
+    _Dest._slice[_index] = _Src._slice[_index];
   }
   return _len;
 }
 
 template <typename _Item_t>
-slice<_Item_t> JNID(append)(const slice<_Item_t> &_Src,
-                            const slice<_Item_t> &_Components) noexcept {
+slice<_Item_t> JNC_ID(append)(const slice<_Item_t> &_Src,
+                              const slice<_Item_t> &_Components) noexcept {
   const int_jnt _N{_Src.len() + _Components.len()};
-  slice<_Item_t> _buffer{JNID(make) < _Item_t > (_N)};
-  JNID(copy)<_Item_t>(_buffer, _Src);
+  slice<_Item_t> _buffer{JNC_ID(make) < _Item_t > (_N)};
+  JNC_ID(copy)<_Item_t>(_buffer, _Src);
   for (int_jnt _index{0}; _index < _Components.len(); ++_index) {
-    _buffer[_Src.len() + _index] = _Components._buffer[_index];
+    _buffer[_Src.len() + _index] = _Components._slice[_index];
   }
   return _buffer;
 }
 
-template <typename T>
-ptr<T> JNID(new)(void) noexcept {
+template <typename T> ptr<T> JNC_ID(new)(void) noexcept {
   ptr<T> _ptr;
-  _ptr._heap = new(std::nothrow) bool* {__JNC_PTR_HEAP_TRUE};
+  _ptr._heap = new (std::nothrow) bool *{__JNC_PTR_HEAP_TRUE};
   if (!_ptr._heap) {
-    JNID(panic)("memory allocation failed");
+    JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
   }
-  *_ptr._ptr = new(std::nothrow) T;
+  _ptr._ptr = new (std::nothrow) T *;
+  if (!_ptr._ptr) {
+    JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
+  }
+  *_ptr._ptr = new (std::nothrow) T;
   if (!*_ptr._ptr) {
-    JNID(panic)("memory allocation failed");
+    JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
   }
-  _ptr._ref = new(std::nothrow) uint_jnt{1};
+  _ptr._ref = new (std::nothrow) uint_jnt{1};
   if (!_ptr._ref) {
-    JNID(panic)("memory allocation failed");
+    JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
   }
   return _ptr;
 }

@@ -82,10 +82,6 @@ public:
     return (const_iterator)(&this->_buffer[0]);
   }
 
-  inline iterator end(void) noexcept {
-    return (iterator)(&this->_buffer[this->len()]);
-  }
-
   inline const_iterator end(void) const noexcept {
     return (const_iterator)(&this->_buffer[this->len()]);
   }
@@ -94,8 +90,8 @@ public:
                           const int_jnt &_End) const noexcept {
     if (_Start < 0 || _End < 0 || _Start > _End) {
       std::stringstream _sstream;
-      _sstream << "index out of range [" << _Start << ':' << _End << ']';
-      JNID(panic)(_sstream.str().c_str());
+      __JNC_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(_sstream, _Start, _End);
+      JNC_ID(panic)(_sstream.str().c_str());
     } else if (_Start == _End) {
       return str_jnt();
     }
@@ -117,7 +113,7 @@ public:
 
   inline bool has_prefix(const str_jnt &_Sub) const noexcept {
     return this->len() >= _Sub.len() &&
-           this->_buffer.substr(0, _Sub.len()) == _Sub._buffer;
+           this->_buffer.substr(this->len() - _Sub.len()) == _Sub._buffer;
   }
 
   inline bool has_suffix(const str_jnt &_Sub) const noexcept {
@@ -259,8 +255,8 @@ public:
   u8_jnt &operator[](const int_jnt &_Index) {
     if (this->empty() || _Index < 0 || this->len() <= _Index) {
       std::stringstream _sstream;
-      _sstream << "index out of range [" << _Index << ']';
-      JNID(panic)(_sstream.str().c_str());
+      __JNC_WRITE_ERROR_INDEX_OUT_OF_RANGE(_sstream, _Index);
+      JNC_ID(panic)(_sstream.str().c_str());
     }
     return this->_buffer[_Index];
   }

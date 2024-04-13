@@ -31,9 +31,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <ostream>
 #include <sstream>
 #include <type_traits>
-#include <ostream>
 
 #include <any>
 #include <cstring>
@@ -52,13 +52,43 @@
 #include <windows.h>
 #endif // _WINDOWS
 
-#define JN_EXIT_PANIC 2
-#define _CONCAT(_A, _B) _A##_B
-#define CONCAT(_A, _B) _CONCAT(_A, _B)
-#define JNID(_Identifier) CONCAT(_, _Identifier)
-#define nil nullptr
-#define CO(_Expr) std::thread{[&](void) mutable -> void { _Expr; }}.detach()
+// PTR HEAP define
+#define __JNC_PTR_NEVER_HEAP ((bool**)(0x0000001))
+#define __JNC_PTR_HEAP_TRUE ((bool*)(0x0000001))
 
-void JNID(panic)(const char *_Message);
+// jn ptr
+#define __jnc_ptr(_PTR) (_PTR)
+
+// error message cpp api
+#define __JNC_ERROR_INVALID_MEMORY                                             \
+  ("invalid memory address or nil pointer deference")
+#define __JNC_ERROR_INCOMPATIBLE_TYPE ("incompatible type")
+#define __JNC_ERROR_MEMORY_ALLOCATION_FAILED ("memory allocation failed")
+#define __JNC_ERROR_INDEX_OUT_OF_RANGE ("index of out range")
+#define __JNC_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(_STREAM, _START, _LEN)    \
+  (_STREAM << __JNC_ERROR_INDEX_OUT_OF_RANGE << '[' << _START << ':' << _LEN   \
+           << ']')
+
+#define __JNC_WRITE_ERROR_INDEX_OUT_OF_RANGE(_STREAM, _INDEX)                  \
+  (_STREAM << __JNC_ERROR_INDEX_OUT_OF_RANGE << '[' << _INDEX << ']')
+#define __JNC_EXIT_PANIC (2)
+#define __JNC_CCONCAT(_A, _B) _A##_B
+#define __JNC_CONCAT(_A, _B) __JNC_CCONCAT(_A, _B)
+#define __JNC_IDENTIFIER_PREFIX _
+#define JNC_ID(_IDENTIFIER) __JNC_CONCAT(__JNC_IDENTIFIER_PREFIX, _IDENTIFIER)
+
+#define nil (nullptr)
+#define CO(_Expr) (std::thread{[&](void) mutable -> void { _EXPR; }}).detach()
+
+template <typename _Obj_t> void JNC_ID(panic)(const _Obj_t &_Expr);
+
+// print standard cpp
+#define _print(_EXPR) (std::cout << _EXPR)
+// println standard cpp
+template <typename _Obj_t>
+inline void JNC_ID(println)(const _Obj_t _Obj) noexcept {
+  JNC_ID(print)(_Obj);
+  std::cout << std::endl;
+}
 
 #endif // !__JNC_UTIL_LIBS_HPP

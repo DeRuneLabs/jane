@@ -24,13 +24,10 @@
 #include "jn_util.hpp"
 #include "typedef.hpp"
 
-#define __JNC_PTR_NEVER_HEAP (bool **)(1U)
-#define __JNC_PTR_HEAP_TRUE (bool *)(1U)
-#define __jnc_ptr_of(_PTR) _PTR
-
 template <typename T> struct ptr;
 
-template <typename T> ptr<T> __jnc_not_heap_ptr_of(T *_T) noexcept;
+template <typename T> ptr<T> __jnc_never_guarantee_ptr(T *_Ptr) noexcept;
+template <typename T> ptr<T> __jnc_guaranteed_ptr(T *_Ptr);
 
 template <typename T> struct ptr {
   T **_ptr{nil};
@@ -41,17 +38,17 @@ template <typename T> struct ptr {
   ptr<T>(std::nullptr_t) noexcept {}
 
   ptr<T>(T *_Ptr) noexcept {
-    this->_ptr = new (std::nothrow) T *;
+    this->_ptr = new (std::nothrow) T *{nil};
     if (!this->_ptr) {
-      JNID(panic)("memory allocation failed");
+      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    this->_heap = new (std::nothrow) bool *;
+    this->_heap = new (std::nothrow) bool *{nil};
     if (!this->_heap) {
-      JNID(panic)("memory allocation failed");
+      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
     }
     this->_ref = new (std::nothrow) uint_jnt{1};
     if (!this->_ref) {
-      JNID(panic)("memory allocation failed");
+      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
     }
     *this->_ptr = _Ptr;
   }
@@ -61,24 +58,32 @@ template <typename T> struct ptr {
   ~ptr<T>(void) noexcept { this->__dealloc(); }
 
   inline void __check_valid(void) const noexcept {
-    if (!this->_ptr) {
-      JNID(panic)("invalid memory address or nil pointer deference");
-    }
-  }
-
-  void __dealloc(void) noexcept {
     if (!this->_ref) {
+      this->_ptr = nil;
       return;
     }
     --(*this->_ref);
     if (!this->_heap || (this->_heap != __JNC_PTR_NEVER_HEAP &&
                          *this->_heap != __JNC_PTR_HEAP_TRUE)) {
+      this->_ptr = nil;
+      return;
+    }
+  }
+
+  void __dealloc(void) noexcept {
+    if (!this->_ref) {
+      this->_ptr = nil;
+      return;
+    }
+    --(*this->_ref);
+    if (!this->_heap || (this->_heap != __JNC_PTR_NEVER_HEAP &&
+                         *this->_heap != __JNC_PTR_HEAP_TRUE)) {
+      this->_ptr = nil;
       return;
     }
     if ((*this->_ref) != 0) {
       return;
     }
-    std::cout << "dealloc" << std::endl;
     if (this->_heap != __JNC_PTR_NEVER_HEAP) {
       delete this->_heap;
     }
@@ -86,24 +91,22 @@ template <typename T> struct ptr {
     delete this->_ref;
     this->_ref = nil;
     delete *this->_ptr;
-    *this->_ptr = nil;
     delete this->_ptr;
     this->_ptr = nil;
   }
 
   ptr<T> &__must_heap(void) noexcept {
-    if (this->_heap && (this->_healp == __JNC_PTR_NEVER_HEAP ||
+    if (this->_heap && (this->_heap == __JNC_PTR_NEVER_HEAP ||
                         *this->_heap == __JNC_PTR_HEAP_TRUE)) {
       return *this;
     }
-    if (!this->_ptr) {
+    if (!this->_ptr || !*this->_ptr) {
       return *this;
     }
-    std::cout << "heaped" << std::endl;
     const T _data{**this->_ptr};
     *this->_ptr = new (std::nothrow) T;
     if (!*this->_ptr) {
-      JNID(panic)("memory allocation failed");
+      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
     }
     **this->_ptr = _data;
     *this->_heap = __JNC_PTR_HEAP_TRUE;
@@ -137,7 +140,7 @@ template <typename T> struct ptr {
   inline void operator=(const std::nullptr_t) noexcept { this->__dealloc(); }
 
   inline bool operator==(const std::nullptr_t) const noexcept {
-    return this->_ptr == nil;
+    return !this->_ptr || !*this->_ptr;
   }
 
   inline bool operator!=(const std::nullptr_t) const noexcept {
@@ -145,7 +148,7 @@ template <typename T> struct ptr {
   }
 
   inline bool operator==(const ptr<T> &_Ptr) const noexcept {
-    return this->_ptr == _Ptr;
+    return this->_ptr == _Ptr._ptr;
   }
 
   inline bool operator!=(const ptr<T> &_Ptr) const noexcept {
@@ -158,14 +161,23 @@ template <typename T> struct ptr {
   }
 };
 
-template <typename T> ptr<T> __jnc_not_heap_ptr_of(T *_T) noexcept {
+template <typename T> ptr<T> __jnc_never_guarantee_ptr(T *_Ptr) noexcept {
   ptr<T> _ptr;
-  _ptr._ptr = new (std::nothrow) T *;
-  if (!_ptr._ptr) {
-    JNID(panic)("memory allocation failed");
+  _ptr._ptr = new (std::nothrow) T *{nil};
+  if (_ptr._ptr) {
+    JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
   }
-  *_ptr._ptr = _T;
+  *_ptr._ptr = _Ptr;
   _ptr._heap = __JNC_PTR_NEVER_HEAP;
+  return _ptr;
+}
+
+template <typename T> ptr<T> __jnc_guaranteed_ptr(T *_Ptr) {
+  ptr<T> _ptr{__jnc_never_guarantee_ptr(_Ptr)};
+  _ptr._heap = new (std::nothrow) bool *{__JNC_PTR_HEAP_TRUE};
+  if (!_ptr._heap) {
+    JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
+  }
   return _ptr;
 }
 

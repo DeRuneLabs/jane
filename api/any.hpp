@@ -60,10 +60,10 @@ public:
 
   template <typename T> operator T(void) const noexcept {
     if (this->_isnil()) {
-      JNID(panic)("invalid memory address or nil pointer deference");
+      JNC_ID(panic)(__JNC_ERROR_INVALID_MEMORY);
     }
     if (!this->type_is<T>()) {
-      JNID(panic)("incompatible type");
+      JNC_ID(panic)(__JNC_ERROR_INCOMPATIBLE_TYPE);
     }
     return std::any_cast<T>(this->_expr);
   }

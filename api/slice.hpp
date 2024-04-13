@@ -28,7 +28,8 @@ template <typename _Item_t> class slice;
 
 template <typename _Item_t> class slice {
 public:
-  _Item_t *_buffer{nil};
+  _Item_t *_alloc{nil};
+  _Item_t *_slice{nil};
   mutable uint_jnt *_ref{nil};
   int_jnt _size{0};
 
@@ -43,15 +44,15 @@ public:
     this->__alloc_new(_Src.size());
     const auto _Src_begin{_Src.begin()};
     for (int_jnt _index{0}; _index < this->_size; ++_index) {
-      this->_buffer[_index] = *(_Item_t *)(_Src_begin + _index);
+      this->_alloc[_index] = *(_Item_t *)(_Src_begin + _index);
     }
   }
 
   ~slice<_Item_t>(void) noexcept { this->__dealloc(); }
 
-  void __check(void) const noexcept {
-    if (!this->_buffer) {
-      JNID(panic)("invalid memory address or nil pointer deference");
+  inline void __check(void) const noexcept {
+    if (this->operator==(nil)) {
+      JNC_ID(panic)(__JNC_ERROR_INVALID_MEMORY);
     }
   }
 
@@ -65,39 +66,41 @@ public:
     }
     delete this->_ref;
     this->_ref = nil;
-    delete[] this->_buffer;
-    this->_buffer = nil;
+    delete[] this->_alloc;
+    this->_alloc = nil;
+    this->_slice = nil;
     this->_size = 0;
   }
 
   void __alloc_new(const int_jnt _N) noexcept {
     this->__dealloc();
-    this->_buffer = new (std::nothrow) _Item_t[_N];
-    if (!this->_buffer) {
-      JNID(panic)("memory allocation failed");
+    this->_alloc = new (std::nothrow) _Item_t[_N];
+    if (!this->_alloc) {
+      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
     }
     this->_ref = new (std::nothrow) uint_jnt{1};
     if (!this->_ref) {
-      JNID(panic)("memory allocation failed");
+      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
     }
     this->_size = _N;
+    this->_slice = this->_alloc;
   }
 
   typedef _Item_t *iterator;
   typedef const _Item_t *const_iterator;
 
-  inline constexpr iterator begin(void) noexcept { return &this->_buffer[0]; }
+  inline constexpr iterator begin(void) noexcept { return &this->_slice[0]; }
 
   inline constexpr const_iterator begin(void) const noexcept {
-    return &this->_buffer[0];
+    return &this->_slice[0];
   }
 
   inline constexpr iterator end(void) noexcept {
-    return &this->_buffer[this->_size];
+    return &this->_slice[this->_size];
   }
 
   inline constexpr const_iterator end(void) const noexcept {
-    return &this->_buffer[this->_size];
+    return &this->_slice[this->_size];
   }
 
   inline slice<_Item_t> ___slice(const int_jnt &_Start,
@@ -105,13 +108,16 @@ public:
     this->__check();
     if (_Start < 0 || _End < 0 || _Start > _End) {
       std::stringstream _sstream;
-      _sstream << "index out of range [" << _Start << ':' << _End << ']';
-      JNID(panic)(_sstream.str().c_str());
+      __JNC_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(_sstream, _Start, _End);
+      JNC_ID(panic)(_sstream.str().c_str());
     } else if (_Start == _End) {
       return slice<_Item_t>();
     }
     slice<_Item_t> _slice;
-    _slice._buffer = &this->_buffer[_Start];
+    _slice._ref = this->_ref;
+    (*_slice._ref)++;
+    _slice._alloc = this->_alloc;
+    _slice._slice = &this->_slice[_Start];
     _slice._size = _End - _Start;
     return _slice;
   }
@@ -127,21 +133,22 @@ public:
   inline constexpr int_jnt len(void) const noexcept { return this->_size; }
 
   inline bool empty(void) const noexcept {
-    return !this->_buffer || this->_size == 0;
+    return !this->_slice || this->_size == 0;
   }
 
   void __push(const _Item_t &_Item) noexcept {
     _Item_t *_new = new (std::nothrow) _Item_t[this->_size + 1];
     if (!_new) {
-      JNID(panic)("memory allocation failed");
+      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
     }
     for (int_jnt _index{0}; _index < this->_size; ++_index) {
-      _new[_index] = this->_buffer[_index];
+      _new[_index] = this->_alloc[_index];
     }
     _new[this->_size] = _Item;
-    delete[] this->_buffer;
-    this->_buffer = nil;
-    this->_buffer = _new;
+    delete[] this->_alloc;
+    this->_alloc = nil;
+    this->_alloc = _new;
+    this->_slice = _alloc;
     ++this->_size;
   }
 
@@ -150,7 +157,7 @@ public:
       return false;
     }
     for (int_jnt _index{0}; _index < this->_size; ++_index) {
-      if (this->_buffer[_index] != _Src._buffer[_index]) {
+      if (this->_slice[_index] != _Src._slice[_index]) {
         return false;
       }
     }
@@ -162,7 +169,7 @@ public:
   }
 
   inline constexpr bool operator==(const std::nullptr_t) const noexcept {
-    return !this->_buffer;
+    return !this->_slice;
   }
 
   inline constexpr bool operator!=(const std::nullptr_t) const noexcept {
@@ -173,25 +180,27 @@ public:
     this->__check();
     if (this->empty() || _Index < 0 || this->len() <= _Index) {
       std::stringstream _sstream;
-      _sstream << "index out of range [" << _Index << ']';
-      JNID(panic)(_sstream.str().c_str());
+      __JNC_WRITE_ERROR_INDEX_OUT_OF_RANGE(_sstream, _Index);
+      JNC_ID(panic)(_sstream.str().c_str());
     }
-    return this->_buffer[_Index];
+    return this->_slice[_Index];
   }
 
   void operator=(const slice<_Item_t> &_Src) noexcept {
-    this->__dealloc();
     if (_Src._ref) {
       (*_Src._ref)++;
     }
+    this->__dealloc();
     this->_size = _Src._size;
     this->_ref = _Src._ref;
-    this->_buffer = _Src._buffer;
+    this->_alloc = _Src._alloc;
+    this->_slice = _Src._slice;
   }
 
   void operator=(const std::nullptr_t) noexcept {
     if (!this->_ref) {
-      this->_ptr = nil;
+      this->_alloc = nil;
+      this->_slice = nil;
       return;
     }
     this->__dealloc();
@@ -201,9 +210,9 @@ public:
                                   const slice<_Item_t> &_Src) noexcept {
     _Stream << '[';
     for (int_jnt _index{0}; _index < _Src._size;) {
-      _Stream << _Src._buffer[_index++];
+      _Stream << _Src._slice[_index++];
       if (_index < _Src._size) {
-        _Stream << ", ";
+        _Stream << " ";
       }
     }
     _Stream << ']';

@@ -43,7 +43,7 @@ public:
     slice<_Key_t> _keys(this->size());
     uint_jnt _index{0};
     for (const auto &_pair : *this) {
-      _keys._buffer[_index++] = _pair.first;
+      _keys._alloc[_index++] = _pair.first;
     }
     return _keys;
   }
@@ -52,7 +52,7 @@ public:
     slice<_Value_t> _keys(this->size());
     uint_jnt _index{0};
     for (const auto &_pair : *this) {
-      _keys._buffer[_index++] = _pair.second;
+      _keys._alloc[_index++] = _pair.second;
     }
     return _keys;
   }

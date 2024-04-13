@@ -117,11 +117,11 @@ struct __jnc_utf8_accept_range {
 };
 
 const __jnc_utf8_accept_range __jnc_utf8_accept_ranges[16] = {
-    {__JNC_UTF8_LOCB, __JNC_UTF8_HICB},
-    {0xA0, __JNC_UTF8_HICB},
-    {__JNC_UTF8_LOCB, 0x9F},
-    {0x90, __JNC_UTF8_HICB},
-    {__JNC_UTF8_LOCB, 0x8F},
+    __jnc_utf8_accept_range{__JNC_UTF8_LOCB, __JNC_UTF8_HICB},
+    __jnc_utf8_accept_range{0xA0, __JNC_UTF8_HICB},
+    __jnc_utf8_accept_range{__JNC_UTF8_LOCB, 0x9F},
+    __jnc_utf8_accept_range{0x90, __JNC_UTF8_HICB},
+    __jnc_utf8_accept_range{__JNC_UTF8_LOCB, 0x8F},
 };
 
 std::tuple<i32_jnt, int_jnt>

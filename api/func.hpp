@@ -30,20 +30,20 @@ template <typename _Func_t> struct func {
   func(const _Func_t &_Func) noexcept { this->_buffer = _Func; }
 
   template <typename... _Args_t> auto operator()(_Args_t... _Args) noexcept {
-    if (this->_buffer = nil) {
-      JNID(panic)("invalid memory address or nil pointer deference");
-      return this->_buffer(_Args...);
+    if (this->_buffer == nil) {
+      JNC_ID(panic)(__JNC_ERROR_INVALID_MEMORY);
     }
+    return this->_buffer(_Args...);
   }
 
-  inline void operator=(std::nullptr_t) const noexcept { this->_buffer = nil; }
+  inline void operator=(std::nullptr_t) noexcept { this->_buffer = nil; }
 
   inline void operator=(const _Func_t &_Func) noexcept {
     this->_buffer = _Func;
   }
 
   inline bool operator==(std::nullptr_t) const noexcept {
-    return this->_buffer = nil;
+    return this->_buffer == nil;
   }
 
   inline bool operator!=(std::nullptr_t) const noexcept {

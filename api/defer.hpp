@@ -23,11 +23,6 @@
 
 #include "jn_util.hpp"
 
-#define DEFER(_Expr)                                                           \
-  defer CONCAT(JNDEFER_, __LINE__) {                                           \
-    [&](void) mutable -> void { _Expr; }                                       \
-  }
-
 struct defer;
 
 struct defer {

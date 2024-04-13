@@ -75,11 +75,12 @@ inline auto tuple_as_args(const func<_Func_t> &_Function,
 std::ostream &operator<<(std::ostream &_Stream, const i8_jnt &_Src);
 std::ostream &operator<<(std::ostream &_Stream, const u8_jnt &_Src);
 
-template <typename _Obj_t> str_jnt tostr(const _Obj_t &_Obj) noexcept;
+void __jnc_terminate_handler(void) noexcept;
 
-void jn_terminate_handler(void) noexcept;
-void JNID(main)(void);
-void _jnc___call_initializers(void);
+// entry point function generated jn code
+void JNC_ID(main)(void);
+// package initializer function
+void __jnc_call_package_initializers(void);
 int main(void);
 
 template <typename T>
@@ -169,38 +170,42 @@ std::ostream &operator<<(std::ostream &_Stream, const u8_jnt &_Src) {
   return _Stream << (i32_jnt)(_Src);
 }
 
-template <typename _Obj_t> str_jnt tostr(const _Obj_t *_Obj) noexcept {
+template <typename _Obj_t> str_jnt __jnc_tostr(const _Obj_t &_Obj) noexcept {
   std::stringstream _stream;
+  _stream << _Obj;
+  return str_jnt(_stream.str());
 }
 
-void jn_terminate_handler(void) noexcept {
+inline void JNC_ID(panic)(const trait<JNC_ID(Error)> &_Error) { throw(_Error); }
+
+template <typename _Obj_t> void JNC_ID(panic)(const _Obj_t &_Expr) {
+  struct panic_error : public JNC_ID(Error) {
+    str_jnt _message;
+    str_jnt error(void) { return this->_message; }
+  };
+  struct panic_error _error;
+  _error._message = __jnc_tostr(_Expr);
+  throw(trait<JNC_ID(Error)>(_error));
+}
+
+void __jnc_terminate_handler(void) noexcept {
   try {
     std::rethrow_exception(std::current_exception());
-  } catch (trait<JNID(Error)> _error) {
+  } catch (trait<JNC_ID(Error)> _error) {
     std::cout << "panic: " << _error.get().error() << std::endl;
-    std::exit(JN_EXIT_PANIC);
+    std::exit(__JNC_EXIT_PANIC);
   }
 }
 
-inline void JNID(panic)(const char *_Message) {
-  struct panic_error : public JNID(Error) {
-    const char *_message;
-    str_jnt error(void) { return this->_message; }
-  };
-  panic_error _error;
-  _error._message = _Message;
-  JNID(panic)(_error);
-}
-
 int main(void) {
-  std::set_terminate(&jn_terminate_handler);
+  std::set_terminate(&__jnc_terminate_handler);
   std::cout << std::boolalpha;
 #ifdef _WINDOWS
   SetConsoleOutputCP(CP_UTF8);
   _setmode(_fileno(stdin), 0x00020000);
 #endif // _WINDOWS
-  _jnc___call_initializers();
-  JNID(main());
+  __jnc_call_package_initializers();
+  JNC_ID(main());
   return EXIT_SUCCESS;
 }
 
