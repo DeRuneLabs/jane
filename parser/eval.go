@@ -1,3 +1,23 @@
+// Copyright (c) 2024 - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package parser
 
 import (
@@ -970,17 +990,19 @@ func (e *eval) bracketRange(toks Toks, m *exprModel) (v value) {
 	m.appendSubNode(model)
 	toks = toks[len(exprToks):]
 	if toks, colon := ast.SplitColon(toks, new(int)); colon != -1 {
-		var leftV, rightV value
+		var leftv, rightv value
+		leftv.constExpr = true
+		rightv.constExpr = true
 		leftToks := toks[:colon]
 		rightToks := toks[colon+1:]
 		m.appendSubNode(exprNode{".___slice("})
 		if len(leftToks) > 0 {
 			var model iExpr
-			leftV, model = e.p.evalToks(leftToks)
+			leftv, model = e.p.evalToks(leftToks)
 			m.appendSubNode(model)
-			e.checkIntegerIndexing(leftV, errTok)
-			if leftV.constExpr && tonums(leftV.expr) < 0 {
-				e.p.pusherrtok(leftV.data.Tok, "invalid_expr")
+			e.checkIntegerIndexing(leftv, errTok)
+			if leftv.constExpr && tonums(leftv.expr) < 0 {
+				e.p.pusherrtok(leftv.data.Tok, "invalid_expr")
 			}
 		} else {
 			m.appendSubNode(exprNode{"0"})
@@ -988,21 +1010,18 @@ func (e *eval) bracketRange(toks Toks, m *exprModel) (v value) {
 		if len(rightToks) > 0 {
 			m.appendSubNode(exprNode{","})
 			var model iExpr
-			rightV, model = e.p.evalToks(rightToks)
+			rightv, model = e.p.evalToks(rightToks)
 			m.appendSubNode(model)
-			e.checkIntegerIndexing(rightV, errTok)
-			if rightV.constExpr && tonums(rightV.expr) < 0 {
-				e.p.pusherrtok(rightV.data.Tok, "invalid_expr")
-			}
+			e.checkIntegerIndexing(rightv, errTok)
 		}
 		m.appendSubNode(exprNode{")"})
-		return e.slicing(v, errTok)
+		return e.slicing(v, leftv, rightv, errTok)
 	}
 	m.appendSubNode(exprNode{tokens.LBRACKET})
-	leftv, model := e.toks(toks[1 : len(toks)-1])
+	indexv, model := e.toks(toks[1 : len(toks)-1])
 	m.appendSubNode(model)
 	m.appendSubNode(exprNode{tokens.RBRACKET})
-	v = e.indexing(v, leftv, errTok)
+	v = e.indexing(v, indexv, errTok)
 	v.data.Type.Pure = true
 	v.data.Type.Original = nil
 	return v
@@ -1017,16 +1036,16 @@ func (e *eval) checkIntegerIndexing(v value, errtok Tok) {
 	}
 }
 
-func (e *eval) indexing(enumv, leftv value, errtok Tok) (v value) {
+func (e *eval) indexing(enumv, indexv value, errtok Tok) (v value) {
 	switch {
 	case typeIsArray(enumv.data.Type):
-		return e.indexingArray(enumv, leftv, errtok)
+		return e.indexingArray(enumv, indexv, errtok)
 	case typeIsSlice(enumv.data.Type):
-		return e.indexingSlice(enumv, leftv, errtok)
+		return e.indexingSlice(enumv, indexv, errtok)
 	case typeIsMap(enumv.data.Type):
-		return e.indexingMap(enumv, leftv, errtok)
+		return e.indexingMap(enumv, indexv, errtok)
 	case typeIsPure(enumv.data.Type):
-		return e.indexingStr(enumv, leftv, errtok)
+		return e.indexingStr(enumv, indexv, errtok)
 	}
 	e.pusherrtok(errtok, "not_supports_indexing", enumv.data.Type.Kind)
 	return
@@ -1064,20 +1083,43 @@ func (e *eval) indexingStr(strv, index value, errtok Tok) value {
 	strv.data.Type.Id = jntype.U8
 	strv.data.Type.Kind = jntype.TypeMap[strv.data.Type.Id]
 	e.checkIntegerIndexing(index, errtok)
-	if index.constExpr && tonums(index.expr) < 0 {
-		e.p.pusherrtok(index.data.Tok, "invalid_expr")
+	if !index.constExpr {
+		return strv
+	}
+	i := tonums(index.expr)
+	if i < 0 {
+		e.pusherrtok(errtok, "overflow_limits")
+	} else if strv.constExpr {
+		s := strv.expr.(string)
+		if int(i) >= len(s) {
+			e.p.pusherrtok(errtok, "overflow_limits")
+		} else {
+			strv.expr = uint64(s[i])
+			strv.model = numericModel(strv)
+		}
 	}
 	return strv
 }
 
-func (e *eval) slicing(enumv value, errtok Tok) (v value) {
+func (e *eval) slicing(enumv, leftv, rightv value, errtok Tok) (v value) {
+	if leftv.constExpr && tonums(leftv.expr) < 0 {
+		e.p.pusherrtok(errtok, "overflow_limits")
+	}
+	if rightv.constExpr && tonums(rightv.expr) < 0 {
+		e.p.pusherrtok(errtok, "overflow_limits")
+	}
+	if leftv.constExpr && rightv.constExpr {
+		if tonums(leftv.expr) > tonums(rightv.expr) {
+			e.p.pusherrtok(errtok, "overflow_limits")
+		}
+	}
 	switch {
 	case typeIsArray(enumv.data.Type):
 		return e.slicingArray(enumv, errtok)
 	case typeIsSlice(enumv.data.Type):
 		return e.slicingSlice(enumv, errtok)
 	case typeIsPure(enumv.data.Type):
-		return e.slicingStr(enumv, errtok)
+		return e.slicingStr(enumv, leftv, rightv, errtok)
 	}
 	e.pusherrtok(errtok, "not_supports_slicing", enumv.data.Type.Kind)
 	return
@@ -1095,11 +1137,40 @@ func (e *eval) slicingArray(v value, errtok Tok) value {
 	return v
 }
 
-func (e *eval) slicingStr(v value, errtok Tok) value {
+func (e *eval) slicingStr(v, leftv, rightv value, errtok Tok) value {
 	v.lvalue = false
-	v.constExpr = false
 	v.data.Type.Id = jntype.Str
 	v.data.Type.Kind = jntype.TypeMap[v.data.Type.Id]
+	if !v.constExpr {
+		return v
+	}
+	if rightv.constExpr {
+		right := tonums(rightv.expr)
+		s := v.expr.(string)
+		if int(right) >= len(s) {
+			e.p.pusherrtok(errtok, "overflow_limits")
+		}
+	}
+	if leftv.constExpr && rightv.constExpr {
+		left := tonums(leftv.expr)
+		if left < 0 {
+			return v
+		}
+		s := v.expr.(string)
+		var right int64
+		if rightv.expr == nil {
+			right = int64(len(s))
+		} else {
+			right = tonums(rightv.expr)
+		}
+		if left > right {
+			return v
+		}
+		v.expr = s[left:right]
+		v.model = strModel(v)
+	} else {
+		v.constExpr = false
+	}
 	return v
 }
 
