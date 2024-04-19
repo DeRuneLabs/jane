@@ -20,7 +20,9 @@
 
 package models
 
+import "github.com/DeRuneLabs/jane/lexer"
+
 type Object struct {
-	Tok  Tok
-	Data any
+	Token lexer.Token
+	Data  any
 }

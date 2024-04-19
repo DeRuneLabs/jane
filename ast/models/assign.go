@@ -23,6 +23,7 @@ package models
 import (
 	"strings"
 
+	"github.com/DeRuneLabs/jane/lexer"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
@@ -43,7 +44,7 @@ func (as AssignLeft) String() string {
 }
 
 type Assign struct {
-	Setter      Tok
+	Setter      lexer.Token
 	Left        []AssignLeft
 	Right       []Expr
 	IsExpr      bool
@@ -58,8 +59,8 @@ func (a *Assign) cppSingleAssign() string {
 		return s[:len(s)-1]
 	}
 	var cpp strings.Builder
-	if len(expr.Expr.Toks) != 1 ||
-		!jnapi.IsIgnoreId(expr.Expr.Toks[0].Kind) {
+	if len(expr.Expr.Tokens) != 1 ||
+		!jnapi.IsIgnoreId(expr.Expr.Tokens[0].Kind) {
 		cpp.WriteString(expr.String())
 		cpp.WriteString(a.Setter.Kind)
 	}
@@ -136,7 +137,7 @@ func (a *Assign) cppNewDefines() string {
 	return cpp.String()
 }
 
-func (a *Assign) cppSuffix() string {
+func (a *Assign) cppPostfix() string {
 	var cpp strings.Builder
 	cpp.WriteString(a.Left[0].Expr.String())
 	cpp.WriteString(a.Setter.Kind)
@@ -147,7 +148,7 @@ func (a Assign) String() string {
 	var cpp strings.Builder
 	switch {
 	case len(a.Right) == 0:
-		cpp.WriteString(a.cppSuffix())
+		cpp.WriteString(a.cppPostfix())
 	case a.MultipleRet:
 		cpp.WriteString(a.cppMultiRet())
 	case len(a.Left) == 1:

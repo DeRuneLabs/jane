@@ -20,8 +20,10 @@
 
 package models
 
+import "github.com/DeRuneLabs/jane/lexer"
+
 type Struct struct {
-	Tok      Tok
+	Token    lexer.Token
 	Id       string
 	Pub      bool
 	Fields   []*Var

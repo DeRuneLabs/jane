@@ -23,11 +23,12 @@ package models
 import (
 	"strings"
 
+	"github.com/DeRuneLabs/jane/lexer"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
 type EnumItem struct {
-	Tok     Tok
+	Token   lexer.Token
 	Id      string
 	Expr    Expr
 	ExprTag any
@@ -35,7 +36,7 @@ type EnumItem struct {
 
 func (ei EnumItem) String() string {
 	var cpp strings.Builder
-	cpp.WriteString(jnapi.OutId(ei.Id, ei.Tok.File))
+	cpp.WriteString(jnapi.OutId(ei.Id, ei.Token.File))
 	cpp.WriteString(" = ")
 	cpp.WriteString(ei.Expr.String())
 	return cpp.String()
@@ -43,9 +44,9 @@ func (ei EnumItem) String() string {
 
 type Enum struct {
 	Pub   bool
-	Tok   Tok
+	Token lexer.Token
 	Id    string
-	Type  DataType
+	Type  Type
 	Items []*EnumItem
 	Used  bool
 	Desc  string
@@ -63,7 +64,7 @@ func (e *Enum) ItemById(id string) *EnumItem {
 func (e Enum) String() string {
 	var cpp strings.Builder
 	cpp.WriteString("enum ")
-	cpp.WriteString(jnapi.OutId(e.Id, e.Tok.File))
+	cpp.WriteString(jnapi.OutId(e.Id, e.Token.File))
 	cpp.WriteByte(':')
 	cpp.WriteString(e.Type.String())
 	cpp.WriteString(" {\n")

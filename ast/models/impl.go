@@ -20,8 +20,10 @@
 
 package models
 
+import "github.com/DeRuneLabs/jane/lexer"
+
 type Impl struct {
-	Trait  Tok
-	Target DataType
+	Base   lexer.Token
+	Target Type
 	Tree   []Object
 }

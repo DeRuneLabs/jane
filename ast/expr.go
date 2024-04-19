@@ -20,9 +20,12 @@
 
 package ast
 
-import "github.com/DeRuneLabs/jane/lexer/tokens"
+import (
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/lexer/tokens"
+)
 
-func IsFuncCall(toks Toks) Toks {
+func IsFuncCall(toks []lexer.Token) []lexer.Token {
 	switch toks[0].Id {
 	case tokens.Brace, tokens.Id, tokens.DataType:
 	default:
@@ -35,17 +38,17 @@ func IsFuncCall(toks Toks) Toks {
 	if tok.Id != tokens.Brace || tok.Kind != tokens.RPARENTHESES {
 		return nil
 	}
-	braceCount := 0
+	brace_n := 0
 	for i := len(toks) - 1; i >= 1; i-- {
 		tok := toks[i]
 		if tok.Id == tokens.Brace {
 			switch tok.Kind {
 			case tokens.RPARENTHESES:
-				braceCount++
+				brace_n++
 			case tokens.LPARENTHESES:
-				braceCount--
+				brace_n--
 			}
-			if braceCount == 0 {
+			if brace_n == 0 {
 				return toks[:i]
 			}
 		}
@@ -53,7 +56,7 @@ func IsFuncCall(toks Toks) Toks {
 	return nil
 }
 
-func RequireOperatorToProcess(tok Tok, index, len int) bool {
+func RequireOperatorToProcess(tok lexer.Token, index, len int) bool {
 	switch tok.Id {
 	case tokens.Comma:
 		return false
@@ -66,21 +69,21 @@ func RequireOperatorToProcess(tok Tok, index, len int) bool {
 	return index < len-1
 }
 
-func BlockExpr(toks Toks) (expr Toks) {
-	braceCount := 0
+func BlockExpr(toks []lexer.Token) (expr []lexer.Token) {
+	brace_n := 0
 	for i, tok := range toks {
 		if tok.Id == tokens.Brace {
 			switch tok.Kind {
 			case tokens.LBRACE:
-				if braceCount > 0 {
-					braceCount++
+				if brace_n > 0 {
+					brace_n++
 					break
 				}
 				return toks[:i]
 			case tokens.LBRACKET, tokens.LPARENTHESES:
-				braceCount++
+				brace_n++
 			default:
-				braceCount--
+				brace_n--
 			}
 		}
 	}

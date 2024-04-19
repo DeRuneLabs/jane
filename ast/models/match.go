@@ -23,11 +23,13 @@ package models
 import (
 	"strconv"
 	"strings"
+
+	"github.com/DeRuneLabs/jane/lexer"
 )
 
 type Fallthrough struct {
-	Tok  Tok
-	Case *Case
+	Token lexer.Token
+	Case  *Case
 }
 
 func (f Fallthrough) String() string {
@@ -39,7 +41,7 @@ func (f Fallthrough) String() string {
 }
 
 type Case struct {
-	Tok   Tok
+	Token lexer.Token
 	Exprs []Expr
 	Block *Block
 	Match *Match
@@ -49,16 +51,16 @@ type Case struct {
 func (c *Case) BeginLabel() string {
 	var cpp strings.Builder
 	cpp.WriteString("case_begin_")
-	cpp.WriteString(strconv.FormatInt(int64(c.Tok.Row), 10))
-	cpp.WriteString(strconv.FormatInt(int64(c.Tok.Column), 10))
+	cpp.WriteString(strconv.Itoa(c.Token.Row))
+	cpp.WriteString(strconv.Itoa(c.Token.Column))
 	return cpp.String()
 }
 
 func (c *Case) EndLabel() string {
 	var cpp strings.Builder
 	cpp.WriteString("case_end_")
-	cpp.WriteString(strconv.FormatInt(int64(c.Tok.Row), 10))
-	cpp.WriteString(strconv.FormatInt(int64(c.Tok.Column), 10))
+	cpp.WriteString(strconv.Itoa(c.Token.Row))
+	cpp.WriteString(strconv.Itoa(c.Token.Column))
 	return cpp.String()
 }
 
@@ -90,11 +92,9 @@ func (c *Case) String(matchExpr string) string {
 		cpp.WriteByte('\n')
 		cpp.WriteString(IndentString())
 		cpp.WriteString("goto ")
-
 		cpp.WriteString(c.Match.EndLabel())
 		cpp.WriteString(";")
 		cpp.WriteByte('\n')
-
 	}
 	cpp.WriteString(IndentString())
 	cpp.WriteString(endlabel)
@@ -103,9 +103,9 @@ func (c *Case) String(matchExpr string) string {
 }
 
 type Match struct {
-	Tok      Tok
+	Token    lexer.Token
 	Expr     Expr
-	ExprType DataType
+	ExprType Type
 	Default  *Case
 	Cases    []Case
 }
@@ -165,9 +165,8 @@ func (m *Match) MatchBoolString() string {
 func (m *Match) EndLabel() string {
 	var cpp strings.Builder
 	cpp.WriteString("match_end_")
-
-	cpp.WriteString(strconv.FormatInt(int64(m.Tok.Row), 10))
-	cpp.WriteString(strconv.FormatInt(int64(m.Tok.Column), 10))
+	cpp.WriteString(strconv.FormatInt(int64(m.Token.Row), 10))
+	cpp.WriteString(strconv.FormatInt(int64(m.Token.Column), 10))
 	return cpp.String()
 }
 

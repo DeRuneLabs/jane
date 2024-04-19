@@ -24,6 +24,7 @@ import (
 	"github.com/DeRuneLabs/jane/package/jnset"
 )
 
+// jn constant value
 const (
 	Version       = `@dev_beta 0.0.1`
 	SrcExt        = `.jn`
@@ -35,21 +36,24 @@ const (
 	EntryPoint          = "main"
 	InitializerFunction = "init"
 
-	Anonymous = "<anonymous>"
-
-	DocPrefix = "doc:"
+	Anonymous              = "<anonymous>"
+	CommentPragmaSeparator = ":"
+	PragmaCommentPrefix    = "jn" + CommentPragmaSeparator
 
 	PlatformWindows = "windows"
 	PlatformLinux   = "linux"
 	PlatformDarwin  = "darwin"
+	PlatformUnix    = "unix"
 
 	ArchArm   = "arm"
 	ArchArm64 = "arm64"
 	ArchAmd64 = "amd64"
 	ArchI386  = "i386"
+	Arch64Bit = "64bit"
+	Arch32Bit = "32bit"
 
-	Attribute_Inline  = "inline"
 	Attribute_TypeArg = "typearg"
+	Attribute_CDef    = "cdef"
 
 	PreprocessorDirective      = "pragma"
 	PreprocessorDirectiveEnofi = "enofi"
@@ -58,11 +62,16 @@ const (
 
 	Prefix_Slice = "[]"
 	Prefix_Array = "[" + Mark_Array + "]"
+
+	CompilerGCC   = "gcc"
+	CompilerClang = "clang"
 )
 
+// environment constant value
 var (
-	LangsPath  string
-	StdlibPath string
-	ExecPath   string
-	Set        *jnset.JnSet
+	LangsPath   string
+	StdlibPath  string
+	ExecPath    string
+	WorkingPath string
+	Set         *jnset.Set
 )

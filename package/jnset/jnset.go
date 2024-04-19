@@ -20,25 +20,32 @@
 
 package jnset
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"runtime"
+)
 
 const (
 	ModeTranspile = "transpile"
 	ModeCompile   = "compile"
 )
 
-type JnSet struct {
-	CppOutDir    string   `json:"cxx_out_dir"`
-	CppOutName   string   `json:"cxx_out_name"`
+// set struct
+type Set struct {
+	CppOutDir    string   `json:"cpp_out_dir"`
+	CppOutName   string   `json:"cpp_out_name"`
 	OutName      string   `json:"out_name"`
 	Language     string   `json:"language"`
 	Mode         string   `json:"mode"`
 	PostCommands []string `json:"post_commands"`
 	Indent       string   `json:"indent"`
 	IndentCount  int      `json:"indent_count"`
+	Compiler     string   `json:"compiler"`
+	CompilerPath string   `json:"compiler_path"`
 }
 
-var Default = &JnSet{
+// default instance of jn.set
+var Default = &Set{
 	CppOutDir:    "./dist",
 	CppOutName:   "jn.cpp",
 	OutName:      "main",
@@ -46,14 +53,28 @@ var Default = &JnSet{
 	Mode:         "transpile",
 	Indent:       "\t",
 	IndentCount:  1,
+	Compiler:     "",
+	CompilerPath: "",
 	PostCommands: []string{},
 }
 
-func Load(bytes []byte) (*JnSet, error) {
+// load set from json string
+func Load(bytes []byte) (*Set, error) {
 	set := *Default
 	err := json.Unmarshal(bytes, &set)
 	if err != nil {
 		return nil, err
 	}
 	return &set, nil
+}
+
+// initialize jn.set
+func init() {
+	if runtime.GOOS == "windows" {
+		Default.Compiler = "gcc"
+		Default.CompilerPath = "g++"
+	} else {
+		Default.Compiler = "clang"
+		Default.CompilerPath = "clang++"
+	}
 }

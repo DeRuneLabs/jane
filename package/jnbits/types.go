@@ -22,6 +22,7 @@ package jnbits
 
 import "github.com/DeRuneLabs/jane/package/jntype"
 
+// return bit-size of data type specified type code
 func BitsizeType(t uint8) int {
 	switch t {
 	case jntype.I8, jntype.U8:

@@ -21,12 +21,10 @@
 package tokens
 
 const (
-	SHARP               = "#"
 	DOUBLE_COLON        = "::"
 	COLON               = ":"
 	SEMICOLON           = ";"
 	COMMA               = ","
-	AT                  = "@"
 	TRIPLE_DOT          = "..."
 	DOT                 = "."
 	PLUS_EQUAL          = "+="
@@ -43,8 +41,8 @@ const (
 	NOT_EQUALS          = "!="
 	GREAT_EQUAL         = ">="
 	LESS_EQUAL          = "<="
-	AND                 = "&&"
-	OR                  = "||"
+	DOUBLE_AMPER        = "&&"
+	DOUBLE_VLINE        = "||"
 	LSHIFT              = "<<"
 	RSHIFT              = ">>"
 	DOUBLE_PLUS         = "++"
@@ -113,4 +111,8 @@ const (
 	IMPL                = "impl"
 	CPP                 = "cpp"
 	FALLTHROUGH         = "fallthrough"
+	FN                  = "fn"
+	LET                 = "let"
+	UNSAFE              = "unsafe"
+	MUT                 = "mut"
 )

@@ -20,9 +20,11 @@
 
 package models
 
+import "github.com/DeRuneLabs/jane/lexer"
+
 type Attribute struct {
-	Tok Tok
-	Tag string
+	Token lexer.Token
+	Tag   string
 }
 
 func (a Attribute) String() string {

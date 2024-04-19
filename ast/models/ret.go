@@ -20,16 +20,76 @@
 
 package models
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/package/jnapi"
+)
+
+type RetType struct {
+	Type        Type
+	Identifiers []lexer.Token
+}
+
+func (rt RetType) String() string {
+	return rt.Type.String()
+}
+
+func (rt *RetType) AnyVar() bool {
+	for _, tok := range rt.Identifiers {
+		if !jnapi.IsIgnoreId(tok.Kind) {
+			return true
+		}
+	}
+	return false
+}
+
+func (rt *RetType) Vars(owner *Block) []*Var {
+	get := func(tok lexer.Token, t Type) *Var {
+		v := new(Var)
+		v.Token = tok
+		if jnapi.IsIgnoreId(tok.Kind) {
+			v.Id = jnapi.Ignore
+		} else {
+			v.Id = tok.Kind
+		}
+		v.Type = t
+		v.Owner = owner
+		v.Mutable = true
+		return v
+	}
+	if !rt.Type.MultiTyped {
+		if len(rt.Identifiers) > 0 {
+			v := get(rt.Identifiers[0], rt.Type)
+			if v == nil {
+				return nil
+			}
+			return []*Var{v}
+		}
+		return nil
+	}
+	var vars []*Var
+	types := rt.Type.Tag.([]Type)
+	for i, tok := range rt.Identifiers {
+		v := get(tok, types[i])
+		if v != nil {
+			vars = append(vars, v)
+		}
+	}
+	return vars
+}
 
 type Ret struct {
-	Tok  Tok
-	Expr Expr
+	Token lexer.Token
+	Expr  Expr
 }
 
 func (r Ret) String() string {
+	if r.Expr.Model == nil {
+		return "return;"
+	}
 	var cpp strings.Builder
-	cpp.WriteString("return ")
 	cpp.WriteString(r.Expr.String())
 	cpp.WriteByte(';')
 	return cpp.String()

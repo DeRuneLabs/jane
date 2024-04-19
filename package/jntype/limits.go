@@ -22,6 +22,7 @@ package jntype
 
 import "math"
 
+// return min value of integer type
 func MinOfType(id uint8) int64 {
 	if !IsInteger(id) {
 		return 0
@@ -40,6 +41,7 @@ func MinOfType(id uint8) int64 {
 	return 0
 }
 
+// return max value of integer type
 func MaxOfType(id uint8) uint64 {
 	if !IsInteger(id) {
 		return 0

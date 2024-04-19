@@ -20,7 +20,28 @@
 
 package models
 
-type CppLink struct {
-	Tok  Tok
-	Link *Func
+import "github.com/DeRuneLabs/jane/lexer"
+
+// linked function AST model.
+type CppLinkFn struct {
+	Token lexer.Token
+	Link  *Fn
+}
+
+// linked variable AST model.
+type CppLinkVar struct {
+	Token lexer.Token
+	Link  *Var
+}
+
+// linked structure AST model.
+type CppLinkStruct struct {
+	Token lexer.Token
+	Link  Struct
+}
+
+// linked type alias AST model.
+type CppLinkAlias struct {
+	Token lexer.Token
+	Link  TypeAlias
 }

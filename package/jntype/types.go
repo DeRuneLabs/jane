@@ -27,9 +27,14 @@ import (
 )
 
 var (
-	IntCode  uint8
+	// integer type code of current platform architecture,
+	// equivalent to "int", but specific bit-size integer type code
+	IntCode uint8
+	// integer type of current platform architecture
+	// equivalent to "uint", but specific bit-size integer type code
 	UIntCode uint8
-	BitSize  int
+	// bit size of architecture
+	BitSize int
 )
 
 const (
@@ -38,6 +43,8 @@ const (
 	VoidTypeStr    = "<void>"
 )
 
+// return real type code of code,
+// if type is "int" or "uint", set to bit-specific type code
 func GetRealCode(t uint8) uint8 {
 	switch t {
 	case Int:
@@ -48,44 +55,53 @@ func GetRealCode(t uint8) uint8 {
 	return t
 }
 
+// report i16 is greater or not data-type than specified type
 func I16GreaterThan(t uint8) bool {
 	t = GetRealCode(t)
 	return t == U8
 }
 
+// report i32 is greater or not data-type than specified type
 func I32GreaterThan(t uint8) bool {
 	t = GetRealCode(t)
 	return t == I8 || t == I16
 }
 
+// report i64 is greater or not data-type than specified type
 func I64GreaterThan(t uint8) bool {
 	t = GetRealCode(t)
 	return t == I8 || t == I16 || t == I32
 }
 
+// report u16 is greater or not data-type than specified type
 func U16GreaterThan(t uint8) bool {
 	t = GetRealCode(t)
 	return t == U8
 }
 
+// report u32 is greater or not data-type than specified type
 func U32GreaterThan(t uint8) bool {
 	t = GetRealCode(t)
 	return t == U8 || t == U16
 }
 
+// report u64 is greater or not data-type than specified type
 func U64GreaterThan(t uint8) bool {
 	t = GetRealCode(t)
 	return t == U8 || t == U16 || t == U32
 }
 
+// report f32 is greater or not data-type than specified type
 func F32GreaterThan(t uint8) bool {
 	return t != Any && t != F64
 }
 
+// report f64 is greater or not data-type than specified type
 func F64GreaterThan(t uint8) bool {
 	return t != Any
 }
 
+// report type one is greater than type two or not
 func TypeGreaterThan(t1, t2 uint8) bool {
 	t1 = GetRealCode(t1)
 	switch t1 {
@@ -111,21 +127,25 @@ func TypeGreaterThan(t1, t2 uint8) bool {
 	return false
 }
 
+// report i8 is compatible or not with data-type specified type
 func I8CompatibleWith(t uint8) bool {
 	t = GetRealCode(t)
 	return t == I8
 }
 
+// report i16 is compatible or not with data-type specified type
 func I16CompatibleWith(t uint8) bool {
 	t = GetRealCode(t)
 	return t == I8 || t == I16 || t == U8
 }
 
+// report i32 is compatible or not with data-type specified type
 func I32CompatibleWith(t uint8) bool {
 	t = GetRealCode(t)
 	return t == I8 || t == I16 || t == I32 || t == U8 || t == U16
 }
 
+// report i64 is compatible or not with data-type specified type
 func I64CompatibleWith(t uint8) bool {
 	t = GetRealCode(t)
 	switch t {
@@ -136,26 +156,31 @@ func I64CompatibleWith(t uint8) bool {
 	}
 }
 
+// report u8 is compatible or not with data-type specified type
 func U8CompatibleWith(t uint8) bool {
 	t = GetRealCode(t)
 	return t == U8
 }
 
+// report u16 is compatible or not with data-type specified type
 func U16CompatibleWith(t uint8) bool {
 	t = GetRealCode(t)
 	return t == U8 || t == U16
 }
 
+// report u32 is compatible or not with data-type specified type
 func U32CompatibleWith(t uint8) bool {
 	t = GetRealCode(t)
 	return t == U8 || t == U16 || t == U32
 }
 
+// report u64 is compatible or not with data-type specified type
 func U64CompatibleWith(t uint8) bool {
 	t = GetRealCode(t)
 	return t == U8 || t == U16 || t == U32 || t == U64
 }
 
+// report f32 is compatible or not with data-type specified type
 func F32CompatibleWith(t uint8) bool {
 	t = GetRealCode(t)
 	switch t {
@@ -166,6 +191,7 @@ func F32CompatibleWith(t uint8) bool {
 	}
 }
 
+// report f64 is compatible or not with data-type specified type
 func F64CompatibleWith(t uint8) bool {
 	t = GetRealCode(t)
 	switch t {
@@ -176,6 +202,7 @@ func F64CompatibleWith(t uint8) bool {
 	}
 }
 
+// report type one and type two is compatible or not
 func TypesAreCompatible(t1, t2 uint8, ignoreany bool) bool {
 	t1 = GetRealCode(t1)
 	switch t1 {
@@ -211,26 +238,32 @@ func TypesAreCompatible(t1, t2 uint8, ignoreany bool) bool {
 	return false
 }
 
+// report type is signed/unsigned integer or not
 func IsInteger(t uint8) bool {
 	return IsSignedInteger(t) || IsUnsignedInteger(t)
 }
 
+// report type is numeric or not
 func IsNumericType(t uint8) bool {
 	return IsInteger(t) || IsFloat(t)
 }
 
+// report type is float or not
 func IsFloat(t uint8) bool {
 	return t == F32 || t == F64
 }
 
+// report type is numeric or not
 func IsNumeric(t uint8) bool {
 	return IsInteger(t) || IsFloat(t)
 }
 
+// report type is float or not
 func IsSignedNumeric(t uint8) bool {
 	return IsSignedInteger(t) || IsFloat(t)
 }
 
+// report type is signed itneger or not
 func IsSignedInteger(t uint8) bool {
 	t = GetRealCode(t)
 	switch t {
@@ -241,6 +274,7 @@ func IsSignedInteger(t uint8) bool {
 	}
 }
 
+// report type is unsigned integer or not
 func IsUnsignedInteger(t uint8) bool {
 	t = GetRealCode(t)
 	switch t {
@@ -251,6 +285,7 @@ func IsUnsignedInteger(t uint8) bool {
 	}
 }
 
+// return type id of specified type code
 func TypeFromId(id string) uint8 {
 	for t, tid := range TypeMap {
 		if id == tid {
@@ -260,6 +295,7 @@ func TypeFromId(id string) uint8 {
 	return 0
 }
 
+// return cpp output indentifier of data-type
 func CppId(t uint8) string {
 	if t == Void {
 		return "void"
@@ -272,6 +308,7 @@ func CppId(t uint8) string {
 	return id
 }
 
+// return default value of specified type
 func DefaultValOfType(t uint8) string {
 	t = GetRealCode(t)
 	if IsNumericType(t) || t == Enum {
@@ -286,6 +323,7 @@ func DefaultValOfType(t uint8) string {
 	return "nil"
 }
 
+// return type code by bits
 func IntFromBits(bits uint64) uint8 {
 	switch bits {
 	case 8:
@@ -299,6 +337,7 @@ func IntFromBits(bits uint64) uint8 {
 	}
 }
 
+// return type code by bits
 func UIntFromBits(bits uint64) uint8 {
 	switch bits {
 	case 8:
@@ -312,6 +351,7 @@ func UIntFromBits(bits uint64) uint8 {
 	}
 }
 
+// return type code by bits
 func FloatFromBits(bits uint64) uint8 {
 	switch bits {
 	case 32:

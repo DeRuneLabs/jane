@@ -20,10 +20,14 @@
 
 package models
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/DeRuneLabs/jane/lexer"
+)
 
 type If struct {
-	Tok   Tok
+	Token lexer.Token
 	Expr  Expr
 	Block *Block
 }
@@ -34,5 +38,32 @@ func (ifast If) String() string {
 	cpp.WriteString(ifast.Expr.String())
 	cpp.WriteString(") ")
 	cpp.WriteString(ifast.Block.String())
+	return cpp.String()
+}
+
+type ElseIf struct {
+	Token lexer.Token
+	Expr  Expr
+	Block *Block
+}
+
+func (elif ElseIf) String() string {
+	var cpp strings.Builder
+	cpp.WriteString("else if (")
+	cpp.WriteString(elif.Expr.String())
+	cpp.WriteString(") ")
+	cpp.WriteString(elif.Block.String())
+	return cpp.String()
+}
+
+type Else struct {
+	Token lexer.Token
+	Block *Block
+}
+
+func (elseast Else) String() string {
+	var cpp strings.Builder
+	cpp.WriteString("else ")
+	cpp.WriteString(elseast.Block.String())
 	return cpp.String()
 }

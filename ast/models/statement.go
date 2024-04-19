@@ -23,10 +23,12 @@ package models
 import (
 	"fmt"
 	"strings"
+
+	"github.com/DeRuneLabs/jane/lexer"
 )
 
 type Statement struct {
-	Tok            Tok
+	Token          lexer.Token
 	Data           any
 	WithTerminator bool
 }

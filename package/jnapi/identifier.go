@@ -28,16 +28,24 @@ import (
 	"github.com/DeRuneLabs/jane/package/jnio"
 )
 
+// ignore operator
 const Ignore = "_"
-const InitializerCaller = "_jnc___call_initializers"
+
+// initializer caller identifier
+const InitializerCaller = "__jnc_call_package_initializers"
+
+// type extension
 const typeExtension = "_jnt"
 
+// reporting identifier is ignore or not
 func IsIgnoreId(id string) bool {
 	return id == Ignore
 }
 
+// return specified identifier as jn Cpp identifier
 func AsId(id string) string {
-	return "JNID(" + id + ")"
+	// convert to "JNC_ID(" + id + ")"
+	return "_" + id
 }
 
 func getPtrAsId(ptr unsafe.Pointer) string {

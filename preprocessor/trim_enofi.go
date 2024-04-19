@@ -20,19 +20,23 @@
 
 package preprocessor
 
-import "github.com/DeRuneLabs/jane/ast/models"
+import (
+	"github.com/DeRuneLabs/jane/ast/models"
+	"github.com/DeRuneLabs/jane/package/jn"
+)
 
 func TrimEnofi(tree *Tree) {
 	for i, obj := range *tree {
 		switch t := obj.Data.(type) {
-		case models.Preprocessor:
-			switch t := t.Command.(type) {
-			case models.Directive:
-				switch t.Command.(type) {
-				case models.DirectiveEnofi:
-					*tree = (*tree)[:i]
-					return
-				}
+		case models.Comment:
+			if !IsPreprocessorPragma(t.Content) {
+				continue
+			}
+			directive := getDirective(t.Content)
+			switch directive {
+			case jn.PreprocessorDirectiveEnofi:
+				*tree = (*tree)[:i]
+				return
 			}
 		}
 	}

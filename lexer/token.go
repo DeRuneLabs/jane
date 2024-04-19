@@ -20,8 +20,10 @@
 
 package lexer
 
-type Tok struct {
-	File   *File
+import "github.com/DeRuneLabs/jane/package/jnio"
+
+type Token struct {
+	File   *jnio.File
 	Row    int
 	Column int
 	Kind   string

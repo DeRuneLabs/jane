@@ -20,9 +20,14 @@
 
 package models
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/DeRuneLabs/jane/lexer"
+)
 
 type Comment struct {
+	Token   lexer.Token
 	Content string
 }
 

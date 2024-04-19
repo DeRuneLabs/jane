@@ -23,12 +23,13 @@ package models
 import (
 	"strings"
 
+	"github.com/DeRuneLabs/jane/lexer"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
 type GenericType struct {
-	Tok Tok
-	Id  string
+	Token lexer.Token
+	Id    string
 }
 
 func (gt GenericType) String() string {

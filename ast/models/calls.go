@@ -20,11 +20,14 @@
 
 package models
 
-import "github.com/DeRuneLabs/jane/package/jnapi"
+import (
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/package/jnapi"
+)
 
 type Defer struct {
-	Tok  Tok
-	Expr Expr
+	Token lexer.Token
+	Expr  Expr
 }
 
 func (d Defer) String() string {
@@ -32,8 +35,8 @@ func (d Defer) String() string {
 }
 
 type ConcurrentCall struct {
-	Tok  Tok
-	Expr Expr
+	Token lexer.Token
+	Expr  Expr
 }
 
 func (cc ConcurrentCall) String() string {

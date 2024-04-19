@@ -20,7 +20,22 @@
 
 package jn
 
+// attribute languages
 var Attributes = [...]string{
-	0: Attribute_Inline,
-	1: Attribute_TypeArg,
+	0: Attribute_TypeArg,
+	1: Attribute_CDef,
+}
+
+var Distos = []string{
+	"windows",
+	"linux",
+	"darwin",
+}
+
+// architecture
+var Distarch = []string{
+	"arm",
+	"arm64",
+	"amd64",
+	"i386",
 }

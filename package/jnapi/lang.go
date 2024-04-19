@@ -22,24 +22,30 @@ package jnapi
 
 import "strings"
 
+// hader path of "jnc.hpp"
 var JNCHeader = ""
 
 const (
+	// ignoring of cpp
 	CppIgnore = "std::ignore"
-	CppSelf   = "this"
+	// self keyword equavalent of cpp
+	CppSelf = "this"
 )
 
+// return cpp of defer function call expression string
 func ToDeferredCall(expr string) string {
 	var cpp strings.Builder
-	cpp.WriteString("DEFER(")
+	cpp.WriteString("__JNC_DEFER(")
 	cpp.WriteString(expr)
 	cpp.WriteString(");")
 	return cpp.String()
 }
 
+// return of concurrent function call expression
+// string
 func ToConcurrentCall(expr string) string {
 	var cpp strings.Builder
-	cpp.WriteString("CO(")
+	cpp.WriteString("__JNC_CO(")
 	cpp.WriteString(expr)
 	cpp.WriteString(");")
 	return cpp.String()

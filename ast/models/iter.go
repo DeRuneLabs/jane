@@ -20,20 +20,89 @@
 
 package models
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+
+	"github.com/DeRuneLabs/jane/lexer"
+)
+
+type Break struct {
+	Token      lexer.Token
+	LabelToken lexer.Token
+	Label      string
+}
+
+func (b Break) String() string {
+	return "goto " + b.Label + ";"
+}
+
+type Continue struct {
+	Token     lexer.Token
+	LoopLabel lexer.Token
+	Label     string
+}
+
+func (c Continue) String() string {
+	return "goto " + c.Label + ";"
+}
 
 type Iter struct {
-	Tok     Tok
+	Token   lexer.Token
 	Block   *Block
+	Parent  *Block
 	Profile IterProfile
 }
 
-func (iter Iter) String() string {
-	if iter.Profile == nil {
-		var cpp strings.Builder
-		cpp.WriteString("while (true) ")
-		cpp.WriteString(iter.Block.String())
-		return cpp.String()
+func (i *Iter) BeginLabel() string {
+	var cpp strings.Builder
+	cpp.WriteString("iter_begin_")
+	cpp.WriteString(strconv.Itoa(i.Token.Row))
+	cpp.WriteString(strconv.Itoa(i.Token.Column))
+	return cpp.String()
+}
+
+func (i *Iter) EndLabel() string {
+	var cpp strings.Builder
+	cpp.WriteString("iter_end_")
+	cpp.WriteString(strconv.Itoa(i.Token.Row))
+	cpp.WriteString(strconv.Itoa(i.Token.Column))
+	return cpp.String()
+}
+
+func (i *Iter) NextLabel() string {
+	var cpp strings.Builder
+	cpp.WriteString("iter_next_")
+	cpp.WriteString(strconv.Itoa(i.Token.Row))
+	cpp.WriteString(strconv.Itoa(i.Token.Column))
+	return cpp.String()
+}
+
+func (i *Iter) infinityString() string {
+	var cpp strings.Builder
+	indent := IndentString()
+	begin := i.BeginLabel()
+	cpp.WriteString(begin)
+	cpp.WriteString(":;\n")
+	cpp.WriteString(indent)
+	cpp.WriteString(i.Block.String())
+	cpp.WriteByte('\n')
+	cpp.WriteString(indent)
+	cpp.WriteString(i.NextLabel())
+	cpp.WriteString(":;\n")
+	cpp.WriteString(indent)
+	cpp.WriteString("goto ")
+	cpp.WriteString(begin)
+	cpp.WriteString(";\n")
+	cpp.WriteString(indent)
+	cpp.WriteString(i.EndLabel())
+	cpp.WriteString(":;")
+	return cpp.String()
+}
+
+func (i Iter) String() string {
+	if i.Profile == nil {
+		return i.infinityString()
 	}
-	return iter.Profile.String(iter)
+	return i.Profile.String(&i)
 }

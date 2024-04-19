@@ -21,17 +21,22 @@
 package models
 
 import (
+	"strconv"
 	"strings"
 
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/lexer/tokens"
 	"github.com/DeRuneLabs/jane/package/jnapi"
 )
 
 type Var struct {
+	Owner     *Block
 	Pub       bool
-	Token     Tok
-	SetterTok Tok
+	Mutable   bool
+	Token     lexer.Token
+	SetterTok lexer.Token
 	Id        string
-	Type      DataType
+	Type      Type
 	Expr      Expr
 	Const     bool
 	New       bool
@@ -40,18 +45,35 @@ type Var struct {
 	Desc      string
 	Used      bool
 	IsField   bool
+	CppLinked bool
+}
+
+func (v *Var) IsLocal() bool { return v.Owner != nil }
+
+func as_local_id(row, column int, id string) string {
+	id = strconv.Itoa(row) + strconv.Itoa(column) + "_" + id
+	return jnapi.AsId(id)
 }
 
 func (v *Var) OutId() string {
 	switch {
+	case v.CppLinked:
+		return v.Id
+	case v.Id == tokens.SELF:
+		return "self"
+	case v.IsLocal():
+		return as_local_id(v.Token.Row, v.Token.Column, v.Id)
 	case v.IsField:
-		return jnapi.AsId(v.Id)
+		return "__jnc_field_" + jnapi.AsId(v.Id)
 	default:
 		return jnapi.OutId(v.Id, v.Token.File)
 	}
 }
 
 func (v Var) String() string {
+	if jnapi.IsIgnoreId(v.Id) {
+		return ""
+	}
 	if v.Const {
 		return ""
 	}
@@ -81,4 +103,16 @@ func (v *Var) FieldString() string {
 	cpp.WriteString(jnapi.DefaultExpr)
 	cpp.WriteByte(';')
 	return cpp.String()
+}
+
+func (v *Var) ReceiverTypeString() string {
+	var s strings.Builder
+	if v.Mutable {
+		s.WriteString("mut ")
+	}
+	if v.Type.Kind != "" && v.Type.Kind[0] == '&' {
+		s.WriteByte('&')
+	}
+	s.WriteString("self")
+	return s.String()
 }

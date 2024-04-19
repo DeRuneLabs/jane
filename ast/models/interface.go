@@ -22,17 +22,18 @@ package models
 
 type CompiledStruct interface {
 	OutId() string
-	Generics() []DataType
-	SetGenerics([]DataType)
+	Generics() []Type
+	SetGenerics([]Type)
+	CppLinked() bool
 }
 
 type Genericable interface {
-	Generics() []DataType
-	SetGenerics([]DataType)
+	Generics() []Type
+	SetGenerics([]Type)
 }
 
 type IterProfile interface {
-	String(iter Iter) string
+	String(i *Iter) string
 }
 
 type IExprModel interface {

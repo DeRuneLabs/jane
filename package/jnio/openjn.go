@@ -28,6 +28,7 @@ import (
 	"github.com/DeRuneLabs/jane/package/jn"
 )
 
+// return jn source file
 func OpenJn(path string) (*File, error) {
 	path, _ = filepath.Abs(path)
 	if filepath.Ext(path) != jn.SrcExt {

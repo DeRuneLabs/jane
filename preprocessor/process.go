@@ -20,9 +20,30 @@
 
 package preprocessor
 
-import "github.com/DeRuneLabs/jane/ast/models"
+import (
+	"strings"
+
+	"github.com/DeRuneLabs/jane/ast/models"
+	"github.com/DeRuneLabs/jane/package/jn"
+)
 
 type Tree = []models.Object
+
+func IsPreprocessorPragma(s string) bool {
+	if !strings.HasPrefix(s, jn.PragmaCommentPrefix) {
+		return false
+	}
+	switch getDirective(s) {
+	case jn.PreprocessorDirectiveEnofi:
+		return true
+	default:
+		return false
+	}
+}
+
+func getDirective(s string) string {
+	return s[len(jn.PragmaCommentPrefix):]
+}
 
 func Process(tree *Tree, includeEnofi bool) {
 	if includeEnofi {

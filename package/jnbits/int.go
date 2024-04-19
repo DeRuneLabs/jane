@@ -26,10 +26,12 @@ import (
 	"strings"
 )
 
+// maximum bitsize of integer type
 const MaxInt = 64
 
 type bitChecker = func(val string, base, bit int) error
 
+// report integer is compatible this bit-size or not
 func CheckBitInt(val string, bit int) bool {
 	return checkBit(val, bit, func(val string, base, bit int) error {
 		_, err := strconv.ParseInt(val, base, bit)
@@ -37,6 +39,7 @@ func CheckBitInt(val string, bit int) bool {
 	})
 }
 
+// report unsigned integer is compatible this bit-size or not
 func CheckBitUInt(val string, bit int) bool {
 	return checkBit(val, bit, func(val string, base, bit int) error {
 		_, err := strconv.ParseUint(val, base, bit)
@@ -63,6 +66,7 @@ func checkBit(val string, bit int, checker bitChecker) bool {
 	return err == nil
 }
 
+// return minimum bitsize of given value
 func BitsizeInt(x int64) uint64 {
 	switch {
 	case x >= math.MinInt8 && x <= math.MaxInt8:
@@ -76,6 +80,7 @@ func BitsizeInt(x int64) uint64 {
 	}
 }
 
+// return minimum bitsize of given value
 func BitsizeUInt(x uint64) uint64 {
 	switch {
 	case x <= math.MaxUint8:

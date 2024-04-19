@@ -20,13 +20,18 @@
 
 package models
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/DeRuneLabs/jane/lexer"
+)
 
 type Labels []*Label
+
 type Gotos []*Goto
 
 type Label struct {
-	Tok   Tok
+	Token lexer.Token
 	Label string
 	Index int
 	Used  bool
@@ -38,7 +43,7 @@ func (l Label) String() string {
 }
 
 type Goto struct {
-	Tok   Tok
+	Token lexer.Token
 	Label string
 	Index int
 	Block *Block

@@ -20,6 +20,7 @@
 
 package jnapi
 
+// header are valid extension of cpp header
 var CppHeaderExtensions = []string{
 	".h",
 	".hpp",
@@ -27,6 +28,7 @@ var CppHeaderExtensions = []string{
 	".hh",
 }
 
+// valid header return true if the extesion valid, false if not
 func IsValidHeader(ext string) bool {
 	for _, validExt := range CppHeaderExtensions {
 		if ext == validExt {

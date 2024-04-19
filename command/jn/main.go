@@ -23,12 +23,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
+	"runtime"
 	"strings"
 	"time"
 
@@ -37,33 +35,30 @@ import (
 	"github.com/DeRuneLabs/jane/package/jnapi"
 	"github.com/DeRuneLabs/jane/package/jnio"
 	"github.com/DeRuneLabs/jane/package/jnset"
-	"github.com/DeRuneLabs/jane/parser"
-)
-
-type Parser = parser.Parser
-
-const (
-	commandHelp    = "help"
-	commandVersion = "version"
-	commandInit    = "init"
-	commandDoc     = "doc"
+	"github.com/DeRuneLabs/jane/transpiler"
 )
 
 const (
-	localizationErrors   = "error.json"
-	localizationWarnings = "warning.json"
+	command_help    = "help"
+	command_version = "version"
+	command_init    = "init"
+	command_doc     = "doc"
+	command_bug     = "bug"
+	command_tool    = "tool"
 )
 
 var helpmap = [...][2]string{
-	0: {commandHelp, "Show help."},
-	1: {commandVersion, "Show version."},
-	2: {commandInit, "Initialize new project here."},
-	3: {commandDoc, "Documentize Jn source code."},
+	0: {command_help, "Show help"},
+	1: {command_version, "Show version"},
+	2: {command_init, "Initialize new project here"},
+	3: {command_doc, "Documentize Jane source code"},
+	4: {command_bug, "Start a new bug report"},
+	5: {command_tool, "Tools for effective Jane"},
 }
 
 func help(cmd string) {
 	if cmd != "" {
-		println("This mod can only be used as single")
+		println("can only be used as single")
 		return
 	}
 	max := len(helpmap[0][0])
@@ -86,15 +81,15 @@ func help(cmd string) {
 
 func version(cmd string) {
 	if cmd != "" {
-		println("This mod can only be used as single!")
+		println("can only be used as single")
 		return
 	}
-	println("jn version", jn.Version)
+	println("jn version: ", jn.Version)
 }
 
-func initProject(cmd string) {
+func init_project(cmd string) {
 	if cmd != "" {
-		println("This module can only be used as single!")
+		println("can only be used as single")
 		return
 	}
 	bytes, err := json.MarshalIndent(*jnset.Default, "", "\t")
@@ -102,48 +97,111 @@ func initProject(cmd string) {
 		println(err)
 		os.Exit(0)
 	}
-	err = ioutil.WriteFile(jn.SettingsFile, bytes, 0666)
+	err = os.WriteFile(jn.SettingsFile, bytes, 0666)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
 	}
-	println("Initialized project.")
+	println("initialize jane project")
 }
 
 func doc(cmd string) {
+	fmt_json := false
 	cmd = strings.TrimSpace(cmd)
+	if strings.HasPrefix(cmd, "--json") {
+		cmd = strings.TrimSpace(cmd[len("--json"):])
+		fmt_json = true
+	}
 	paths := strings.SplitN(cmd, " ", -1)
 	for _, path := range paths {
 		path = strings.TrimSpace(path)
-		p := compile(path, false, true, true)
-		if p == nil {
+		t := compile(path, false, true, true)
+		if t == nil {
 			continue
 		}
-		if printlogs(p) {
+		if print_logs(t) {
 			fmt.Println(jn.GetError("doc_couldnt_generated", path))
 			continue
 		}
-		docjson, err := documenter.Doc(p)
+		docjson, err := documenter.Doc(t, fmt_json)
 		if err != nil {
 			fmt.Println(jn.GetError("error", err.Error()))
 			continue
 		}
 		path = path[:len(path)-len(jn.SrcExt)]
 		path = filepath.Join(jn.Set.CppOutDir, path+jn.DocExt)
-		writeOutput(path, docjson)
+		write_output(path, docjson)
 	}
 }
 
-func processCommand(namespace, cmd string) bool {
+func open_url(url string) error {
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/c", "start"}
+	case "darwin":
+		cmd = "open"
+	default:
+		cmd = "xdg-open"
+	}
+	args = append(args, url)
+	command := exec.Command(cmd, args...)
+	return command.Start()
+}
+
+func bug(cmd string) {
+	if cmd != "" {
+		println("can only be used as single")
+		return
+	}
+	err := open_url("https://github.com/DeRuneLabs/jane/issues/new")
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+}
+
+func list_horizontal_slice(s []string) string {
+	lst := fmt.Sprint(s)
+	return lst[1 : len(lst)-1]
+}
+
+func tool(cmd string) {
+	if cmd == "" {
+		println(`tooling command:
+distos display all supported operating system
+distarch display all support architecture`)
+		return
+	}
+	switch cmd {
+	case "distos":
+		print("supported operating system list:\n")
+		println(list_horizontal_slice(jn.Distos))
+	case "distarch":
+		print("supported architecture:\n")
+		println(list_horizontal_slice(jn.Distarch))
+	default:
+		println("undefine command: " + cmd)
+	}
+}
+
+func process_command(namespace, cmd string) bool {
+	cmd = strings.TrimSpace(cmd)
 	switch namespace {
-	case commandHelp:
+	case command_help:
 		help(cmd)
-	case commandVersion:
+	case command_version:
 		version(cmd)
-	case commandInit:
-		initProject(cmd)
-	case commandDoc:
+	case command_init:
+		init_project(cmd)
+	case command_doc:
 		doc(cmd)
+	case command_bug:
+		bug(cmd)
+	case command_tool:
+		tool(cmd)
 	default:
 		return false
 	}
@@ -156,13 +214,17 @@ func init() {
 		println(err.Error())
 		os.Exit(0)
 	}
+	jn.WorkingPath, err = os.Getwd()
+	if err != nil {
+		println(err.Error())
+		os.Exit(0)
+	}
 	execp = filepath.Dir(execp)
 	jn.ExecPath = execp
 	jn.StdlibPath = filepath.Join(jn.ExecPath, jn.Stdlib)
 	jnapi.JNCHeader = filepath.Join(jn.ExecPath, "api")
 	jnapi.JNCHeader = filepath.Join(jnapi.JNCHeader, "jnc.hpp")
 	jn.LangsPath = filepath.Join(jn.ExecPath, jn.Localizations)
-
 	if len(os.Args) < 2 {
 		os.Exit(0)
 	}
@@ -176,99 +238,52 @@ func init() {
 	if i == -1 {
 		i = len(arg)
 	}
-	if processCommand(arg[:i], arg[i:]) {
+	if process_command(arg[:i], arg[i:]) {
 		os.Exit(0)
 	}
 }
 
-func loadLangWarns(path string, infos []fs.FileInfo) {
-	i := -1
-	for j, f := range infos {
-		if f.IsDir() || f.Name() != localizationWarnings {
-			continue
-		}
-		i = j
-		path = filepath.Join(path, f.Name())
-		break
-	}
-	if i == -1 {
-		return
-	}
-	bytes, err := ioutil.ReadFile(path)
-	if err != nil {
-		println("Language's warnings couldn't loaded (uses default);")
-		println(err.Error())
-		return
-	}
-	err = json.Unmarshal(bytes, &jn.Warnings)
-	if err != nil {
-		println("Language's warnings couldn't loaded (uses default);")
-		println(err.Error())
-		return
-	}
-}
-
-func loadLangErrs(path string, infos []fs.FileInfo) {
-	i := -1
-	for j, f := range infos {
-		if f.IsDir() || f.Name() != localizationErrors {
-			continue
-		}
-		i = j
-		path = filepath.Join(path, f.Name())
-		break
-	}
-	if i == -1 {
-		return
-	}
-	bytes, err := ioutil.ReadFile(path)
-	if err != nil {
-		println("Language's errors couldn't loaded (uses default);")
-		println(err.Error())
-		return
-	}
-	err = json.Unmarshal(bytes, &jn.Errors)
-	if err != nil {
-		println("Language's errors couldn't loaded (uses default);")
-		println(err.Error())
-		return
-	}
-}
-
-func loadLang() {
+func load_localization() {
 	lang := strings.TrimSpace(jn.Set.Language)
 	if lang == "" || lang == "default" {
 		return
 	}
-	path := filepath.Join(jn.LangsPath, lang)
-	infos, err := ioutil.ReadDir(path)
+	path := filepath.Join(jn.LangsPath, lang+".json")
+	bytes, err := os.ReadFile(path)
 	if err != nil {
-		println("Language couldn't loaded (uses default);")
+		println("language not loaded (using default);")
+		println(err.Error())
+	}
+	err = json.Unmarshal(bytes, &jn.Errors)
+	if err != nil {
+		println("language error couldn't load (using default);")
 		println(err.Error())
 		return
 	}
-	loadLangWarns(path, infos)
-	loadLangErrs(path, infos)
 }
 
-func checkMode() {
-	lower := strings.ToLower(jn.Set.Mode)
-	if lower != jnset.ModeTranspile &&
-		lower != jnset.ModeCompile {
-		key, _ := reflect.TypeOf(jn.Set).Elem().FieldByName("Mode")
-		tag := string(key.Tag)
-		tag = tag[6 : len(tag)-1]
-		println(jn.GetError("invalid_value_for_key", jn.Set.Mode, tag))
+func check_mode() {
+	mode := jn.Set.Mode
+	if mode != jnset.ModeTranspile && mode != jnset.ModeCompile {
+		println(jn.GetError("invalid_value_for_key", mode, "mode"))
 		os.Exit(0)
 	}
-	jn.Set.Mode = lower
 }
 
-func loadJnSet() {
+func check_compiler() {
+	c := jn.Set.Compiler
+	if c != jn.CompilerGCC && c != jn.CompilerClang {
+		println(jn.GetError("invalid_value_for_key", c, "compiler"))
+		os.Exit(0)
+	}
+}
+
+func load_jnset() {
 	info, err := os.Stat(jn.SettingsFile)
 	if err != nil || info.IsDir() {
-		println(`JN settings file ("` + jn.SettingsFile + `") is not found!`)
-		os.Exit(0)
+		jn.Set = new(jnset.Set)
+		*jn.Set = *jnset.Default
+		return
 	}
 	bytes, err := os.ReadFile(jn.SettingsFile)
 	if err != nil {
@@ -277,29 +292,30 @@ func loadJnSet() {
 	}
 	jn.Set, err = jnset.Load(bytes)
 	if err != nil {
-		println("X settings has errors;")
+		println("jane settings has errors;")
 		println(err.Error())
 		os.Exit(0)
 	}
-	loadLang()
-	checkMode()
+	load_localization()
+	check_mode()
+	check_compiler()
 }
 
-func printlogs(p *Parser) bool {
+func print_logs(t *transpiler.Transpiler) bool {
 	var str strings.Builder
-	for _, log := range p.Warnings {
+	for _, log := range t.Warnings {
 		str.WriteString(log.String())
 		str.WriteByte('\n')
 	}
-	for _, log := range p.Errors {
+	for _, log := range t.Errors {
 		str.WriteString(log.String())
 		str.WriteByte('\n')
 	}
 	print(str.String())
-	return len(p.Errors) > 0
+	return len(t.Errors) > 0
 }
 
-func appendStandard(code *string) {
+func append_standard(code *string) {
 	year, month, day := time.Now().Date()
 	hour, min, _ := time.Now().Clock()
 	timeStr := fmt.Sprintf("%d/%d/%d %d.%d (DD/MM/YYYY) (HH.MM)",
@@ -325,45 +341,49 @@ func appendStandard(code *string) {
 	*code = sb.String()
 }
 
-func writeOutput(path, content string) {
+func write_output(path, content string) {
 	dir := filepath.Dir(path)
 	err := os.MkdirAll(dir, 0o777)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
 	}
-	bytes := []byte(content)
-	err = ioutil.WriteFile(path, bytes, 0o666)
+	f, err := os.Create(path)
+	if err != nil {
+		println(err.Error())
+		os.Exit(0)
+	}
+	_, err = f.WriteString(content)
 	if err != nil {
 		println(err.Error())
 		os.Exit(0)
 	}
 }
 
-func compile(path string, main, nolocal, justDefs bool) *Parser {
-	loadJnSet()
-	p := parser.New(nil)
+func compile(path string, main, nolocal, justDefs bool) *transpiler.Transpiler {
+	load_jnset()
+	t := transpiler.New(nil)
+	inf, err := os.Stat(jn.StdlibPath)
+	if err != nil || !inf.IsDir() {
+		t.PushErr("stdlib_not_exist")
+		return t
+	}
 	f, err := jnio.OpenJn(path)
 	if err != nil {
 		println(err.Error())
 		return nil
 	}
-	if !jnio.IsUseable(path) {
-		p.PushErr("file_not_useable")
-		return p
+	if !jnio.IsPassFileAnnotation(path) {
+		t.PushErr("file_not_useable")
+		return t
 	}
-	inf, err := os.Stat(jn.StdlibPath)
-	if err != nil || !inf.IsDir() {
-		p.PushErr("no_stdlib")
-		return p
-	}
-	p.File = f
-	p.NoLocalPkg = nolocal
-	p.Parsef(main, justDefs)
-	return p
+	t.File = f
+	t.NoLocalPkg = nolocal
+	t.Parsef(main, justDefs)
+	return t
 }
 
-func execPostCommands() {
+func exec_post_commands() {
 	for _, cmd := range jn.Set.PostCommands {
 		fmt.Println(">", cmd)
 		parts := strings.SplitN(cmd, " ", -1)
@@ -374,27 +394,44 @@ func execPostCommands() {
 	}
 }
 
-func doSpell(path, cpp string) {
-	defer execPostCommands()
-	writeOutput(path, cpp)
+func generate_compile_command(source_path string) (c, cmd string) {
+	var cpp strings.Builder
+	cpp.WriteString("-g -O0 ")
+	cpp.WriteString(source_path)
+	return jn.Set.CompilerPath, cpp.String()
+}
+
+func do_spell(cpp string) {
+	defer exec_post_commands()
+	path := filepath.Join(jn.WorkingPath, jn.Set.CppOutDir)
+	path = filepath.Join(path, jn.Set.CppOutName)
+	write_output(path, cpp)
 	switch jn.Set.Mode {
 	case jnset.ModeCompile:
-		defer os.Remove(path)
-		println("compilation is not supported yet")
+		c, cmd := generate_compile_command(path)
+		println(c + " " + cmd)
+		command := exec.Command(c, strings.SplitN(cmd, " ", -1)...)
+		err := command.Start()
+		if err != nil {
+			println(err.Error())
+		}
+		err = command.Wait()
+		if err != nil {
+			println(err.Error())
+		}
 	}
 }
 
 func main() {
 	fpath := os.Args[0]
-	p := compile(fpath, true, false, false)
-	if p == nil {
+	t := compile(fpath, true, false, false)
+	if t == nil {
 		return
 	}
-	if printlogs(p) {
+	if print_logs(t) {
 		os.Exit(0)
 	}
-	cpp := p.Cpp()
-	appendStandard(&cpp)
-	path := filepath.Join(jn.Set.CppOutDir, jn.Set.CppOutName)
-	doSpell(path, cpp)
+	cpp := t.Cpp()
+	append_standard(&cpp)
+	do_spell(cpp)
 }

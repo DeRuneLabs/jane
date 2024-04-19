@@ -28,12 +28,13 @@ import (
 )
 
 type Block struct {
+	IsUnsafe bool
 	Parent   *Block
 	SubIndex int
 	Tree     []Statement
+	Func     *Fn
 	Gotos    *Gotos
 	Labels   *Labels
-	Func     *Func
 }
 
 func (b Block) String() string {
@@ -71,5 +72,5 @@ func AddIndent() {
 }
 
 func DoneIndent() {
-	atomic.SwapUint32(&Indent, Indent-1)
+	atomic.SwapUint32(&Indent, atomic.LoadUint32(&Indent)-1)
 }

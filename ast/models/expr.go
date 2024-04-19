@@ -21,32 +21,41 @@
 package models
 
 import (
-	"strings"
-
-	"github.com/DeRuneLabs/jane/lexer/tokens"
-	"github.com/DeRuneLabs/jane/package/jnapi"
+	"github.com/DeRuneLabs/jane/lexer"
 )
 
+type BinopExpr struct {
+	Tokens []lexer.Token
+}
+
+type Binop struct {
+	L  any
+	R  any
+	Op lexer.Token
+}
+
 type Expr struct {
-	Toks      []Tok
-	Processes [][]Tok
-	Model     IExprModel
+	Tokens []lexer.Token
+	Op     any
+	Model  IExprModel
+}
+
+func (e *Expr) IsNotBinop() bool {
+	switch e.Op.(type) {
+	case BinopExpr:
+		return true
+	default:
+		return false
+	}
+}
+
+func (e *Expr) IsEmpty() bool {
+	return e.Op == nil
 }
 
 func (e Expr) String() string {
 	if e.Model != nil {
 		return e.Model.String()
 	}
-	var expr strings.Builder
-	for _, process := range e.Processes {
-		for _, tok := range process {
-			switch tok.Id {
-			case tokens.Id:
-				expr.WriteString(jnapi.OutId(tok.Kind, tok.File))
-			default:
-				expr.WriteString(tok.Kind)
-			}
-		}
-	}
-	return expr.String()
+	return ""
 }

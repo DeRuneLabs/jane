@@ -27,19 +27,23 @@ struct defer;
 
 struct defer {
   typedef std::function<void(void)> _Function_t;
+  _Function_t _function;
+
   template <class Callable>
   defer(Callable &&_function) : _function(std::forward<Callable>(_function)) {}
-  defer(defer &&_Src) : _function(std::move(_Src._function)) {
+
+  defer(defer &_Src) : _function(std::move(_Src._function)) {
     _Src._function = nullptr;
   }
+
   ~defer() noexcept {
     if (this->_function) {
       this->_function();
     }
   }
+
   defer(const defer &) = delete;
   void operator=(const defer &) = delete;
-  _Function_t _function;
 };
 
 #endif // !__JNC_DEFER_HPP

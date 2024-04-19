@@ -22,12 +22,14 @@ package jnio
 
 import "path/filepath"
 
+// file instance of fs
 type File struct {
 	Dir  string
 	Name string
 	Data []rune
 }
 
+// return full path of file
 func (f *File) Path() string {
 	return filepath.Join(f.Dir, f.Name)
 }

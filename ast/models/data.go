@@ -20,10 +20,12 @@
 
 package models
 
+import "github.com/DeRuneLabs/jane/lexer"
+
 type Data struct {
-	Tok   Tok
+	Token lexer.Token
 	Value string
-	Type  DataType
+	Type  Type
 }
 
 func (d Data) String() string {

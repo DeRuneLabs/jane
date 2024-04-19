@@ -22,54 +22,68 @@
 #define __JNC_TRAIT_HPP
 
 #include "jn_util.hpp"
-#include "typedef.hpp"
+#include "ref.hpp"
+#include <iterator>
 
 template <typename T> struct trait;
 
 template <typename T> struct trait {
 public:
-  T *_data{nil};
-  mutable uint_jnt *_ref{nil};
+  jn_ref<T> _data{nil};
+  const char *type_id{nil};
 
   trait<T>(void) noexcept {}
   trait<T>(std::nullptr_t) noexcept {}
 
   template <typename TT> trait<T>(const TT &_Data) noexcept {
-    TT *_alloc = new (std::nothrow) TT{_Data};
+    TT *_alloc{new (std::nothrow) TT};
     if (!_alloc) {
       JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    this->_data = (T *)(_alloc);
-    this->_ref = new (std::nothrow) uint_jnt{1};
-    if (!this->_ref) {
-      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
-    }
+    *_alloc = _Data;
+    this->_data = jn_ref<T>((T *)(_alloc));
+    this->type_id = typeid(_Data).name();
+  }
+
+  template <typename TT> trait<T>(const jn_ref<TT> &_Ref) noexcept {
+    this->_data = jn_ref<T>(((T *)(_Ref._alloc)), _Ref._ref);
+    this->_data.__add_ref();
+    this->type_id = typeid(_Ref).name();
   }
 
   trait<T>(const trait<T> &_Src) noexcept { this->operator=(_Src); }
 
-  void __dealloc(void) noexcept {
-    if (!this->_ref) {
-      return;
-    }
-    (*this->_ref)--;
-    if (*this->_ref != 0) {
-      return;
-    }
-    delete this->_ref;
-    this->_ref = nil;
-    delete this->_data;
-    this->_data = nil;
-  }
+  void __dealloc(void) noexcept { this->_data.__drop(); }
 
-  T &get(void) noexcept {
+  inline void __must_ok(void) noexcept {
     if (this->operator==(nil)) {
       JNC_ID(panic)(__JNC_ERROR_INVALID_MEMORY);
     }
-    return *this->_data;
+  }
+
+  inline T &get(void) noexcept {
+    this->__must_ok();
+    return this->_data;
   }
 
   ~trait(void) noexcept { this->__dealloc(); }
+
+  template <typename TT> operator TT(void) noexcept {
+    this->__must_ok();
+    if (std::strcmp(this->type_id, typeid(TT).name()) != 0) {
+      JNC_ID(panic)(__JNC_ERROR_INCOMPATIBLE_TYPE);
+    }
+    return (*((TT *)(this->_data._alloc)));
+  }
+
+  template <typename TT> operator jn_ref<TT>(void) noexcept {
+    this->__must_ok();
+    if (std::strcmp(this->type_id, typeid(jn_ref<TT>).name()) != 0) {
+      JNC_ID(panic)(__JNC_ERROR_INCOMPATIBLE_TYPE);
+    }
+    this->_data.__add_ref();
+    return (jn_ref<TT>((TT *)(this->_data._alloc), this->_data._ref));
+  }
 
   inline void operator=(const std::nullptr_t) noexcept { this->__dealloc(); }
 
@@ -78,28 +92,28 @@ public:
     if (_Src == nil) {
       return;
     }
-    (*_Src._ref)++;
     this->_data = _Src._data;
-    this->_ref = _Src._ref;
   }
 
   inline bool operator==(const trait<T> &_Src) const noexcept {
-    return this->_data == this->_data;
+    return (this->_data._alloc == this->_data._alloc);
   }
 
   inline bool operator!=(const trait<T> &_Src) const noexcept {
-    return !this->operator==(_Src);
+    return (!this->operator==(_Src));
   }
 
-  inline bool operator==(std::nullptr_t) const noexcept { return !this->_data; }
+  inline bool operator==(std::nullptr_t) const noexcept {
+    return (this->_data._alloc == nil);
+  }
 
   inline bool operator!=(std::nullptr_t) const noexcept {
-    return !this->operator==(nil);
+    return (!this->operator==(nil));
   }
 
   friend inline std::ostream &operator<<(std::ostream &_Stream,
                                          const trait<T> &_Src) noexcept {
-    return _Stream << _Src._data;
+    return (_Stream << _Src._data._alloc);
   }
 };
 

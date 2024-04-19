@@ -20,8 +20,10 @@
 
 package models
 
+import "github.com/DeRuneLabs/jane/lexer"
+
 type Namespace struct {
-	Tok  Tok
-	Ids  []string
-	Tree []Object
+	Token       lexer.Token
+	Identifiers []string
+	Tree        []Object
 }

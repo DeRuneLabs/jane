@@ -32,20 +32,21 @@ class map : public std::unordered_map<_Key_t, _Value_t> {
 public:
   map<_Key_t, _Value_t>(void) noexcept {}
   map<_Key_t, _Value_t>(const std::nullptr_t) noexcept {}
+
   map<_Key_t, _Value_t>(
-      const std::initializer_list<std::pair<_Key_t, _Value_t>> _Src) {
+      const std::initializer_list<std::pair<_Key_t, _Value_t>> _Src) noexcept {
     for (const auto _data : _Src) {
       this->insert(_data);
     }
   }
 
-  slice<_Key_t> keys(void) const noexcept {
+  slice<_Key_t> keys(void) noexcept {
     slice<_Key_t> _keys(this->size());
     uint_jnt _index{0};
     for (const auto &_pair : *this) {
       _keys._alloc[_index++] = _pair.first;
     }
-    return _keys;
+    return (_keys);
   }
 
   slice<_Value_t> values(void) const noexcept {
@@ -54,23 +55,23 @@ public:
     for (const auto &_pair : *this) {
       _keys._alloc[_index++] = _pair.second;
     }
-    return _keys;
+    return (_keys);
   }
 
   inline constexpr bool has(const _Key_t _Key) const noexcept {
-    return this->find(_Key) != this->end();
+    return (this->find(_Key) != this->end());
   }
 
-  inline int_jnt len(void) const noexcept { return this->size(); }
+  inline int_jnt len(void) const noexcept { return (this->size()); }
 
   inline void del(const _Key_t _Key) noexcept { this->erase(_Key); }
 
   inline bool operator==(const std::nullptr_t) const noexcept {
-    return this->empty();
+    return (this->empty());
   }
 
   inline bool operator!=(const std::nullptr_t) const noexcept {
-    return !this->operator==(nil);
+    return (!this->operator==(nil));
   }
 
   friend std::ostream &operator<<(std::ostream &_Stream,
@@ -86,7 +87,7 @@ public:
       }
     }
     _Stream << '}';
-    return _Stream;
+    return (_Stream);
   }
 };
 

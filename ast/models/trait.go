@@ -20,11 +20,13 @@
 
 package models
 
+import "github.com/DeRuneLabs/jane/lexer"
+
 type Trait struct {
 	Pub   bool
-	Tok   Tok
+	Token lexer.Token
 	Id    string
 	Desc  string
 	Used  bool
-	Funcs []*Func
+	Funcs []*Fn
 }
