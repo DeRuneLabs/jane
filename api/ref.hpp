@@ -18,109 +18,149 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_REF_HPP
-#define __JNC_REF_HPP
+#ifndef __JANE_REF_HPP
+#define __JANE_REF_HPP
 
 #include "atomicity.hpp"
-#include "jn_util.hpp"
 #include "typedef.hpp"
+constexpr signed int __JANE_REFERENCE_DELTA{1};
 
-template <typename T> struct jn_ref;
+template <typename T> struct ref_jnt;
 
-template <typename T> struct jn_ref {
-  T *_alloc{nil};
-  mutable uint_jnt *_ref{nil};
+template <typename T> struct ref_jnt {
+  mutable T *__alloc{nil};
+  mutable uint_jnt *__ref{nil};
 
-  jn_ref<T>(void) noexcept : jn_ref<T>(T()) {}
-  jn_ref<T>(std::nullptr_t) noexcept {}
-
-  jn_ref<T>(T *_Ptr, uint_jnt *_Ref) noexcept {
-    this->_alloc = _Ptr;
-    this->_ref = _Ref;
+  static ref_jnt<T> make(T *_Ptr, uint_jnt *_Ref) noexcept {
+    ref_jnt<T> _buffer;
+    _buffer.__alloc = _Ptr;
+    _buffer.__ref = _Ref;
+    return (_buffer);
   }
 
-  jn_ref<T>(T *_Ptr) noexcept {
-    this->_ref = (new (std::nothrow) uint_jnt);
-    if (!this->_ref) {
-      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
+  static ref_jnt<T> make(T *_Ptr) noexcept {
+    ref_jnt<T> _buffer;
+    _buffer.__ref = (new (std::nothrow) uint_jnt);
+    if (!_buffer.__ref) {
+      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    *this->_ref = 1;
-    this->_alloc = _Ptr;
+    *_buffer.__ref = 1;
+    _buffer.__alloc = _Ptr;
+    return (_buffer);
   }
 
-  jn_ref<T>(const T &_Instance) noexcept {
-    this->_alloc = (new (std::nothrow) T);
-    if (!this->_alloc) {
-      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
+  static ref_jnt<T> make(const T &_Instance) noexcept {
+    ref_jnt<T> _buffer;
+    _buffer.__alloc = (new (std::nothrow) T);
+    if (!_buffer.__alloc) {
+      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    this->_ref = (new (std::nothrow) uint_jnt);
-    if (!this->_ref) {
-      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
+    _buffer.__ref = (new (std::nothrow) uint_jnt);
+    if (!_buffer.__ref) {
+      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    *this->_ref = __JNC_REFERENCE_DELTA;
-    *this->_alloc = _Instance;
+    *_buffer.__ref = __JANE_REFERENCE_DELTA;
+    *_buffer.__aloc = _Instance;
+    return (_buffer);
   }
 
-  jn_ref<T>(const jn_ref<T> &_Ref) noexcept { this->operator=(_Ref); }
+  ref_jnt<T>(void) noexcept {}
 
-  ~jn_ref<T>(void) noexcept { this->__drop(); }
+  ref_jnt<T>(const ref_jnt<T> &_Ref) noexcept { this->operator=(_Ref); }
+
+  ~ref_jnt<T>(void) noexcept { this->_drop(); }
 
   inline int_jnt __drop_ref(void) const noexcept {
-    return (__jnc_atomic_add(this->_ref, -__JNC_REFERENCE_DELTA));
+    return (__jane_atomic_add(this->__ref, -__JANE_REFERENCE_DELTA));
   }
 
   inline int_jnt __add_ref(void) const noexcept {
-    return (__jnc_atomic_add(this->_ref, __JNC_REFERENCE_DELTA));
+    return (__jane_atomic_add(this->__ref, __JANE_REFERENCE_DELTA));
   }
 
   inline uint_jnt __get_ref_n(void) const noexcept {
-    return (__jnc_atomic_load(this->_ref));
+    return (__jane_atomic_load(this->__ref));
   }
 
-  void __drop(void) noexcept {
-    if (!this->_ref) {
+  void _drop(void) const noexcept {
+    if (!this->__ref) {
+      this->__alloc = nil;
       return;
     }
-    if ((this->__drop_ref()) != __JNC_REFERENCE_DELTA) {
+    if ((this->__drop_ref()) != __JANE_REFERENCE_DELTA) {
+      this->__ref = nil;
+      this->__alloc = nil;
       return;
     }
-    delete this->_ref;
-    this->_ref = nil;
-    delete this->_alloc;
-    this->_alloc = nil;
+    delete this->__ref;
+    this->__ref = nil;
+    delete this->__alloc;
+    this->__alloc = nil;
   }
 
-  inline T *operator->(void) noexcept { return (this->_alloc); }
+  inline bool _real() const noexcept { return (this->__alloc != nil); }
 
-  inline operator T(void) const noexcept { return (*this->_alloc); }
+  inline T *operator->(void) noexcept {
+    this->__must_ok();
+    return (*this->__alloc);
+  }
 
-  inline operator T &(void) noexcept { return (*this->_alloc); }
+  inline operator T(void) noexcept {
+    this->__must_ok();
+    return (*this->__alloc);
+  }
 
-  void operator=(const jn_ref<T> &_Ref) noexcept {
-    this->__drop();
-    if (_Ref._ref) {
+  inline operator T &(void) noexcept {
+    this->__must_ok();
+    return (*this->__alloc);
+  }
+
+  inline void __must_ok(void) const noexcept {
+    if (!this->_real()) {
+      JANE_ID(panic)(__JANE_ERROR_INVALID_MEMORY);
+    }
+  }
+
+  void operator=(const ref_jnt<T> &_Ref) noexcept {
+    this->_drop();
+    if (_Ref.__ref) {
       _Ref.__add_ref();
     }
-    this->_ref = _Ref._ref;
-    this->_alloc = _Ref._alloc;
+    this->__ref = _Ref.__ref;
+    this->__alloc = _Ref.__alloc;
   }
 
-  inline void operator=(const T &_Val) const noexcept {
-    (*this->_alloc) = (_Val);
+  inline bool operator==(const T &_Val) const noexcept {
+    return (this->__alloc == nil ? false : *this->__alloc == _Val);
   }
 
-  inline bool operator==(const jn_ref<T> &_Ref) const noexcept {
-    return ((*this->_alloc) == (*_Ref._alloc));
+  inline bool operator!=(const T &_Val) const noexcept {
+    return (!this->operator==(_Val));
   }
 
-  inline bool operator!=(const jn_ref<T> &_Ref) const noexcept {
+  inline bool operator==(const ref_jnt<T> &_Ref) const noexcept {
+    if (this->__alloc == nil) {
+      return _Ref.__alloc == nil;
+    }
+    if (_Ref.__alloc == nil) {
+      return false;
+    }
+    return ((*this->__alloc) == (*_Ref.__alloc));
+  }
+
+  inline bool operator!=(const ref_jnt<T> &_Ref) const noexcept {
     return (!this->operator==(_Ref));
   }
 
   friend inline std::ostream &operator<<(std::ostream &_Stream,
-                                         const jn_ref<T> &_Ref) noexcept {
-    return (_Stream << _Ref.operator T());
+                                         const ref_jnt<T> &_Ref) noexcept {
+    if (!_Ref._real()) {
+      _Stream << "nil";
+    } else {
+      _Stream << _Ref.operator T();
+    }
+    return (_Stream);
   }
 };
 
-#endif // !__JNC_REF_HPP
+#endif // !__JANE_REF_HPP

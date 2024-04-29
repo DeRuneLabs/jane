@@ -18,20 +18,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_ARRAY_HPP
-#define __JNC_ARRAY_HPP
+#ifndef __JANE_ARRAY_HPP
+#define __JANE_ARRAY_HPP
 
-#include "jn_util.hpp"
 #include "slice.hpp"
 #include "typedef.hpp"
 
-template <typename _Item_t, const uint_jnt _N> struct array;
+template <typename _Item_t, const uint_jnt _N> struct array_jnt;
 
-template <typename _Item_t, const uint_jnt _N> struct array {
+template <typename _Item_t, const uint_jnt _N> struct array_jnt {
 public:
   std::array<_Item_t, _N> _buffer{};
-
-  array<_Item_t, _N>(const std::initializer_list<_Item_t> &_Src) noexcept {
+  array_jnt<_Item_t, _N>(const std::initializer_list<_Item_t> &_Src) noexcept {
     const auto _Src_begin{_Src.begin()};
     for (int_jnt _index{0}; _index < _Src.size(); ++_index) {
       this->_buffer[_index] = *((_Item_t *)(_Src_begin + _index));
@@ -53,60 +51,60 @@ public:
     return (&this->_buffer[_N]);
   }
 
-  inline slice<_Item_t> ___slice(const int_jnt &_Start,
-                                 const int_jnt &_End) const noexcept {
-    if (_Start < 0 || _End < 0 || _Start > _End) {
+  inline slice_jnt<_Item_t> ___slice(const int_jnt &_Start,
+                                     const int_jnt &_End) const noexcept {
+    if (_Start < 0 || _End < 0 || _Start > _End || _End > this->_len()) {
       std::stringstream _sstream;
-      __JNC_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(_sstream, _Start, _End);
-      JNC_ID(panic)(_sstream.str().c_str());
+      __JANE_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(_sstream, _Start, _End);
+      JANE_ID(panic)(_sstream.str().c_str());
     } else if (_Start == _End) {
-      return (slice<_Item_t>());
+      return (slice_jnt<_Item_t>());
     }
     const int_jnt _n{_End - _Start};
-    slice<_Item_t> _slice(_n);
+    slice_jnt<_Item_t> _slice(_n);
     for (int_jnt _counter{0}; _counter < _n; ++_counter) {
       _slice[_counter] = this->_buffer[_Start + _counter];
     }
     return (_slice);
   }
 
-  inline slice<_Item_t> ___slice(const int_jnt &_Start) const noexcept {
-    return this->___slice(_Start, this->len());
+  inline slice_jnt<_Item_t> ___slice(const int_jnt &_Start) const noexcept {
+    return this->___slice(_Start, this->_len());
   }
 
-  inline slice<_Item_t> ___slice(void) const noexcept {
-    return this->___slice(0, this->len());
+  inline slice_jnt<_Item_t> ___slice(void) const noexcept {
+    return this->___slice(0, this->_len());
   }
 
-  inline constexpr int_jnt len(void) const noexcept { return (_N); }
+  inline constexpr int_jnt _len(void) const noexcept { return (_N); }
 
-  inline constexpr bool empty(void) const noexcept { return (_N == 0); }
+  inline constexpr bool _empty(void) const noexcept { return (_N == 0); }
 
   inline constexpr bool
-  operator==(const array<_Item_t, _N> &_Src) const noexcept {
-    return (this->_buffer == _Src._buffer);
+  operator==(const array_jnt<_Item_t, _N> &_Src) const noexcept {
+    return (!this->operator==(_Src));
   }
 
   inline constexpr bool
-  operator!=(const array<_Item_t, _N> &_Src) const noexcept {
+  operator!=(const array_jnt<_Item_t, _N> &_Src) const noexcept {
     return (!this->operator==(_Src));
   }
 
   _Item_t &operator[](const int_jnt &_Index) {
-    if (this->empty() || _Index < 0 || this->len() <= _Index) {
+    if (this->_empty() || _Index < 0 || this->_len() <= _Index) {
       std::stringstream _sstream;
-      __JNC_WRITE_ERROR_INDEX_OUT_OF_RANGE(_sstream, _Index);
-      JNC_ID(panic)(_sstream.str().c_str());
+      __JANE_WRITE_ERROR_INDEX_OUT_OF_RANGE(_sstream, _Index);
+      JANE_ID(panic)(_sstream.str().c_str());
     }
     return (this->_buffer[_Index]);
   }
 
   friend std::ostream &operator<<(std::ostream &_Stream,
-                                  const array<_Item_t, _N> &_Src) noexcept {
+                                  const array_jnt<_Item_t, _N> &_Src) noexcept {
     _Stream << '[';
-    for (int_jnt _index{0}; _index < _Src.len();) {
+    for (int_jnt _index{0}; _index < _Src._len();) {
       _Stream << _Src._buffer[_index++];
-      if (_index < _Src.len()) {
+      if (_index < _Src._len()) {
         _Stream << " ";
       }
     }
@@ -115,4 +113,4 @@ public:
   }
 };
 
-#endif // !__JNC_ARRAY_HPP
+#endif // !__JANE_ARRAY_HPP

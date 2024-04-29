@@ -18,20 +18,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_ATOMICITY_HPP
-#define __JNC_ATOMICITY_HPP
+#ifndef __JANE_ATOMICITY_HPP
+#define __JANE_ATOMICITY_HPP
 
-#define __jnc_atomic_store_explicit(_ADDR, _VAL, _MO)                          \
+#define __jane_atomic_store_explicit(_ADDR, _VAL, _MO)                         \
   (__extension__({                                                             \
     auto __atomic_store_ptr = (_ADDR);                                         \
-    __typeof__((void)(0), *__atomic_store_ptr) __atomic_store_tmp = (_VAL);    \
+    __typeof__((void)(0), *__atomi_store_ptr) __atomic_store_tmp = (_VAL);     \
     __atomic_store(__atomic_store_ptr, &__atomic_store_tmp, (_MO));            \
   }))
 
-#define __jnc_atomic_store(_ADDR, _VAL)                                        \
-  (__jnc_atomic_store_explicit((_ADDR), (_VAL), __ATOMIC_SEQ_CST))
+#define __jane_atomic_store(_ADDR, _VAL)                                       \
+  (__jane_atomic_store_explicit((_ADDR), (_VAL), __ATOMIC_SEQ_CST))
 
-#define __jnc_atomic_load_explicit(_ADDR, _MO)                                 \
+#define __jane_atomic_load_explicit(_ADDR, _MO)                                \
   (__extension__({                                                             \
     auto __atomic_load_ptr = (_ADDR);                                          \
     __typeof__((void)(0), *__atomic_load_ptr) __atomic_load_tmp;               \
@@ -39,38 +39,39 @@
     __atomic_load_tmp;                                                         \
   }))
 
-#define __jnc_atomic_load(_ADDR)                                               \
-  __jnc_atomic_load_explicit(_ADDR, __ATOMIC_SEQ_CST)
+#define __jane_atomic_load(_ADDR)                                              \
+  __jane_atomic_load_explicit(_ADDR, __ATOMIC_SEQ_CST)
 
-#define __jnc_atomic_swap_explicit(_ADDR, _NEW, _MO)                           \
+#define __jane_atomic_swap_explicit(_ADDR, _NEW, _MO)                          \
   (__extension__({                                                             \
     auto __atomic_exchange_ptr = (_ADDR);                                      \
     __typeof__((void)(0), *__atomic_exchange_ptr) __atomic_exchange_val =      \
         (_NEW);                                                                \
     __typeof__((void)(0), *__atomic_exchange_ptr) __atomic_exchange_tmp;       \
     __atomic_exchange(__atomic_exchange_ptr, &__atomic_exchange_val,           \
-                      &__atomic_exchange_tmp, (_MOD));                         \
+                      &__atomic_exchange_tmp, (_MO));                          \
     __atomic_exchange_tmp;                                                     \
   }))
 
-#define __jnc_atomic_swap(_ADDR, _NEW)                                         \
-  (__jnc_atomic_swap_explicit((_ADDR), (_NEW), (__ATOMIC_SEQ_CST)))
+#define __jane_atomic_swap(_ADDR, _NEW)                                        \
+  (__jane_atomic_swap_explicit((_ADDR), (_NEW), (ATOMIC_SEQ_CST)))
 
-#define __jnc_atomic_compare_swap_explicit(_ADDR, _OLD, _NEW, _SUC, _FAIL)     \
+#define __jane_atomic_compare_swap_explicit(_ADDR, _OLD, _NEW, _SUC, _FAIL)    \
   (__extension__({                                                             \
     auto __atomic_compare_exchange_ptr = (_ADDR);                              \
     __typeof__((void)(0),                                                      \
-               *__atomic_compare_ptr) __atomic_compare_exchange_tmp = (_NEW);  \
+               *__atomic_compare_exchange_ptr) __atomic_compare_exchange_tmp = \
+        (_NEW);                                                                \
     __atomic_compare_exchange(__atomic_compare_exchange_ptr, (_OLD),           \
                               &__atomic_compare_exchange_tmp, 0, (_SUC),       \
                               (_FAIL));                                        \
   }))
 
-#define __jnc_atomic_compare_swap(_ADDR, _OLD, _NEW)                           \
-  (__jnc_atomic_compare_swap_explicit((_ADDR), (_OLD), (_NEW),                 \
-                                      __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+#define __jane_atomic_compare_swap(_ADDR, _OLD, _NEW)                          \
+  (__jane_atomic_compare_swap_explicit((_ADDR), (_OLD), (_NEW),                \
+                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
 
-#define __jnc_atomic_add(_ADDR, _DELTA)                                        \
+#define __jane_atomic_add(_ADDR, _DELTA)                                       \
   (__atomic_fetch_add((_ADDR), (_DELTA), __ATOMIC_SEQ_CST))
 
-#endif // !__JNC_ATOMICITY_HPP
+#endif // !__JANE_ATOMICITY_HPP

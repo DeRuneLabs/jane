@@ -18,80 +18,104 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_BUILTIN_HPP
-#define __JNC_BUILTIN_HPP
+#ifndef __JANE_BUILTIN_HPP
+#define __JANE_BUILTIN_HPP
 
-#include "jn_util.hpp"
 #include "ref.hpp"
 #include "slice.hpp"
+#include "str.hpp"
 #include "typedef.hpp"
 
-typedef u8_jnt(JNC_ID(byte));
-typedef i32_jnt(JNC_ID(rune));
+typedef u8_jnt(JANE_ID(byte));
+typedef i32_jnt(JANE_ID(rune));
+
+template <typename _Obj_t> str_jnt __jane_to_str(const _Obj_t &_Obj) noexcept;
+slice_jnt<u16_jnt> __jane_utf16_from_str(const str_jnt &_Str) noexcept;
 
 template <typename _Obj_t>
-inline void JNC_ID(print)(const _Obj_t &_Obj) noexcept;
+inline void JANE_ID(print)(const _Obj_t &_Obj) noexcept;
 template <typename _Obj_t>
-inline void JNC_ID(println)(const _Obj_t &_Obj) noexcept;
-
-struct JNC_ID(Error);
-
+inline void JANE_ID(println)(const _Obj_t &_Obj) noexcept;
+struct JANE_ID(Error);
 template <typename _Item_t>
-int_jnt JNC_ID(copy)(const slice<_Item_t> &_Src,
-                     const slice<_Item_t> &_Components) noexcept;
+int_jnt JANE_ID(copy)(const slice_jnt<_Item_t> &_Dest,
+                      const slice_jnt<_Item_t> &Components) noexcept;
 
-template <typename T> inline jn_ref<T> JNC_ID(new)(void) noexcept;
+template <typename T> inline ref_jnt<T> JANE_ID(new)(void) noexcept;
+template <typename T> inline ref_jnt<T> JANE_ID(new)(const T &_Expr) noexcept;
+template <typename T> inline void JANE_ID(drop)(T &_Obj) noexcept;
+template <typename T> inline bool JANE_ID(real)(T &_Obj) noexcept;
 
-// panic function will be used when on main header
 template <typename _Obj_t>
-inline void JNC_ID(print)(const _Obj_t &_Obj) noexcept {
+inline void JANE_ID(print)(const _Obj_t &_Obj) noexcept {
+#ifdef _WINDOWS
+  const str_jnt _str{__jane_to_str<_Obj_t>(_Obj)};
+  const slice_jnt<u16_jnt> _utf16_str{__jane_utf16_from_str(_str)};
+  HANDLE _handle{GetStdHandle(STD_OUTPUT_HANDLE)};
+  WriteConsoleW(_handle, &_utf16_str[0], _utf16_str._len(), nullptr, nullptr);
+#else
   std::cout << _Obj;
+#endif // DEBUG
 }
 
 template <typename _Obj_t>
-inline void JNC_ID(println)(const _Obj_t &_Obj) noexcept {
-  JNC_ID(print)(_Obj);
+inline void JANE_ID(println)(const _Obj_t &_Obj) noexcept {
+  JANE_ID(print)(_Obj);
   std::cout << std::endl;
 }
 
-struct JNC_ID(Error) {
-  // virtual str_jnt error(void) {return {};}
-  virtual ~JNC_ID(Error)(void) noexcept {}
+struct JANE_ID(Error) {
+  virtual str_jnt _error(void) { return {}; }
+  virtual ~JANE_ID(Error)(void) noexcept {}
+
+  bool operator==(const JANE_ID(Error) & _Src) { return false; }
+  bool operator!=(const JANE_ID(Error) & _Src) {
+    return !this->operator==(_Src);
+  }
 };
 
 template <typename _Item_t>
-int_jnt JNC_ID(copy)(const slice<_Item_t> &_Dest,
-                     const slice<_Item_t> &_Src) noexcept {
-  if (_Dest.empty() || _Src.empty()) {
+int_jnt JANE_ID(copy)(const slice_jnt<_Item_t> &_Dest,
+                      const slice_jnt<_Item_t> &_Src) noexcept {
+  if (_Dest._empty() || _Src._empty()) {
     return 0;
   }
-  int_jnt _len = (_Dest.len() > _Src.len())   ? _Src.len()
-                 : (_Src.len() > _Dest.len()) ? _Dest.len()
-                                              : _Src.len();
+  int_jnt _len = (_Dest._len() > _Src._len())   ? _Src._len()
+                 : (_Src._len() > _Dest._len()) ? _Dest._len()
+                                                : _Src._len();
   for (int_jnt _index{0}; _index < _len; ++_index) {
-    _Dest._slice[_index] = _Src._slice[_index];
+    _Dest.__slice[_index] = _Src.__slice[_index];
   }
   return (_len);
-};
+}
 
 template <typename _Item_t>
-slice<_Item_t> JNC_ID(append)(const slice<_Item_t> &_Src,
-                              const slice<_Item_t> &_Components) noexcept {
-  const int_jnt _N{_Src.len() + _Components.len()};
-  slice<_Item_t> _buffer{slice<_Item_t>(_N)};
-  JNC_ID(copy)<_Item_t>(_buffer, _Src);
-  for (int_jnt _index{0}; _index < _Components.len(); ++_index) {
-    _buffer[_Src.len() + _index] = _Components._slice[_index];
+slice_jnt<_Item_t>
+JANE_ID(append)(const slice_jnt<_Item_t> &_Src,
+                const slice_jnt<_Item_t> &_Components) noexcept {
+  const int_jnt _N{_Src._len() + _Components._len()};
+  slice_jnt<_Item_t> _buffer(_N);
+  JANE_ID(copy)<_Item_t>(_buffer, _Src);
+  for (int_jnt _index{0}; _index < _Components._len(); ++_index) {
+    _buffer[_Src._len() + _index] = _Components.__slice[_index];
   }
   return (_buffer);
 }
 
-template <typename T> inline jn_ref<T> JNC_ID(new)(void) noexcept {
-  T *_alloc{new (std::nothrow) T};
-  if (!_alloc) {
-    JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
-  }
-  return (jn_ref<T>(_alloc));
+template <typename T> inline ref_jnt<T> JANE_ID(new)(void) noexcept {
+  return (ref_jnt<T>());
 }
 
-#endif // !__JNC_BUILTIN_HPP
+template <typename T> inline ref_jnt<T> JANE_ID(new)(const T &_Expr) noexcept {
+  return (ref_jnt<T>::make(_Expr));
+}
+
+template <typename T> inline void JANE_ID(drop)(T &_Obj) noexcept {
+  _Obj._drop();
+}
+
+template <typename T> inline bool JANE_ID(real)(T &_Obj) noexcept {
+  return (_Obj._real());
+}
+
+#endif // !__JANE_BUILTIN_HPP

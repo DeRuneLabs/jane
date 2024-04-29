@@ -18,32 +18,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_DEFER_HPP
-#define __JNC_DEFER_HPP
+#ifndef __JANE_DEFER_HPP
+#define __JANE_DEFER_HPP
 
-#include "jn_util.hpp"
+#include <functional>
 
-struct defer;
-
-struct defer {
-  typedef std::function<void(void)> _Function_t;
-  _Function_t _function;
-
-  template <class Callable>
-  defer(Callable &&_function) : _function(std::forward<Callable>(_function)) {}
-
-  defer(defer &_Src) : _function(std::move(_Src._function)) {
-    _Src._function = nullptr;
+struct defer_base {
+  std::function<void(void)> __scope;
+  defer_base(const std::function<void(void)> &_Fn) noexcept {
+    this->__scope = _Fn;
   }
-
-  ~defer() noexcept {
-    if (this->_function) {
-      this->_function();
-    }
+  ~defer_base(void) noexcept {
+    this->__scope();
   }
-
-  defer(const defer &) = delete;
-  void operator=(const defer &) = delete;
 };
 
-#endif // !__JNC_DEFER_HPP
+#define __JANE_DEFER(_BLOCK) defer_base __JANE_CONCAT(__deferred_, __LINE__) { [&]_BLOCK }
+
+#endif // !__JANE_DEFER_HPP

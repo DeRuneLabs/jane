@@ -18,18 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_ANY_HPP
-#define __JNC_ANY_HPP
+#ifndef __JANE_ANY_HPP
+#define __JANE_ANY_HPP
 
-#include "jn_util.hpp"
 #include "ref.hpp"
-#include "slice.hpp"
-
+#include "typedef.hpp"
 struct any_jnt;
 
 struct any_jnt {
-  jn_ref<void *> _data{nil};
-  const char *_type_id{nil};
+public:
+  ref_jnt<void *> __data{};
+  const char *__type_id{nil};
+
+  any_jnt(void) noexcept {}
 
   template <typename T> any_jnt(const T &_Expr) noexcept {
     this->operator=(_Expr);
@@ -40,18 +41,20 @@ struct any_jnt {
   ~any_jnt(void) noexcept { this->__dealloc(); }
 
   inline void __dealloc(void) noexcept {
-    this->_type_id = nil;
-    if (!this->_data._ref) {
-      this->_data._alloc = nil;
+    this->__type_id = nil;
+    if (!this->__data.__ref) {
+      this->__data.__alloc = nil;
       return;
     }
-    if ((this->_data.__get_ref_n()) != __JNC_REFERENCE_DELTA) {
+    if ((this->__data.__get_ref_n()) != __JANE_REFERENCE_DELTA) {
       return;
     }
-    delete this->_data._ref;
-    this->_data._ref = nil;
-    std::free(*this->_data._alloc);
-    this->_data._alloc = nil;
+    delete this->__data.__ref;
+    this->__data.__ref = nil;
+    std::free(*this->__data.__alloc);
+    *this->__data.__alloc = nil;
+    std::free(this->__data.__alloc);
+    this->__data.__alloc = nil;
   }
 
   template <typename T> inline bool __type_is(void) const noexcept {
@@ -61,23 +64,23 @@ struct any_jnt {
     if (this->operator==(nil)) {
       return (false);
     }
-    return std::strcmp(this->_type_id, typeid(T).name()) == 0;
+    return std::strcmp(this->__type_id, typeid(T).name()) == 0;
   }
 
   template <typename T> void operator=(const T &_Expr) noexcept {
     this->__dealloc();
     T *_alloc{new (std::nothrow) T};
     if (!_alloc) {
-      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
+      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
     }
     void **_main_alloc{new (std::nothrow) void *};
     if (!_main_alloc) {
-      JNC_ID(panic)(__JNC_ERROR_MEMORY_ALLOCATION_FAILED);
+      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
     }
     *_alloc = _Expr;
     *_main_alloc = ((void *)(_alloc));
-    this->_data = jn_ref<void *>(_main_alloc);
-    this->_type_id = typeid(_Expr).name();
+    this->__data = ref_jnt<void *>::make(_main_alloc);
+    this->__type_id = typeid(_Expr).name();
   }
 
   void operator=(const any_jnt &_Src) noexcept {
@@ -86,20 +89,20 @@ struct any_jnt {
       return;
     }
     this->__dealloc();
-    this->_data = _Src._data;
-    this->_type_id = _Src._type_id;
+    this->__data = _Src.__data;
+    this->__type_id = _Src.__type_id;
   }
 
   inline void operator=(const std::nullptr_t) noexcept { this->__dealloc(); }
 
   template <typename T> operator T(void) const noexcept {
     if (this->operator==(nil)) {
-      JNC_ID(panic)(__JNC_ERROR_INVALID_MEMORY);
+      JANE_ID(panic)(__JANE_ERROR_INVALID_MEMORY);
     }
     if (!this->__type_is<T>()) {
-      JNC_ID(panic)(__JNC_ERROR_INCOMPATIBLE_TYPE);
+      JANE_ID(panic)(__JANE_ERROR_INCOMPATIBLE_TYPE);
     }
-    return (*((T *)(*this->_data._alloc)));
+    return (*(T *)(*this->__data.__alloc));
   }
 
   template <typename T> inline bool operator==(const T &_Expr) const noexcept {
@@ -115,7 +118,7 @@ struct any_jnt {
     if (this->operator==(nil) && _Any.operator==(nil)) {
       return (true);
     }
-    return (std::strcmp(this->_type_id, _Any._type_id) == 0);
+    return (std::strcmp(this->__type_id, _Any.__type_id) == 0);
   }
 
   inline bool operator!=(const any_jnt &_Any) const noexcept {
@@ -123,15 +126,14 @@ struct any_jnt {
   }
 
   inline bool operator==(std::nullptr_t) const noexcept {
-    return (!this->_data._alloc);
+    return (!this->__data.__alloc);
   }
 
   inline bool operator!=(std::nullptr_t) const noexcept {
     return (!this->operator==(nil));
   }
 
-  friend std::ostream &operator<<(std::ostream &_Stream,
-                                  const any_jnt &_Src) noexcept {
+  friend std::ostream &operator<<(std::ostream &_Stream, const any_jnt &_Src) noexcept {
     if (_Src.operator!=(nil)) {
       _Stream << "<any>";
     } else {
@@ -141,4 +143,4 @@ struct any_jnt {
   }
 };
 
-#endif // !__JNC_ANY_HPP
+#endif // !__JANE_ANY_HPP

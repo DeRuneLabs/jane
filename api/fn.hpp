@@ -18,35 +18,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JNC_FN_HPP
-#define __JNC_FN_HPP
+#ifndef __JANE_FN_HPP
+#define __JANE_FN_HPP
 
-#include "jn_util.hpp"
-#include "slice.hpp"
-#include "str.hpp"
+#include "typedef.hpp"
+#include <cstddef>
 
-template <typename _Fn_t> struct fn;
+template <typename _Function_t> struct fn_jnt;
 
-template <typename _Fn_t> struct fn {
-  _Fn_t _buffer;
+template <typename _Function_t> struct fn_jnt {
+  std::function<_Function_t> __buffer;
 
-  fn<_Fn_t>(void) noexcept {}
+  fn_jnt<_Function_t>(void) noexcept {}
 
-  fn<_Fn_t>(const _Fn_t &_Fn) noexcept { this->_buffer = _Fn; }
-
-  template <typename... _Args_t> auto operator()(_Args_t... _Args) noexcept {
-    if (this->_buffer == nil) {
-      JNC_ID(panic)(__JNC_ERROR_INVALID_MEMORY);
-    }
-    return (this->_buffer(_Args...));
+  fn_jnt<_Function_t>(const std::function<_Function_t> &_Function) noexcept {
+    this->__buffer = _Function;
+  }
+  fn_jnt<_Function_t>(const _Function_t &_Function) noexcept {
+    this->__buffer = _Function;
   }
 
-  inline void operator=(std::nullptr_t) noexcept { this->_buffer = nil; }
+  template <typename... _Arguments_t>
+  auto operator()(_Arguments_t... _Arguments) noexcept {
+    if (this->__buffer == nil) {
+      JANE_ID(panic)(__JANE_ERROR_INVALID_MEMORY);
+    }
+    return (this->__buffer(_Arguments...));
+  }
 
-  inline void operator=(const _Fn_t &_Func) noexcept { this->_buffer = _Func; }
+  inline void operator=(std::nullptr_t) noexcept { this->__buffer = nil; }
+
+  inline void operator=(const std::function<_Function_t> &_Function) noexcept {
+    this->__buffer = _Function;
+  }
+
+  inline void operator=(const _Function_t &_Function) noexcept {
+    this->__buffer = _Function;
+  }
 
   inline bool operator==(std::nullptr_t) const noexcept {
-    return (this->_buffer == nil);
+    return (this->__buffer == nil);
   }
 
   inline bool operator!=(std::nullptr_t) const noexcept {
@@ -54,4 +65,4 @@ template <typename _Fn_t> struct fn {
   }
 };
 
-#endif // !__JNC_FN_HPP
+#endif // !__JANE_FN_HPP
