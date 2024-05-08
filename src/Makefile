@@ -18,10 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-MAIN_LOCATION = command/jn/main.go
-BIN_FILE = jane
-DIST_FOLDER = dist
-SET_FILE = jn.set
+MAIN_LOCATION = command/jane/main.go
+BIN_LOCATION = ../bin/jane
 
 HOST_SYSTEM = $(shell uname | cut -f 1 -d_)
 SYSTEM ?= $(HOST_SYSTEM)
@@ -56,10 +54,10 @@ all:
 .PHONY: build
 build:
 	@echo "build project"
-	$(DEFAULT_GO) build -o $(BIN_FILE) -v $(MAIN_LOCATION)
+	$(DEFAULT_GO) build -o $(BIN_LOCATION) -v $(MAIN_LOCATION)
 
 # NOTE: DO NOT CHANGE THIS ONE MAKEFILE
 .PHONY: clean
 clean:
 	@echo "clean project"
-	rm -rf $(DIST_FOLDER) $(SET_FILE) $(BIN_FILE)
+	rm -rf $(DIST_FOLDER) $(SET_FILE) $(BIN_LOCATION)

@@ -22,4 +22,7 @@ jobs:
           go-version: "1.21.x"
 
       - name: build jane
-        run: sh ./jn_scripts/build.sh
+        run: |
+          brew install make
+          cd src
+          make all
