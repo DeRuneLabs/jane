@@ -1,0 +1,111 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// signed integer
+type i8: [compiler_implemented]
+type i16: [compiler_implemented]
+type i32: [compiler_implemented]
+type i64: [compiler_implemented]
+
+// unsigned integer
+type u8: [compiler_implemented]
+type u16: [compiler_implemented]
+type u32: [compiler_implemented]
+type u64: [compiler_implemented]
+
+// floating point
+type f32: [compiler_implemented]
+type f64: [compiler_implemented]
+
+// platform dependent integer type
+type int: [compiler_implemented]
+
+// platform dependent unsigned integer type
+type uint: [compiler_implemented]
+
+// platform dependent unsigned integer type
+// for casting pointer to integer
+type uintptr: [compiler_implemented]
+
+// encoded character string UTF8
+type str: [compiler_implemented]
+
+// boolean type for logical expression
+type bool: [compiler_implemented]
+
+// can be hold any data type and nil
+// only support equal (==) and not equal (!=) operators
+type any: [compiler_implemented]
+
+// alias for u8
+// by convention, to distinguish byte values from 8-bit unsigned
+type byte: u8
+
+// alias for i32
+// by convetion, to distinguish character values from values
+type rune: i32
+
+// error handling trait of standard library
+// used for erro handling and panic
+trait Error {
+  fn error(self): str
+}
+
+// print value to command line
+fn print(v)
+
+// same like print function
+// but end with newline after print value
+fn println(v)
+
+// panic program with given error data
+// data converting to str and panics with
+// error trait compatible structure instance
+fn panic(error: any)
+
+// recover error if exist and call given
+// function with handled error instance
+fn recover(handler: fn(Error))
+
+// return instance of data type for supported types
+fn make(T, ...V): T
+
+// copy element of source to destination slice
+// return number of copied elements
+// source can be any data type that supported by destination type
+fn copy(mut dest: []T, src): int
+
+// create new require size slice, copies all elements of given
+// source slice and appends given values to end of new slice
+// return new slice, not changes given source slice.
+fn append(src: []T, values: ...T): []T
+
+// return nil reference of data type
+fn new(T): &T
+
+// return reference to new heap-allocation initialized with expression
+// of data type if allocation is success, panic if not
+fn new(T, v: T): &T
+
+// drop allocation and reference counting of reference
+fn drop(&T)
+
+// report reference is not nil
+fn real(&T): bool

@@ -1,0 +1,427 @@
+// copyright (c) 2024 arfy slowy - derunelabs
+//
+// permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "software"), to deal
+// in the software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the software, and to permit persons to whom the software is
+// furnished to do so, subject to the following conditions:
+//
+// the above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the software.
+//
+// the software is provided "as is", without warranty of any kind, express or
+// implied, including but not limited to the warranties of merchantability,
+// fitness for a particular purpose and noninfringement. in no event shall the
+// authors or copyright holders be liable for any claim, damages or other
+// liability, whether in an action of contract, tort or otherwise, arising from,
+// out of or in connection with the software or the use or other dealings in the
+// software.
+
+package main
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/DeRuneLabs/jane"
+	"github.com/DeRuneLabs/jane/build"
+	"github.com/DeRuneLabs/jane/command/jane/gen"
+	"github.com/DeRuneLabs/jane/lexer"
+	"github.com/DeRuneLabs/jane/parser"
+)
+
+const (
+	mode_transpile      = "transpile"
+	mode_compile        = "compiler"
+	compiler_gcc        = "gcc"
+	compiler_clang      = "clang"
+	compiler_path_gcc   = "g++"
+	compiler_path_clang = "clang++"
+)
+
+var (
+	out_dir  = "dist"
+	mode     = mode_compile
+	out_name = "ir.cpp"
+	out      = ""
+)
+
+var (
+	compiler      = ""
+	compiler_path = ""
+	jane_header   = ""
+)
+
+const (
+	cmd_help    = "help"
+	cmd_version = "version"
+	cmd_tool    = "tool"
+)
+
+var HELP_MAP = [...][2]string{
+	{cmd_help, "Show help"},
+	{cmd_version, "Show version"},
+	{cmd_tool, "tool for effective jane"},
+}
+
+func help() {
+	if len(os.Args) > 2 {
+		print_error_message("invalid command: " + os.Args[2])
+		return
+	}
+	max := len(HELP_MAP[0][0])
+	for _, k := range HELP_MAP {
+		n := len(k[0])
+		if n > max {
+			max = n
+		}
+	}
+	var sb strings.Builder
+	const SPACE = 5
+	for _, part := range HELP_MAP {
+		sb.WriteString(part[0])
+		sb.WriteString(strings.Repeat(" ", (max-len(part[0]))+SPACE))
+		sb.WriteString(part[1])
+		sb.WriteByte('\n')
+	}
+	println(sb.String()[:sb.Len()-1])
+}
+
+func print_error_message(msg string) {
+	println(msg)
+}
+
+func exit_err(msg string) {
+	print_error_message(msg)
+	const ERROR_EXIT_CODE = 0
+	os.Exit(ERROR_EXIT_CODE)
+}
+
+func version() {
+	if len(os.Args) > 2 {
+		print_error_message("invalid command: " + os.Args[2])
+		return
+	}
+	println("jane version", jane.VERSION)
+}
+
+func list_horizontal_slice(s []string) string {
+	lst := fmt.Sprint(s)
+	return lst[1 : len(lst)-1]
+}
+
+func tool() {
+	if len(os.Args) == 2 {
+		println(`tool commands:
+ distos     Lists all supported operating systems
+ distarch   Lists all supported architects`)
+		return
+	} else if len(os.Args) > 3 {
+		print_error_message("invalid command: " + os.Args[3])
+		return
+	}
+	cmd := os.Args[2]
+	switch cmd {
+	case "distos":
+		print("supported operating systems:\n ")
+		println(list_horizontal_slice(build.DISTOS))
+	case "distarch":
+		print("supported architects:\n ")
+		println(list_horizontal_slice(build.DISTARCH))
+	default:
+		print_error_message("Undefined command: " + cmd)
+	}
+}
+
+func process_command() bool {
+	switch os.Args[1] {
+	case cmd_help:
+		help()
+	case cmd_version:
+		version()
+	case cmd_tool:
+		tool()
+	default:
+		return false
+	}
+	return true
+}
+
+func init() {
+	jane_header = filepath.Join(jane.EXEC_PATH, "..")
+	jane_header = filepath.Join(jane_header, "api")
+	jane_header = filepath.Join(jane_header, "jane.hpp")
+	if runtime.GOOS == "windows" {
+		compiler = compiler_gcc
+		compiler_path = compiler_path_gcc
+	} else {
+		compiler = compiler_clang
+		compiler_path = compiler_path_clang
+	}
+
+	if len(os.Args) < 2 {
+		os.Exit(0)
+	}
+	if process_command() {
+		os.Exit(0)
+	}
+}
+
+func check_mode() {
+	if mode != mode_transpile && mode != mode_compile {
+		println(build.Errorf("invalid_value_for_key", mode, "mode"))
+		os.Exit(0)
+	}
+}
+
+func check_compiler() {
+	if compiler != compiler_gcc && compiler != compiler_clang {
+		println(build.Errorf("invalid_value_for_key", compiler, "compiler"))
+		os.Exit(0)
+	}
+}
+
+func set() {
+	check_mode()
+	check_compiler()
+}
+
+func print_logs(p *parser.Parser) bool {
+	var str strings.Builder
+	for _, l := range p.Errors {
+		str.WriteString(l.String())
+		str.WriteByte('\n')
+	}
+	print(str.String())
+	return len(p.Errors) > 0
+}
+
+func append_standard(obj_code *string) {
+	y, m, d := time.Now().Date()
+	h, min, _ := time.Now().Clock()
+	timeStr := fmt.Sprintf("%d/%d/%d %d.%d (DD/MM/YYYY) (HH.MM)",
+		d, m, y, h, min)
+	var sb strings.Builder
+	sb.WriteString("// Generated by Jane Compiler.\n")
+	sb.WriteString("// Jane Compiler version: ")
+	sb.WriteString(jane.VERSION)
+	sb.WriteByte('\n')
+	sb.WriteString("// Date: ")
+	sb.WriteString(timeStr)
+	sb.WriteString("\n\n#include \"")
+	sb.WriteString(jane_header)
+	sb.WriteString("\"\n\n")
+	sb.WriteString(*obj_code)
+	sb.WriteString(`
+
+int main(int argc, char *argv[]) {
+  std::set_terminate( &__jane_terminate_handler );
+  __jane_set_sig_handler(__jane_signal_handler);
+  __jane_setup_command_line_args(argc, argv);
+  __jane_call_package_initializers();
+  JANE_ID(main)();
+  return(EXIT_SUCCESS);
+}`)
+	*obj_code = sb.String()
+}
+
+func write_output(path, content string) {
+	dir := filepath.Dir(path)
+	err := os.MkdirAll(dir, 0o777)
+	if err != nil {
+		exit_err(err.Error())
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		exit_err(err.Error())
+	}
+	_, err = f.WriteString(content)
+	if err != nil {
+		exit_err(err.Error())
+	}
+	_ = f.Close()
+}
+
+func compile(path string) *parser.Parser {
+	set()
+	inf, err := os.Stat(jane.STDLIB_PATH)
+	if err != nil || !inf.IsDir() {
+		p := &parser.Parser{}
+		p.PushErr("stdlib_not_exist")
+		return p
+	}
+	if !build.IsPassFileAnnotation(path) {
+		p := &parser.Parser{}
+		p.PushErr("file_not_useable")
+		return p
+	}
+	p, err_msg := parser.ParsePackage(path, false)
+	if err_msg != "" {
+		exit_err(err_msg)
+	}
+
+	f, _, _ := p.Defines.FnById(jane.ENTRY_POINT, nil)
+	if f == nil {
+		p.PushErr("no_entry_point")
+	} else {
+		f.IsEntryPoint = true
+		f.Used = true
+	}
+
+	return p
+}
+
+func gen_compile_cmd(source_path string) (c string, cmd string) {
+	var cpp strings.Builder
+	cpp.WriteString("-g -O0 -Wno-narrowing ")
+	if out != "" {
+		cpp.WriteString("-o ")
+		cpp.WriteString(out)
+		cpp.WriteByte(' ')
+	}
+	cpp.WriteString(source_path)
+	return compiler_path, cpp.String()
+}
+
+func do_spell(cpp string) {
+	path := filepath.Join(jane.WORKING_PATH, out_dir)
+	path = filepath.Join(path, out_name)
+	write_output(path, cpp)
+	switch mode {
+	case mode_compile:
+		c, cmd := gen_compile_cmd(path)
+		println(c + " " + cmd)
+		entries := strings.SplitN(cmd, " ", -1)
+		command := exec.Command(c, entries...)
+		err := command.Start()
+		if err != nil {
+			println(err.Error())
+		}
+		err = command.Wait()
+		if err != nil {
+			println(err.Error())
+		}
+	}
+}
+
+func get_option(i *int) (arg string, content string) {
+	for ; *i < len(os.Args); *i++ {
+		arg = os.Args[*i]
+		j := 0
+		runes := []rune(arg)
+		r := runes[j]
+		if r != '-' {
+			content += arg
+			arg = ""
+			continue
+		}
+		j++
+		if j >= len(runes) {
+			exit_err("undefined syntax: " + arg)
+		}
+		r = runes[j]
+		if r == '-' {
+			j++
+			if j >= len(runes) {
+				exit_err("undefined syntax: " + arg)
+			}
+			r = runes[j]
+		}
+		if !lexer.IsIdentifierRune(string(r)) {
+			exit_err("undefined syntax: " + arg)
+		}
+		j++
+		for ; j < len(runes); j++ {
+			r = runes[j]
+			if !lexer.IsSpace(r) && !lexer.IsLetter(r) &&
+				!lexer.IsDecimal(byte(r)) && r != '_' && r != '-' {
+				exit_err("undefined syntax: " + string(runes[j:]))
+			}
+		}
+		break
+	}
+	return
+}
+
+func get_option_value(i *int) string {
+	*i++
+	if *i < len(os.Args) {
+		arg := os.Args[*i]
+		return arg
+	}
+	return ""
+}
+
+func parse_out_option(i *int) {
+	value := get_option_value(i)
+	if value == "" {
+		exit_err("missing option value: -o --out")
+	}
+	out = value
+}
+
+func parse_compiler_option(i *int) {
+	value := get_option_value(i)
+	if value == "" {
+		exit_err("missing option value: --compiler")
+	}
+	switch value {
+	case compiler_clang:
+		compiler_path = compiler_path_clang
+	case compiler_gcc:
+		compiler_path = compiler_path_gcc
+	default:
+		exit_err("invalid option value for --compiler: " + value)
+	}
+	compiler = value
+}
+
+func parse_options() string {
+	cmd := ""
+	i := 1
+	for ; i < len(os.Args); i++ {
+		arg, content := get_option(&i)
+		cmd += content
+		switch arg {
+		case "":
+		case "-o", "--out":
+			parse_out_option(&i)
+		case "-t", "--transpile":
+			mode = mode_transpile
+		case "-c", "--compile":
+			mode = mode_compile
+		case "--compiler":
+			parse_compiler_option(&i)
+		default:
+			exit_err("undefined option: " + arg)
+		}
+	}
+	cmd = strings.TrimSpace(cmd)
+	return cmd
+}
+
+func main() {
+	cmd := parse_options()
+	if cmd == "" {
+		exit_err("missing compile path")
+	}
+
+	p := compile(cmd)
+	if p == nil {
+		return
+	}
+
+	if print_logs(p) {
+		return
+	}
+	p.WrapPackage()
+	obj_code := gen.Gen(p.Defines, p.Used)
+	append_standard(&obj_code)
+	do_spell(obj_code)
+}
