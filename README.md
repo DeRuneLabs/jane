@@ -4,30 +4,22 @@
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/DeRuneLabs/jane/workflow_go_macos.yml?style=flat-square&logo=github&label=Build%20MacOS)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/DeRuneLabs/jane/workflow_go_windows.yml?style=flat-square&logo=github&label=Build%20Windows)
 
-Jane is early experimental compiled programming language, static type, fast, modern and simple. the
-flow of jane source compiled, its to translate to C++ code and compiled it from
-C++ code. Transpile to C++ only instead of compiling is also an Optional. the
-mission to be advance, readable and good choice for system programming
+Jane is early experimental compiled programming language, static type, fast, modern and simple. jane design for maintainable and reliable software development. ensure memory safety and commits not to contain undefined behavior, contains a reference compiler withfeatures that help developers to design safe applications.
 
-![relu_image](.github/code_snap/relu.png)
+## CPP interopability
+
+jane is meant to work with cpp, a cpp header file depedence can be addedto the jane code, allowing its functions to be linked. writting cpp code that is compatible with the jane code created by compiler is rather straightforward. jane stores all of cpp code it uses for jane in the `api` directory. this API make it feasible and easy to develop cpp programming that can be completely integrated with jane
+
+![summary_hpp_image](.github/codesnap/summary_hpp.png)
+![summary_jn_image](.github/codesnap/summary_jn.png)
 
 ## feature of jn
 
 - simple
-- efficient performance as C/C++
-- deffered call
-- language intergrated concurrency
-- generic programming
-- C/C++ embed
-- return type identifier
-- multiple assignment
-- multiple function return
-- type constant
-- argument targettting
-
-## memory on jane
-
-memory safety and memory management. a significant problem in C, C++, or comparable programming langauges. jane use reference counting to control memory and ensure memory safety. an account allotment is immediately withdrawn when the reference count approaches zero. there are no hanging pointers, and accessing null pointer will plainly result in an error.
+- fast and scaleable development
+- performance-critical software
+- memory safety
+- fun
 
 ## information
 
