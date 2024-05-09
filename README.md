@@ -10,8 +10,8 @@ Jane is early experimental compiled programming language, static type, fast, mod
 
 jane is meant to work with cpp, a cpp header file depedence can be addedto the jane code, allowing its functions to be linked. writting cpp code that is compatible with the jane code created by compiler is rather straightforward. jane stores all of cpp code it uses for jane in the `api` directory. this API make it feasible and easy to develop cpp programming that can be completely integrated with jane
 
-![summary_hpp_image](.github/codesnap/summary_hpp.png)
-![summary_jn_image](.github/codesnap/summary_jn.png)
+![summary_hpp_image](.github/code_snap/summary_hpp.png)
+![summary_jn_image](.github/code_snap/summary_jn.png)
 
 ## feature of jn
 
