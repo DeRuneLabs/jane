@@ -1,0 +1,116 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+use std::sys::{
+	get_last_errno,
+	EACCES,
+	EIO,
+	ELOOP,
+	ENAMETOOLONG,
+	ENOENT,
+	ENOTDIR,
+	EOVERFLOW,
+	EBADF,
+	EMFILE,
+	ENFILE,
+	ENOMEM,
+	EEXIST,
+	EINTR,
+	EINVAL,
+	EISDIR,
+	ENOSR,
+	ENOSPC,
+	ENXIO,
+	EROFS,
+	EAGAIN,
+	ETXTBSY,
+	EFBIG,
+	EPIPE,
+	ERANGE,
+	ESPIPE,
+	ENOBUFS,
+	EBADMSG
+}
+
+pub enum FsError {
+  Ok, // no any error or problem
+  Denied, // search permission is denied for a component of the path prefix
+  IO, // input/output error , error occurred while reading from the file system
+  Loop, // loop exist in symbolic links encountered during resolution of the path argument
+  LongPath, // length of path argument exceeds maximum path length or pathname component is longer than maximum name length
+  NoExist, // component path doest not name existing file or path is an empty string
+  NotDir, // component of path prefix is not directory
+  Overflow, // file size in bytes or the number of blocks allocated to the file or file serial number cannot be represented correctly in the structure pointed to by buf
+  InvalidDescriptor, // fd is not valid file descriptor opened for reading
+  PerProcessLimit, // per-process limit on the number of open file descriptors has been reached
+  SystemWideLimit, // system-wide limit on the total number of open files has been reached
+  InsufficientMemory, // insufficient memory to complete the operation
+  Exist, // component path deos name an existing file
+  Signal, // signal was caught during
+  SyncIO, // implementation does not support synchronized i/o for this file
+  IsDir, // named file is directory and flag include O_WRONLY or O_RDWR
+  UnableStream, // path argument names a STREAMS-based file and the system is nuamble to allocate a STREAM
+  NoSpace, // there is no space on the drive
+  Divice, // device did not respond
+  ReadOnly, // ready only filesystem
+  Retry, // resource temporarily unavailable
+  Busy, // file is busy
+  Big, // file too large
+  Pipe, // broken pipe
+  Range, // input is outside the range
+  Seek, // illegal seek
+  Buffer, // no buffer space available
+  BadMessage, // not data massage
+}
+
+// return last filesystem error by errno
+fn get_last_fs_error(): FsError {
+  let err = get_last_errno()
+  match err {
+    | EACCES: ret FsError.Denied
+    | EIO:          ret FsError.IO
+	  | ELOOP:        ret FsError.Loop
+	  | ENAMETOOLONG: ret FsError.LongPath
+	  | ENOENT:       ret FsError.NotExist
+	  | ENOTDIR:      ret FsError.NotDir
+	  | EOVERFLOW:    ret FsError.Overflow
+	  | EBADF:        ret FsError.InvalidDescriptor
+	  | EMFILE:       ret FsError.PerProcessLimit
+	  | ENFILE:       ret FsError.SystemWideLimit
+	  | ENOMEM:       ret FsError.InsufficientMemory
+	  | EEXIST:       ret FsError.Exist
+	  | EINTR:        ret FsError.Signal
+	  | EINVAL:       ret FsError.SyncIO
+	  | EISDIR:       ret FsError.IsDir
+	  | ENOSR:        ret FsError.UnableStream
+	  | ENOSPC:       ret FsError.NoSpace
+	  | ENXIO:        ret FsError.Divice
+	  | EROFS:        ret FsError.ReadOnly
+	  | EAGAIN:       ret FsError.Retry
+	  | ETXTBSY:      ret FsError.Busy
+	  | EFBIG:        ret FsError.Big
+	  | EPIPE:        ret FsError.Pipe
+	  | ERANGE:       ret FsError.Range
+	  | ESPIPE:       ret FsError.Seek
+	  | ENOBUFS:      ret FsError.Buffer
+	  | EBADMSG:      ret FsError.BadMessage
+	  |:              ret FsError.Ok
+  }
+}

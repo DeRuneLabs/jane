@@ -1,0 +1,86 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+use std::sys::{
+  self,
+  seek,
+  read,
+  write,
+  close
+}
+
+// flag to open wrapping those of the underlying system
+pub const O_RDONLY = std::sys::O_RDONLY // open the file read-only
+pub const O_WRONLY = std::sys::O_WRONLY // open the file write-only
+pub const O_RDWR   = std::sys::O_RDWR   // open the file read-write
+pub const O_APPEND = std::sys::O_APPEND // append data to the file when writing
+pub const O_CREAT  = std::sys::O_CREAT  // create a new file if none exists
+pub const O_EXCL   = std::sys::O_EXCL   // used with O_CREAT, file must not exist
+pub const O_SYNC   = std::sys::O_SYNC   // open for synchronous I/O
+pub const O_TRUNC  = std::sys::O_TRUNC  // truncate regular writable file when opened
+
+pub const SEEK_SET = 0 // seek relative to the origin of the file
+pub const SEEK_CUR = 1 // seek relative to the current offset
+pub const SEEK_END = 2 // seek relative to the end
+
+// file stream handle
+pub struct File {
+  handle: int
+}
+
+impl File {
+  // set offset to next read/write operation and return the new offset
+  pub fn seek(mut self, offset: i64, origin: int): (i64, FsError) {
+    let pos = seek(self.handle, offset, origin)
+    ret pos, FsError.Ok
+  }
+  // read bytes to buffer from handle return readed byte count
+  pub fn read(mut self, mut buff: []byte): (n: int, FsError) {
+    if buff.len == 0 {
+      ret 0, FsError.Ok
+    }
+    n = unsafe { read(self.handle, &buff[0], uint(buff.len)) }
+    if n == -1 {
+      n = 0
+      ret n, get_last_fs_error()
+    }
+    ret n, FsError.Ok
+  }
+
+  // write bytes to handle and return writed byte count
+  pub fn write(mut self, buff: []byte): (n: int, FsError) {
+    if buff.len == 0 {
+      ret 0, FsError.Ok
+    }
+    n = unsafe { write(self.handle, &buff[0], uint(buff.len)) }
+    if n == -1 {
+      n = 0
+      ret n, get_last_fs_error()
+    }
+    ret n, FsError.Ok
+  }
+  pub fn close(mut self): FsError {
+    if close(self.handle) == -1 {
+      ret get_last_fs_error()
+    }
+    ret FsError.Ok
+  }
+}
+
