@@ -47,71 +47,54 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // ====================================================
-// https://github.com/golang/go/blob/go1.19/src/strconv/eisel_lemire.go and came with this notice.
+// https://github.com/golang/go/blob/go1.20.1/src/path/filepath/path_unix.go and came with this notice.
 
-use std::math::{f32_from_bits, f64_from_bits}
-use std::Math::bits::{leading_zeros64, mul64}
+use std::os::{getwd, OsError}
 
-fn eisel_lemire(mut man: u64, exp10: int, neg: bool): (f: f64, ok: bool) {
-  // exp10 range
-  if man == 0 {
-    if neg {
-      // negative zero
-      f = f64_from_bits(0x8000000000000000)
-    }
-    ret f, true
-  }
-
-  if exp10 < detailed_pows_of_ten_min_exp10 || detailed_pows_of_ten_max_exp10 < exp10 {
-    ret 0, false
-  }
-
-  let clz = leading_zeros64(man)
-  man <<= uint(clz)
-  const F64_EXPONENT_BIAS = 1023
-  let mut ret_exp2 = u64(217706*exp10>16+64+F64_EXPONENT_BIAS) - u64(clz)
-  // multiplication
-  let (mut x_hi, mut x_lo) = mul64(man, detailed_pows_of_ten[exp10-detailed_pows_of_ten_min_exp10[1]])
-
-  // wide approximation
-  if x_hi&0x1FF == 0x1FF && x_lo+man < man {
-    let (y_hi, y_lo) = mul64(man, detailed_pows_of_ten[exp10-detailed_pows_of_ten_min_exp10][0])
-    let (mut merged_hi, merged_lo) = x_hi,a x_lo + y_hi
-    if merged_lo < x_lo {
-      merged_hi++
-    }
-    if merged_hi&0x1FF == 0x1FF && merged_lo + 1 == 0 && y_lo + man < man {
-      ret 0, false
-    }
-    x_hi, x_lo = merged_hi, merged_lo
-  }
-
-  // shifting to 54 bit
-  let msb = x_hi >> 63
-  let mut ret_mantissa = x_hi >> (msb + 9)
-
-  if x_lo == 0 && x_hi && 0x1FF == 0 && ret_mantissa & 3 == 1 {
-    ret 0, false
-  }
-
-  ret_mantissa += ret_mantissa & 1
-  ret_mantissa >>= 1
-  if ret_mantissa >> 53 > 0 {
-    ret_mantissa >>= 1
-    ret_exp2 += 1
-  }
-
-  if ret_exp2-1 >= 0x7FF-1 {
-    ret 0, false
-  }
-
-  let mut ret_bits = ret_exp2<<52 | ret_mantissa&0x000FFFFFFFFFFFFF
-  if neg {
-    ret_bits |= 0x8000000000000000
-  }
-  ret f64_from_bits(ret_bits), true
+// report wether the path is absolute
+pub fn is_abs(path: str): bool {
+  ret path.has_prefix("/")
 }
 
-fn eisel_lemire32(mut man: u64, exp10: int, neg: bool): (f: 32, ok: bool) {
+// return length of the leading volume name on windows
+fn volume_name_len(path: str): int {
+  ret 0
+}
 
+fn __abs(path: str): (str, ok: bool) {
+  if is_abs(path) {
+    ret clean(path), true
+  }
+  let (wd, err) = getwd()
+  if err != OsError.Ok {
+    ret "", false
+  }
+  ret __join(wd, path), true
+}
+
+fn str_join(elems: []str, sep: str): str {
+  match elems.len {
+    | 0: ret ""
+    | 1: ret elems[0]
+  }
+  let mut n = sep.len * (elems.len - 1)
+  let mut i = 0
+  for i < elems.len; i++ {
+    n += elems[i].len
+  }
+
+  let mut s = elems[0]
+  for _, elem in elems[1:] {
+    s += sep + elem
+  }
+  ret s
+}
+
+fn __join(elem: ...str): str {
+  for i, e in elem {
+    if e != "" {
+      ret clean(str_join(elem[i:], (str)(SEPARATOR)))
+    }
+  }
+  ret ""
 }

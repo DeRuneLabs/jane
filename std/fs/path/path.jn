@@ -1,0 +1,259 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// ====================================================
+// Copyright (c) 2009 The Go Authors. All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//    * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//    * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//    * Neither the name of Google Inc. nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// ====================================================
+// https://github.com/golang/go/blob/go1.20.1/src/path/filepath/path.go and came with this notice.
+
+use std::os::{
+  PATH_SEPARATOR,
+  PATH_LIST_SEPARATOR,
+  is_path_sep
+}
+
+use std::runtime::{OS}
+
+pub const SEPARATOR = PATH_SEPARATOR
+
+// path list separator
+pub const LIST_SPARATOR = PATH_LIST_SEPARATOR
+
+struct LazyBuff {
+  path: str
+  buff: []byte
+  w: int
+  vol_and_path: str
+  vol_len: int
+}
+
+impl LazyBuff {
+  fn index(mut self, i: int): byte {
+    if self.buff != nil {
+      ret self.buff[i]
+    }
+    ret self.path[i]
+  }
+
+  fn append(mut self, c: byte) {
+    if self.buff == nil {
+      if self.w < self.path.len && self.path[self.w] == c {
+        self.w++
+        ret
+      }
+      self.buff = make([]byte, self.path.len)
+      copy[byte](self.buff, self.path[:self.w])
+    }
+    self.buff[self.w] = c
+    self.w++
+  }
+
+  fn string(mut self): str {
+    if self.buff == nil {
+      ret self.vol_and_path[:self.vol_len + self.w]
+    }
+    ret self.vol_and_path[:self.vol_len] + (str)(self.buff[:self.w])
+  }
+}
+
+// return shortest path name equivalent to path
+// by purely lexical processing
+pub fn clean(mut path: str): str {
+  let original_path = path
+  let vol_len = volume_name_len(path)
+  path = path[vol_len:]
+  if path == "" {
+    if vol_len > 1 && is_path_sep(original_path[0]) && is_path_sep(original_path[1]) {
+      ret from_slash(original_path)
+    }
+    ret original_path + "."
+  }
+  let rooted = is_path_sep(path[0])
+
+  let n = path.len
+  let mut out = LazyBuff {
+    path: path,
+    vol_and_path: original_path,
+    vol_len: vol_len,
+  }
+  let (mut r, mut dotdot) = 0, 0
+  if rooted {
+    out.append(SEPARATOR)
+    r, dotdot = 1, 1
+  }
+
+  for r < n {
+    match {
+      | is_path_sep(path[r]):
+        r++
+      | path[r] == '.' && (r+1 == n || is_path_sep(path[r+1])):
+        r++
+      | path[r] == '.' && path[r+1] == '.' && (r+2 == n || is_path_sep(path[r+2])):
+        r += 2
+        match {
+          | out.w > dotdot:
+            out.w--
+            for out.w > dotdot && !is_path_sep(out.index(out.w)) {
+              out.w--
+            }
+          | !rooted:
+            // cannot backtracking, but not rooted, and append .. element
+            if out.w > 0 {
+              out.append(SEPARATOR)
+            }
+            out.append('.')
+            out.append('.')
+            dotdot = out.w
+        }
+      |:
+        if rooted && out.w != 1 || !rooted && out.w != 0 {
+          out.append(SEPARATOR)
+        }
+        if OS == "windows" && out.w == 0 && out.vol_len == 0 && r != 0 {
+          let mut i = r
+          for i < n && !is_path_sep(path[i]); i++ {
+            if path[i] == ':' {
+              out.append('.')
+              out.append(SEPARATOR)
+              break
+            }
+          }
+        }
+
+        for r < n && !is_path_sep(path[r]); r++ {
+          out.append(path[r])
+        }
+    }
+  }
+  if out.w == 0 {
+    out.append('.')
+  }
+  ret from_slash(out.string())
+}
+
+// return result of replacing each separator character in path with a slash
+// character, multiple separators are replaced by multiple slashes
+pub fn to_slash(path: str): str {
+  if SEPARATOR == '/' {
+    ret path
+  }
+  ret path.replace(str(SEPARATOR), "/", -1)
+}
+
+// return result of replacing each slash character in path
+// with separator character
+pub fn from_slash(path: str): str {
+  if SEPARATOR == '/' {
+    ret path
+  }
+  ret path.replace("/", str(SEPARATOR), -1)
+}
+
+// join any number of path element into single path
+// separating them with an OS specific SEPARATOR
+pub fn join(elem: ...str): str {
+  ret __join(elem...)
+}
+
+pub fn ext(path: str): str {
+  let mut i = path.len - 1
+  for i >= 0 && !is_path_sep(path[i]); i-- {
+    if path[i] == '.' {
+      ret path[i:]
+    }
+  }
+  ret ""
+}
+
+// return absolute repersentation of path
+pub fn abs(path: str): (str, ok: bool) {
+  ret __abs(path)
+}
+
+// return last element of path, trailing path separators are removed
+// before extracing the last element, if the path is empty,
+// base return "."
+pub fn base(mut path: str): str {
+  if path == "" {
+    ret "."
+  }
+  // strip trailing slashes
+  for path.len > 0 && is_path_sep(path[path.len-1]) {
+    path = path[0: path.len-1]
+  }
+  path = path[volume_name(path).len:]
+  // finding last element
+  let mut i = path.len - 1
+  for i >= 0 && !is_path_sep(path[i]) {
+    i--
+  }
+  if i >= 0 {
+    path = path[i+1:]
+  }
+  if path == "" {
+    ret str(SEPARATOR)
+  }
+  ret path
+}
+
+// return all but the last element of path, typically the path's directory
+pub fn dir(path: str): str {
+  let vol = volume_name(path)
+  let mut i = path.len - 1
+  for i >= vol.len && !is_path_sep(path[i]) {
+    i--
+  }
+  let dir = clean(path[vol.len : i+1])
+  if dir == "." && vol.len > 2 {
+    ret vol
+  }
+  ret vol + dir
+}
+
+// return leading volume name
+pub fn volume_name(path: str): str {
+  ret from_slash(path[:volume_name_len(path)])
+}
