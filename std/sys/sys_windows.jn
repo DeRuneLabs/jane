@@ -1,0 +1,82 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+pub const STD_INPUT_HANDLE  = -10
+pub const STD_OUTPUT_HANDLE = -11
+pub const STD_ERROR_HANDLE  = -12
+
+pub const MAX_PATH      = 260
+pub const MAX_LONG_PATH = 32768
+
+pub const O_RDONLY   = 0x00000
+pub const O_WRONLY   = 0x00001
+pub const O_RDWR     = 0x00002
+pub const O_CREAT    = 0x00040
+pub const O_EXCL     = 0x00080
+pub const O_NOCTTY   = 0x00100
+pub const O_TRUNC    = 0x00200
+pub const O_NONBLOCK = 0x00800
+pub const O_APPEND   = 0x00400
+pub const O_SYNC     = 0x01000
+pub const O_ASYNC    = 0x02000
+pub const O_CLOEXEC  = 0x80000
+
+pub const S_IFMT   = 0x1f000
+pub const S_IFIFO  = 0x1000
+pub const S_IFCHR  = 0x2000
+pub const S_IFDIR  = 0x4000
+pub const S_IFBLK  = 0x6000
+pub const S_IFREG  = 0x8000
+pub const S_IFLNK  = 0xa000
+pub const S_IFSOCK = 0xc000
+pub const S_ISUID  = 0x800
+pub const S_ISGID  = 0x400
+pub const S_ISVTX  = 0x200
+pub const S_IRUSR  = 0x100
+pub const S_IWRITE = 0x80
+pub const S_IWUSR  = 0x80
+pub const S_IXUSR  = 0x40
+
+pub const ERROR_ACCESS_DENIED       = 5
+pub const ERROR_ALREADY_EXISTS      = 183
+pub const ERROR_BROKEN_PIPE         = 109
+pub const ERROR_BUFFER_OVERFLOW     = 111
+pub const ERROR_DIR_NOT_EMPTY       = 145
+pub const ERROR_ENVVAR_NOT_FOUND    = 203
+pub const ERROR_FILE_EXISTS         = 80
+pub const ERROR_FILE_NOT_FOUND      = 2
+pub const ERROR_HANDLE_EOF          = 38
+pub const ERROR_INSUFFICIENT_BUFFER = 122
+pub const ERROR_INVALID_NAME        = 123
+pub const ERROR_IO_PENDING          = 997
+pub const ERROR_MOD_NOT_FOUND       = 126
+pub const ERROR_MORE_DATA           = 234
+pub const ERROR_NETNAME_DELETED     = 64
+pub const ERROR_NOT_FOUND           = 1168
+pub const ERROR_NOT_READY           = 21
+pub const ERROR_NO_MORE_FILES       = 18
+pub const ERROR_OPERATION_ABORTED   = 995
+pub const ERROR_PATH_NOT_FOUND      = 3
+pub const ERROR_PRIVILEGE_NOT_HELD  = 1314
+pub const ERROR_PROC_NOT_FOUND      = 127
+
+pub const WSAEACCES       = 10013
+pub const WSAECONNABORTED = 10053
+pub const WSAECONNRESET   = 10054

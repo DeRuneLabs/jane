@@ -1,0 +1,89 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+use cpp "<dirent.h>"
+use cpp "syscall_unix.hpp"
+
+cpp type char: i8
+
+cpp struct DIR{}
+
+cpp struct dirent {
+  pub d_name: *byte
+}
+
+cpp unsafe fn __jane_stat(path: *cpp.char, mut handle: *cpp.stat): int
+cpp unsafe fn __jane_str_from_byte_ptr(s: *byte): str
+cpp unsafe fn opendir(path: *cpp.char): *cpp.DIR
+cpp unsafe fn closedir(mut dir: *cpp.DIR): int
+cpp unsafe fn readdir(mut dir: *cpp.DIR): *cpp.dirent
+cpp unsafe fn open(path: *cpp.char, flag: int, mode: int): int
+cpp unsafe fn getcwd(buff: *cpp.char, bufflen: uint): *cpp.char
+cpp unsafe fn chdir(path: *cpp.char): int
+
+pub type Dir: cpp.DIR
+pub type Dirent: cpp.dirent
+
+pub let STDIN  = uintptr(0)
+pub let STDOUT = uintptr(1)
+pub let STDERR = uintptr(2)
+
+// return string of s, with terminating NULL removed
+pub unsafe fn byte_ptr_to_str(s: *byte): str {
+  if s == nil {
+    ret ""
+  }
+  ret cpp.__jane_str_from_byte_ptr(s)
+}
+
+// c stat function
+pub unsafe fn stat(path: *byte, mut stat: *Stat): int {
+  ret cpp.__jane_stat((*cpp.char)(path), stat)
+}
+
+// c open function
+pub unsafe fn open(path: *byte, flag: int, mode: int): int {
+  ret cpp.open((*cpp.char)(path), flag, mode)
+}
+
+// read current working directory into buff
+pub unsafe fn getcwd(buff: *byte, bufflen: uint): *byte {
+  ret (*byte)(cpp.getcwd((*cpp.char)(buff), bufflen))
+}
+
+// c opendir function
+pub unsafe fn opendir(path: *byte): *Dir {
+  ret cpp.opendir((*cpp.char)(path))
+}
+
+// readdir function
+pub unsafe fn readdir(mut dir: *Dir): *Dirent {
+  ret cpp.readdir(dir)
+}
+
+// closedir function
+pub unsafe fn closedir(mut dir: *Dir): int {
+  ret cpp.closedir(dir)
+}
+
+// chdir function
+pub unsafe fn chdir(path: *byte): int {
+  ret cpp.chdir((*cpp.char)(path))
+}
