@@ -69,7 +69,7 @@ public:
 
   void __dealloc(void) noexcept {
     this->__len = 0;
-    this->_cap = 0;
+    this->__cap = 0;
     if (!this->__data.__ref) {
       this->__data.__alloc = nil;
       return;

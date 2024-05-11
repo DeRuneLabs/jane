@@ -28,7 +28,7 @@ import (
 
 func ToStrLiteral(bytes []byte) string {
 	var cpp strings.Builder
-	cpp.WriteString("str_jt(")
+	cpp.WriteString("str_jnt(")
 	btoa := bytes_to_str(bytes)
 	cpp.WriteByte('"')
 	cpp.WriteString(btoa)

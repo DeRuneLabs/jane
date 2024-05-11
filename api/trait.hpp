@@ -61,7 +61,6 @@ public:
   }
 
   inline T &_get(void) noexcept {
-    this->__must_ok();
     return this->__data;
   }
 
