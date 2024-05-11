@@ -1,0 +1,71 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+use std::os::{ARGS, OsError, exit, getwd}
+use std::fs::path::{abs, dir, join}
+
+// version of package and sub-package
+pub const VERSION = `@master`
+
+// extension (include dot) of jane source code file
+pub const EXT = `.jn`
+
+// directory name jane API
+pub const API = "api"
+
+// directory name standard jane
+pub const STDLIB = "std"
+
+// identifier entry point function
+pub const ENTRY_POINT = "main"
+
+// identifier of initializer function
+pub const INIT_FN = "init
+
+// absolute directory path standard library
+pub let STDLIB_PATH = ""
+
+// absolute directory path of compiler
+pub lete EXEC_PATH = ""
+
+// absolute directory path of working path of compiler
+pub let WORKING_PATH = ""
+
+fn exit_err(msg: str) {
+  println(msg)
+  const EXIT_CODE = 0
+  exit(EXIT_CODE)
+}
+
+fn init() {
+  let ((unsafe { *(&WORKING_PATH) } ), err) = getwd()
+  if err != OsError.Ok {
+    exit_err("std::jane: WOKING_PATH cannot set")
+  }
+  let (path, ok) = abs(ARGS[0])
+  if !ok {
+    exit_err("std::jane: EXEC_PATH cannot set")
+  }
+
+  unsafe {
+    *(&EXEC_PATH) = dir(path)
+    *(&STDLIB_PATH) = join(EXEC_PATH, "..", STDLIB)
+  }
+}

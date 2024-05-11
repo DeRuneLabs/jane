@@ -27,23 +27,5 @@ the project structure, including its lexical and syntactic structure, has now re
 
 ## Build
 
-**powershell**
-
-```psh
-go build -o jane.exe -v command/jn/main.go
-```
-
-**bash**
-
-```sh
-go build -o jane -v command/jn/main.go
-```
-
-using makefile
-
-```sh
-# to build all
-make all
-# to clean binary files after make
-make clean
-```
+> \[!NOTE\]
+> currently not fully documented for build the jane compiler, but you can check on Makefile on src and can check the binary files or exec program on bin after the project was build.
