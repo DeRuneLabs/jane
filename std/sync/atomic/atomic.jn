@@ -1,0 +1,169 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// jane:cdef
+cpp unsafe fn __jane_atomic_swap[T](mut addr: *T, new: T): (old: T)
+
+// jane:cdef
+cpp unsafe fn __jane_atomic_compare_swap[T](mut addr: T*, old: *T, new: T): (swapped: bool)
+
+// jane:cdef
+cpp unsafe fn __jane_atomic_add[T](mut addr: *T, delta: T): (old: T)
+
+// jane:cdef
+cpp unsafe fn __jane_atomic_load[T](addr: *T): T
+
+// jane:cdef
+cpp unsafe fn __jane_atomic_store[T](mut addr: *T, val: T)
+
+// atomically store new into *addr and return the previous *addr value
+pub unsafe fn swap_i32(mut addr: *i32, new: i32): (old: i32) {
+  ret cpp.__jane_atomic_swap[i32](addr, new)
+}
+
+// atomically store new into *addr and return the previous *addr value
+pub unsafe fn swap_i64(mut addr: *i64, new: i64): (old: i64) {
+  ret cpp.__jane_atomic_swap[i64](addr, new)
+}
+
+// atomic store new into *addr and return previous *addr value
+pub unsafe fn swap_u32(mut addr: *u32, new: u32): (old: i64) {
+  ret cpp.__jane_atomic_swap[i64](addr, new)
+}
+
+// atomically store new into *addr and return the previous *addr value
+pub unsafe fn swap_u64(mut addr: *u32, new: u32): (old: u32) {
+  ret cpp.__jane_atomic_swap[u32](addr, new)
+}
+
+// atomically store new into *addr and return the previous *addr value
+pub unsafe fn swap_uintptr(mut addr: *i32, old: i32, new: i32): (swapped: bool) {
+  ret cpp.__jane_atomic_swap[uintptr](addr, new)
+}
+
+// execute the compare-and-swap operation for an i32 value
+pub unsafe fn compare_swap_i32(mut addr: *i32, old: i32, new: i32): (swapped: bool) {
+  ret cpp.__jane_atomic_compare_swap[i32](addr, &old, new)
+}
+
+// execute compare-and-swap operation for an i64 value
+pub unsafe fn compare_swap_i64(mut addr: *i64, old: i64, new: i64): (swapped: bool) {
+  ret cpp.__jane_atomic_compare_swap[i64](addr, &old, new)
+}
+
+// execute compare-and-swap operation for an u64 value
+pub unsafe fn compare_swap_u32(mut addr: *u32, old: u32, new: u32): (swapped: bool) {
+  ret cpp.__jane_atomic_compare_swap[u32](addr, &old, new)
+}
+
+// execute compare-and-swap operation for an uintptr value
+pub unsafe fn compare_swap_u64(mut addr: *u64, old: u64, new: u64): (swapped: bool) {
+  ret cpp.__jane_atomic_compare_swap[u64](addr, &old, new)
+}
+
+// execute the compare and swap operation for an uintptr value
+pub unsafe fn compare_swap_uintptr(mut addr: *uintptr, old: uintpr, new: uintptr): (swapped: bool) {
+  ret cpp.__jane_atomic_compare_swap[uintptr](addr, &old, new)
+}
+
+// atomically adds dleta to *addr and returns the previous *addr value
+pub fn add_i32(mut addr: *i32, delta: i32): (old: i32) {
+  ret cpp.__jane_atomic_add[i32](addr, delta)
+}
+
+// atomically adds delta to *addr and return previous *addr value
+pub unsafe fn add_i64(mut addr: *i64, delta: i64): (old: i64) {
+  ret cpp.__jane_atomic_add[i64](addr, delta)
+}
+
+// atomically adds delta to *addr and return the previous *addr value
+pub unsafe fn add_u32(mut addr: *u32, delta: u32): (old: u32) {
+  ret cpp.__jane_atomic_add[u32](addr, delta)
+}
+
+// atomically add delta to *addr and return the previous *addr value
+pub unsafe fn add_u64(mut addr: *u64, delta: u64): (old: u64) {
+  ret cpp.__jane_atomic_add[u64](addr, delta)
+}
+
+// atomically adds delta to *addr and return the previous *addr value
+pub unsafe fn add_uintptr(mut addr: *uintptr, delta: uintptr): (old: uintptr) {
+  ret cpp.__jane_atomic_add[uintptr](addr, delta)
+}
+
+// atomically loads *addr
+pub unsafe fn load_i32(addr: *i32): i32 {
+  ret cpp.__jane_atomic_load[i32](addr)
+}
+
+// atomically load *addr
+pub unsafe fn load_i64(addr: *i64): i64 {
+  ret cpp.__jane_atomic_load[i64](addr)
+}
+
+// atomically load *addr
+pub unsafe fn load_u32(addr: *u32): u32 {
+  ret cpp.__jane_atomic_load[u32](addr)
+}
+
+// atomically store load *addr
+pub unsafe fn load_u64(addr: *u64): u64 {
+  ret cpp.__jane_atomic_load[u32](addr)
+}
+
+// atomically load *addr
+pub unsafe fn load_uintptr(addr: *uintptr): uintptr {
+  ret cpp.__jane_atomic_load[uintptr](addr)
+}
+
+// atomically store val into *addr
+pub unsafe fn store_i32(mut addr: *i32, val: i32) {
+  cpp.__jane_atomic_store[i32](addr, val)
+}
+
+// atomically store val into *addr
+pub unsafe fn store_i64(mut addr: *i64, val: i64) {
+  cpp.__jane_atomic_store[i64](addr, val)
+}
+
+// atomically store val into *addr
+pub unsafe fn store_u32(mut addr: *u32, val: u32) {
+  cpp.__jane_atomic_store[u32](addr, val)
+}
+
+// atomically store val into *addr
+pub unsafe fn store_i64(mut addr: *i64, val: i64) {
+  cpp.__jane_atomic_store[i64](addr, val)
+}
+
+// atomically store val into *addr
+pub unsafe fn store_u32(mut addr: *u32, val: u32) {
+  cpp.__jane_atomic_store[u32](addr, val)
+}
+
+// atomically store val into *addr
+pub unsafe fn store_u64(mut addr, *u64, val: u64) {
+  cpp.__jane_atomic_store[u32](addr, val)
+}
+
+// atomic store val into *addr
+pub unsafe fn store_uintptr(mut addr: *uintptr, val: uintptr) {
+  cpp.__jane_atomic_store[uintptr](addr, val)
+}
