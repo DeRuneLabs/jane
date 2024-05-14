@@ -2,7 +2,6 @@
 
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/DeRuneLabs/jane/workflow_go_linux.yml?style=flat-square&logo=github&label=Build%20Linux)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/DeRuneLabs/jane/workflow_go_macos.yml?style=flat-square&logo=github&label=Build%20MacOS)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/DeRuneLabs/jane/workflow_go_windows.yml?style=flat-square&logo=github&label=Build%20Windows)
 
 Jane is early experimental compiled programming language, static type, fast, modern and simple. jane design for maintainable and reliable software development. ensure memory safety and commits not to contain undefined behavior, contains a reference compiler withfeatures that help developers to design safe applications.
 
@@ -28,4 +27,4 @@ the project structure, including its lexical and syntactic structure, has now re
 ## Build
 
 > \[!NOTE\]
-> currently not fully documented for build the jane compiler, but you can check on Makefile on src and can check the binary files or exec program on bin after the project was build.
+> currently not fully documented for build the jane compiler, but you can check on `Makefile` on `src` and can check the binary files or exec program on `bin` after the project was build.
