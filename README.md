@@ -30,3 +30,9 @@ the project structure, including its lexical and syntactic structure, has now re
 
 > \[!NOTE\]
 > currently not fully documented for build the jane compiler, but you can check on `Makefile` on `src` and can check the binary files or exec program on `bin` after the project was build.
+
+## showcase
+
+![switch_case](.github/code_snap/switch_case.png)
+![impl](.github/code_snap/impl.png)
+![pub_const](.github/code_snap/pub_const.png)
