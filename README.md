@@ -37,3 +37,4 @@ the project structure, including its lexical and syntactic structure, has now re
 ![impl](.github/code_snap/impl.png)
 ![pub_const](.github/code_snap/pub_const.png)
 ![calc](.github/code_snap/calc.png)
+![builtin_str](.github/code_snap/builtin_str.png)
