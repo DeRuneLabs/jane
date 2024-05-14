@@ -5,6 +5,8 @@
 
 Jane is early experimental compiled programming language, static type, fast, modern and simple. jane design for maintainable and reliable software development. ensure memory safety and commits not to contain undefined behavior, contains a reference compiler withfeatures that help developers to design safe applications.
 
+![relu](.github/code_snap/RELU.png)
+
 ## CPP interopability
 
 jane is meant to work with cpp, a cpp header file depedence can be addedto the jane code, allowing its functions to be linked. writting cpp code that is compatible with the jane code created by compiler is rather straightforward. jane stores all of cpp code it uses for jane in the `api` directory. this API make it feasible and easy to develop cpp programming that can be completely integrated with jane
