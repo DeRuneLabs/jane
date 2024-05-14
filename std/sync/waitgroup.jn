@@ -1,0 +1,68 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+use std::sync::atomic::{add_u32, load_u32, compare_swap_u32}
+
+// INFO: do not copy instance of waitgroup, use ref or pointer
+pub struct WaitGroup {
+  task_n: u32
+  wait_n: u32
+}
+
+impl WaitGroup {
+  pub fn add(mut self, delta: int) {
+    let old_nr_task = int(unsafe { add_u32(&self.task_n, u32(delta)) })
+    let new_nr_taask = old_nr_task + delta
+    if new_nr_taask < 0 {
+      panic("negative number of task in WaitGroup")
+    }
+
+    if new_nr_taask != 0 {
+      ret
+    }
+
+    let mut n_waiters = unsafe { load_u32(&self.wait_n) }
+    if n_waiters == 0 {
+      ret
+    }
+    for {
+      _ = unsafe { compare_swap_u32(&self.wait_n, n_waiters, 0) }
+      if n_waiters == 0 {
+        ret
+      }
+      n_waiters = unsafe { load_u32(&self.wait_n) }
+    }
+  }
+
+  // decrement WaitGroup counter by one
+  pub fn done(mut self) {
+    self.add(-1)
+  }
+
+  // block until all task are done
+  pub fn wait(mut self) {
+    let nr_task = int(unsafe { load_u32(&self.task_n) })
+    if nr_task == 0 {
+      ret
+    }
+    _ = unsafe { add_u32(&self.wait_n, 1) }
+    for (unsafe { load_u32(&self.wait_n) }) != 0 {}
+  }
+}

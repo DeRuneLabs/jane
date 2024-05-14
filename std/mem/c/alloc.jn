@@ -1,0 +1,48 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+cpp fn malloc(size: uint): *unsafe
+cpp fn calloc(size: uint, n: uint): *unsafe
+cpp unsafe fn realloc(mut ptr: *unsafe, size: uint): *unsafe
+cpp unsafe fn free(mut ptr: *unsafe)
+
+// allocate size byte memory, memory does not initialize
+// return pointer to allocation if success, nil if not
+pub fn malloc(size: uint): *unsafe {
+  ret cpp.malloc(size)
+}
+
+// allocate n element of size byte each, all initialize to
+// zero, return pointer to allocation if succes, nil if not
+pub fn calloc(size: uint, n: uint): *unsafe {
+  ret cpp.calloc(size, n)
+}
+
+// re-allocate the previously allocated block in ptr, making
+// new block size bytes long, return pointer to allocation
+// if success, nil if not
+pub unsafe fn realloc(mut ptr: *unsafe, size: uint): *unsafe {
+  ret cpp.realloc(ptr, size)
+}
+
+// free a block allocated by malloc, realloc or calloc
+pub unsafe fn free(mut ptr: *unsafe) {
+  cpp.free(ptr)
+}
