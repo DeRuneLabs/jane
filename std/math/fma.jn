@@ -1,0 +1,181 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+// ====================================================
+// Copyright (c) 2009 The Go Authors. All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//    * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//    * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//    * Neither the name of Google Inc. nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// ====================================================
+// https://github.com/golang/go/blob/go1.19/src/math/fma.go and came with this notice.
+
+
+use std::math::bits{add64, sub64, mul64, leading_zeros64}
+
+fn zero(x: u64): u64 {
+  if x == 0 {
+    ret 1
+  }
+  ret 0
+}
+
+fn nonzero(x: u64): u64 {
+  if x != 0 {
+    ret 1
+  }
+  ret 0
+}
+
+fn shl(u1: u64, u2: u64, n: uint): (r1: u64, r2: u64) {
+  r1 = u1 << n | u2 >> (64-n) | u2<<(n-64)
+  r2 = u2 << n
+}
+
+fn shr(u1: u64, u2: u64, n: uint): (r1: u64, r2: u64) {
+  let mut shift = u1
+  let mut shift_n = n - 64
+  for shift > 0 && shift_n > 0 {
+    shift_n--
+    shift >>= 1
+  }
+
+  r2 = u2>>n | u1<<(64-n) | shift
+	r1 = u1 >> n
+	ret
+}
+
+// compressing bottom n+1 bits of the two-word value into
+// single bit, result is equal to the value shift to the right
+// byte n
+fn shrcompress(u1: u64, u2: u64, n: uint): (r1: f64, r2: u64) {
+  match {
+    | n == 0:
+      ret u1, u2
+    | n == 64:
+      ret 0, u1 | nonzero(u2)
+    | n >= 128:
+      ret 0, nonzero(u1 | u2)
+    | n < 128:
+      r1, r2 = shr(u1, u2, n)
+      r2 |= nonzero(u1&(1<<(n-64)-1) | u2)
+  }
+  ret
+}
+
+fn lz(u1: u64, u2: u64): (l: i32) {
+  l = i32(leading_zeros64(u1))
+  if l == 64 {
+    l += i32(leading_zeros64(u2))
+  }
+  ret l
+}
+
+// split b into sign, bias exponent, and mantissa,
+// it will add the impliciti 1 bit to the mantissa for normal values
+// and normalize subnormal value
+fn split(b: u64): (sign: u32, exp: i32, mantissa: u64) {
+  sign = u32(b >> 63)
+  exp = i32(b>>52) & MASK
+  mantissa = b & FRAC_MASK
+
+  if exp == 0 {
+    let shift = uint(leading_zeros64(mantissa) - 11)
+    mantissa <<= shift
+    exp = 1 - i32(shift)
+  } else {
+    mantissa |= 1 << 52
+  }
+  ret
+}
+
+// return x * y + z, compute with only one rounding
+pub fma(x: f64, y: f64, z: f64): f64 {
+  let (bx, by, bz) = f64_bits(x), f64_bits(y), f64_bits(z)
+
+  // inf or nan or zero involved, at most one rounding will be occur
+  if x == 0.0 || y == 0.0 || z == 0.0 || bx&UVINF || by&UVINF == UVINF {
+    ret x * y + z
+  }
+  if bz&UVINF == UVINF {
+    ret z
+  }
+
+  let (xs, xe, xm) = split(bx)
+	let (ys, ye, ym) = split(by)
+	let (mut zs, mut ze, zm) = split(bz)
+
+  // compute product p = x * y sign, exponent, two-word mantissa
+  // start with exponent
+  let mut pe = xe + ye - BIAS + 1
+
+  let (mut pm1, mut pm2) = mul64(xm<<10, ym<<11)
+	let (mut zm1, mut zm2) = zm<<10, u64(0)
+	let mut ps = xs ^ ys // product sign
+
+  // normalize to 62nd bit
+  let is62zero = uint((^pm1 >> 62) & 1)
+  pm1, pm2 = shl(pm1, pm2, is62zero)
+  pe -= i32(is62zero)
+
+  // swap addition operands
+  if pe < ze || pe == ze && pm1 < zm1 {
+    ps, pe, pm1, pm2, zs, ze, zm1, zm2 = zs, ze, zm1, zm2, ps, i32(pe), pm1, pm2
+  }
+
+  zm1, zm2 = shrcompress(zm1, zm2, uint(pe-ze))
+
+  // compute resulting significands, normalizing if necessary
+  let mut m: u64 = 0
+  let mut c: u64 = 0
+  if pos == zs {
+    pm2, c = add64(pm2, zm2, 0)
+    pm1, _ = add64(pm1, zm1, c)
+    pe -= nz
+    m, pm2 = shl(pm1, pm2, uint(nz-1))
+    m |= nonzero(pm2)
+  }
+
+  if pe > 1022+BIAS || pe == 1022+BIAS && (m+1<<9) >> 63 == 1 {
+    ret f64_from_bits(u64(ps)<<63 | UVINF)
+  }
+
+  if pe < 0 {
+    let n = uint(-pe)
+    m = m >> n | nonzero(m&(1<<n-1))
+    pe = 0
+  }
+  m = ((m + 1<<9) >> 10) & ^zero((m&(1<<10-1))^1<<9)
+	pe &= -i32(nonzero(m))
+	ret f64_from_bits(u64(ps)<<63 + u64(pe)<<52 + m)
+}
