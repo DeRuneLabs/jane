@@ -1,0 +1,106 @@
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// ====================================================
+// Copyright (c) 2009 The Go Authors. All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//    * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//    * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//    * Neither the name of Google Inc. nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// ====================================================
+// https://github.com/golang/go/blob/go1.19/src/math/sincos.go and came with this notice.
+
+// return sin, cos
+pub fn sincos(mut x: f64): (sin: f64, cos: f64) {
+  const PI4A = 7.85398125648498535156e-1  // 0x3fe921fb40000000, Pi/4 split into three parts
+	const PI4B = 3.77489470793079817668e-8  // 0x3e64442d00000000,
+	const PI4C = 2.69515142907905952645e-15 // 0x3ce8469898cc5170,
+  match {
+    | x == 0:
+      ret x, 1
+    | is_nan(x) | is_inf(x, 0):
+      ret nan(), nan()
+  }
+
+  let (mut sin_sign, mut cos_sign) = false, false
+  if x < 0 {
+    x = -x
+    sin_sign = true
+  }
+
+  let mut j: u64 = 0
+	let mut y: f64 = 0
+	let mut z: f64 = 0
+  if x >= REDUCE_THRESHOLD {
+    j, z = trig_reduce(x)
+  } else {
+    j = u64(x * (4 / PI)) // integer part of x/(PI/4), as integer for tests on the phase angle
+		y = f64(j) // integer part of x/(PI/4), as float
+    if j&1 == 1 {
+      j++
+      y++
+    }
+    j &= 7
+    z = ((x - y*PI4A) - y*PI4B) - y*PI4C
+  }
+
+  if j > 3 {
+    j -= 4
+  }
+  if j > 1 {
+    cos_sign = !cos_sign
+  }
+
+  let zz = z * z
+	cos = 1.0 - 0.5*zz + zz*zz*((((((_cos[0]*zz)+_cos[1])*zz+_cos[2])*zz+_cos[3])*zz+_cos[4])*zz+_cos[5])
+	sin = z + z*zz*((((((_sin[0]*zz)+_sin[1])*zz+_sin[2])*zz+_sin[3])*zz+_sin[4])*zz+_sin[5])
+	if j == 1 || j == 2 {
+		sin, cos = cos, sin
+	}
+	if cos_sign {
+		cos = -cos
+	}
+	if sin_sign {
+		sin = -sin
+	}
+	ret
+}
