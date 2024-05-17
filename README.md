@@ -24,7 +24,7 @@ jane is meant to work with cpp, a cpp header file depedence can be added to the 
 
 ## information
 
-the project structure, including its lexical and syntactic structure, has now revealed. however, if there reference compiler is rewritten in jane, it is expected that AST, Lexer, and certain packages will be included in the standard library. this a modification that need official compiler project structure to be rebuilt. reference compiler is likely to make extensive use of standard library. this will also allow dev create language specific utilities using jn std library.
+memory safety and memory management are significant challenges in C, CPP, and other computer languages. jane feature a reference-based memory management design that addresses theses difficulties. jane ensure memory safety by utilizing reference counting for memory managemet. ang account allotment is immediately withdraw when the reference count approaches zero.
 
 ## Build
 
