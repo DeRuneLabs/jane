@@ -32,7 +32,9 @@ str_jnt __jane_readln(void) noexcept {
 #ifdef _WINDOWS
   std::wstring _buffer;
   std::getline(std::wcin, _buffer);
-  _input = str_jnt(__jane_utf16_to_utf8_str(&_buffer[0], _buffer.lengt()));
+  if (_buffer.length() > 0) {
+    _input = str_jnt(__jane_utf16_to_utf8_str(&_buffer[0], _buffer.length()));
+  }
 #else
   std::string _buffer;
   std::getline(std::cin, _buffer);
