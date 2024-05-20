@@ -192,6 +192,9 @@ void __jane_terminate_handler(void) noexcept {
 }
 
 void __jane_signal_handler(int _Signal) noexcept {
+  if (_Signal == __JANE_SIGNINT) {
+    return;
+  }
   JANE_ID(print)<str_jnt>("program terminating with signal: ");
   JANE_ID(println)<int>(_Signal);
 }
