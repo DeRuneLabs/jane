@@ -24,6 +24,8 @@
 #include "slice.hpp"
 #include "typedef.hpp"
 #include "utf8.hpp"
+#include <sstream>
+
 class str_jnt;
 
 class str_jnt {
@@ -276,7 +278,7 @@ public:
     return (this->__buffer[_Index]);
   }
 
-  inline u8_jnt operator[](const uint_jnt &_Index) const {
+  inline u8_jnt operator[](const int_jnt &_Index) const {
     return ((*this).__buffer[_Index]);
   }
 
@@ -304,5 +306,16 @@ public:
     return (_Stream);
   }
 };
+
+template <typename _Obj_t> str_jnt __jane_to_str(const _Obj_t &_Obj) noexcept;
+str_jnt __jane_to_str(const str_jnt &_Obj) noexcept;
+
+template <typename _Obj_t> str_jnt __jane_to_str(const _Obj_t &_Obj) noexcept {
+  std::stringstream _stream;
+  _stream << _Obj;
+  return (str_jnt(_stream.str()));
+}
+
+inline str_jnt __jane_to_str(const str_jnt &_Obj) noexcept { return (_Obj); }
 
 #endif // !__JANE_STR_HPP

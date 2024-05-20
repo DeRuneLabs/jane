@@ -22,19 +22,40 @@
 #define __JANE_MAP_HPP
 
 #include "slice.hpp"
+#include "str.hpp"
 #include "typedef.hpp"
+#include <initializer_list>
 #include <unordered_map>
+
+class __jane_map_key_hasher;
 
 template <typename _Key_t, typename _Value_t> class map_jnt;
 
+class __jane_map_key_hasher {
+public:
+  size_t operator()(const str_jnt &_Key) const noexcept {
+    size_t _hash{0};
+    for (int_jnt _i{0}; _i < _Key._len(); ++_i) {
+      _hash += _Key[_i] % 7;
+    }
+    return (_hash);
+  }
+
+  template <typename _Obj_t>
+  inline size_t operator()(const _Obj_t &_Obj) const noexcept {
+    return (this->operator()(__jane_to_str<_Obj_t>(_Obj)));
+  };
+};
+
 template <typename _Key_t, typename _Value_t>
-class map_jnt : public std::unordered_map<_Key_t, _Value_t> {
+class map_jnt
+    : public std::unordered_map<_Key_t, _Value_t, __jane_map_key_hasher> {
 public:
   map_jnt<_Key_t, _Value_t>(void) noexcept {}
   map_jnt<_Key_t, _Value_t>(const std::nullptr_t) noexcept {}
 
   map_jnt<_Key_t, _Value_t>(
-      const std::initializer_list<std::pair<_Key_t, _Value_t>> _Src) noexcept {
+      const std::initializer_list<std::pair<_Key_t, _Value_t>> &_Src) noexcept {
     for (const auto _data : _Src) {
       this->insert(_data);
     }

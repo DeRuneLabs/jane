@@ -56,6 +56,7 @@ class str_jnt;
 
 #include "any.hpp"
 #include "array.hpp"
+#include "atomicity.hpp"
 #include "builtin.hpp"
 #include "defer.hpp"
 #include "fn.hpp"
@@ -142,22 +143,11 @@ inline auto __jane_tuple_as_args(const fn_jnt<_Function_t> &_Function,
   return _Function.__buffer(std::get<_I_t>(_Tuple)...);
 }
 
-template <typename _Obj_t>
-str_jnt __jane_to_str(const _Obj_t &_Obj) noexcept {
-  std::stringstream _stream;
-  _stream << _Obj;
-  return (str_jnt(_stream.str()));
-}
-
-str_jnt __jane_to_str(const str_jnt &_Obj) noexcept {
-  return (_Obj);
-}
-
 slice_jnt<u16_jnt> __jane_utf16_from_str(const str_jnt &_Str) noexcept {
   constexpr char _NULL_TERMINATOR = '\x00';
   slice_jnt<u16_jnt> _buff{nil};
   slice_jnt<i32_jnt> _runes{_Str.operator slice_jnt<i32_jnt>()};
-  for (const i32_jnt &_R: _runes) {
+  for (const i32_jnt &_R : _runes) {
     if (_R == _NULL_TERMINATOR) {
       break;
     }
@@ -167,19 +157,17 @@ slice_jnt<u16_jnt> __jane_utf16_from_str(const str_jnt &_Str) noexcept {
 }
 
 inline void JANE_ID(panic)(const trait_jnt<JANE_ID(Error)> &_Error) {
-  throw (_Error);
+  throw(_Error);
 }
 
-template <typename _Obj_t> void JANE_ID(panic)(const _Obj_t &_Expr ) {
-  struct panic_error: public JANE_ID(Error) {
+template <typename _Obj_t> void JANE_ID(panic)(const _Obj_t &_Expr) {
+  struct panic_error : public JANE_ID(Error) {
     str_jnt __message;
-    str_jnt _error(void) {
-      return (this->__message);
-    }
+    str_jnt _error(void) { return (this->__message); }
   };
   struct panic_error _error;
   _error.__message = __jane_to_str(_Expr);
-  throw (trait_jnt<JANE_ID(Error)>(_error));
+  throw(trait_jnt<JANE_ID(Error)>(_error));
 }
 
 void __jane_terminate_handler(void) noexcept {
@@ -192,9 +180,19 @@ void __jane_terminate_handler(void) noexcept {
 }
 
 void __jane_signal_handler(int _Signal) noexcept {
-  if (_Signal == __JANE_SIGNINT) {
+#if defined(_WINDOWS)
+  if (_Signal == __JANE_SIGINT) {
     return;
   }
+#elif defined(_DARWIN)
+  if (_Signal == __JULEC_SIGINT) {
+    return;
+  }
+#elif defined(_LINUX)
+  if (_Signal == ___JANE_SIGINT) {
+    return;
+  }
+#endif
   JANE_ID(print)<str_jnt>("program terminating with signal: ");
   JANE_ID(println)<int>(_Signal);
 }
