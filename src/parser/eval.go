@@ -1126,6 +1126,61 @@ func (e *eval) variadic(toks []lexer.Token, m *expr_model, errtok lexer.Token) (
 	return
 }
 
+func (e *eval) try_slicing(v *value, toks []lexer.Token, m *expr_model, errTok lexer.Token) bool {
+	i := 0
+	toks, colon := ast.SplitColon(toks, &i)
+	if colon == -1 {
+		return false
+	}
+	i = 0
+	var leftv, rightv value
+	leftv.constant = true
+	rightv.constant = true
+	leftToks := toks[:colon]
+	rightToks := toks[colon+1:]
+	m.append_sub(exprNode{".___slice("})
+	if len(leftToks) > 0 {
+		var model ast.ExprModel
+		leftv, model = e.p.evalToks(leftToks, nil)
+		m.append_sub(get_indexing_expr_model(leftv, model))
+		e.check_integer_indexing(leftv, errTok)
+	} else {
+		leftv.expr = int64(0)
+		leftv.model = get_num_model(leftv)
+		m.append_sub(exprNode{"0"})
+	}
+	if len(rightToks) > 0 {
+		m.append_sub(exprNode{","})
+		var model ast.ExprModel
+		rightv, model = e.p.evalToks(rightToks, nil)
+		m.append_sub(get_indexing_expr_model(rightv, model))
+		e.check_integer_indexing(rightv, errTok)
+	}
+	m.append_sub(exprNode{")"})
+	*v = e.slicing(*v, leftv, rightv, errTok)
+	if !types.IsMut(v.data.DataType) {
+		v.data.Value = " "
+	}
+	return true
+}
+
+func (e *eval) indexing(v *value, toks []lexer.Token, m *expr_model, err_tok lexer.Token) {
+	m.append_sub(exprNode{lexer.KND_LBRACKET})
+	indexv, model := e.eval_toks(toks[1 : len(toks)-1])
+	if types.IsMap(v.data.DataType) {
+		m.append_sub(model)
+	} else {
+		m.append_sub(get_indexing_expr_model(indexv, model))
+	}
+	m.append_sub(get_indexing_expr_model(indexv, model))
+	*v = e.check_indexing_type(*v, indexv, err_tok)
+	if !types.IsMut(v.data.DataType) {
+		v.data.Value = " "
+	}
+	v.data.DataType.Pure = true
+	v.data.DataType.Original = nil
+}
+
 func (e *eval) bracket_range(toks []lexer.Token, m *expr_model) (v value) {
 	errTok := toks[0]
 	var exprToks []lexer.Token
@@ -1165,76 +1220,37 @@ func (e *eval) bracket_range(toks []lexer.Token, m *expr_model) (v value) {
 	v, model = e.eval_toks(exprToks)
 	m.append_sub(model)
 	toks = toks[len(exprToks):]
-	i := 0
-	if toks, colon := ast.SplitColon(toks, &i); colon != -1 {
-		i = 0
-		var leftv, rightv value
-		leftv.constant = true
-		rightv.constant = true
-		leftToks := toks[:colon]
-		rightToks := toks[colon+1:]
-		m.append_sub(exprNode{".___slice("})
-		if len(leftToks) > 0 {
-			var model ast.ExprModel
-			leftv, model = e.p.evalToks(leftToks, nil)
-			m.append_sub(get_indexing_expr_model(leftv, model))
-			e.check_integer_indexing(leftv, errTok)
-		} else {
-			leftv.expr = int64(0)
-			leftv.model = get_num_model(leftv)
-			m.append_sub(exprNode{"0"})
-		}
-		if len(rightToks) > 0 {
-			m.append_sub(exprNode{","})
-			var model ast.ExprModel
-			rightv, model = e.p.evalToks(rightToks, nil)
-			m.append_sub(get_indexing_expr_model(rightv, model))
-			e.check_integer_indexing(rightv, errTok)
-		}
-		m.append_sub(exprNode{")"})
-		v = e.slicing(v, leftv, rightv, errTok)
-		if !types.IsMut(v.data.DataType) {
-			v.data.Value = " "
-		}
-		return v
+	if e.try_slicing(&v, toks, m, errTok) {
+		return
 	}
-	m.append_sub(exprNode{lexer.KND_LBRACKET})
-	indexv, model := e.eval_toks(toks[1 : len(toks)-1])
-	m.append_sub(get_indexing_expr_model(indexv, model))
-	m.append_sub(exprNode{lexer.KND_RBRACKET})
-	v = e.indexing(v, indexv, errTok)
-	if !types.IsMut(v.data.DataType) {
-		v.data.Value = " "
-	}
-	v.data.DataType.Pure = true
-	v.data.DataType.Original = nil
-	return v
+	e.indexing(&v, toks, m, errTok)
+	return
 }
 
-func (e *eval) check_integer_indexing(v value, errtok lexer.Token) {
+func (e *eval) check_integer_indexing(v value, err_tok lexer.Token) {
 	err_key := check_value_for_indexing(v)
 	if err_key != "" {
-		e.push_err_tok(errtok, err_key)
+		e.push_err_tok(err_tok, err_key)
 	}
 }
 
-func (e *eval) indexing(enumv, indexv value, errtok lexer.Token) (v value) {
+func (e *eval) check_indexing_type(enumv value, indexv value, err_tok lexer.Token) (v value) {
 	switch {
 	case types.IsExplicitPtr(enumv.data.DataType):
-		return e.indexing_explicit_ptr(enumv, indexv, errtok)
+		return e.indexing_explicit_ptr(enumv, indexv, err_tok)
 	case types.IsArray(enumv.data.DataType):
-		return e.indexing_array(enumv, indexv, errtok)
+		return e.indexing_array(enumv, indexv, err_tok)
 	case types.IsSlice(enumv.data.DataType):
-		return e.indexing_slice(enumv, indexv, errtok)
+		return e.indexing_slice(enumv, indexv, err_tok)
 	case types.IsMap(enumv.data.DataType):
-		return e.indexing_map(enumv, indexv, errtok)
+		return e.indexing_map(enumv, indexv, err_tok)
 	case types.IsPure(enumv.data.DataType):
 		switch enumv.data.DataType.Id {
 		case types.STR:
-			return e.indexing_str(enumv, indexv, errtok)
+			return e.indexing_str(enumv, indexv, err_tok)
 		}
 	}
-	e.push_err_tok(errtok, "not_supports_indexing", enumv.data.DataType.Kind)
+	e.push_err_tok(err_tok, "not_supports_indexing", enumv.data.DataType.Kind)
 	return
 }
 

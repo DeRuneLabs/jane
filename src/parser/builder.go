@@ -1871,7 +1871,7 @@ func (b *builder) getForeachIterProfile(
 	return foreach
 }
 
-func (b *builder) getIterProfile(toks []lexer.Token, errtok lexer.Token) any {
+func (b *builder) getIterProfile(toks []lexer.Token, _ lexer.Token) any {
 	brace_n := 0
 	for i, tok := range toks {
 		if tok.Id == lexer.ID_BRACE {
@@ -1974,7 +1974,7 @@ func (b *builder) IterExpr(bs *block_st) ast.St {
 
 func (b *builder) caseexprs(toks *[]lexer.Token, type_match bool) []ast.Expr {
 	var exprs []ast.Expr
-	push_expr := func(toks []lexer.Token, tok lexer.Token) {
+	push_expr := func(toks []lexer.Token, _ lexer.Token) {
 		if len(toks) > 0 {
 			if type_match {
 				i := 0
