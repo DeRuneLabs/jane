@@ -18,24 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JANE_DEFER_HPP
-#define __JANE_DEFER_HPP
+#ifndef __JANE_DERIVE_HPP
+#define __JANE_DERIVE_HPP
 
-#include <functional>
-#define __JANE_CCONCAT(A, B) A##B
-#define __JANE_CONCAT(A, B) __JANE_CCONCAT(A, B)
+#include "clone.hpp"
 
-#define __JANE_DEFER(BLOCK)                                                    \
-  jane::DeferBase __JANE_CONCAT(__deffered__, __LINE__) { [=] BLOCK }
-
-namespace jane {
-struct DeferBase;
-struct DeferBase {
-public:
-  std::function<void(void)> scope;
-  DeferBase(const std::function<void(void)> &fn) noexcept { this->scope = fn; }
-  ~DeferBase(void) noexcept { this->scope(); }
-};
-} // namespace jane
-
-#endif // __JANE_DEFER_HPP
+#endif //__JANE_DERIVE_HPP

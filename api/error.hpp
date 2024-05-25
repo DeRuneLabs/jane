@@ -18,24 +18,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JANE_DEFER_HPP
-#define __JANE_DEFER_HPP
+#ifndef __JANE_ERROR_HPP
+#define __JANE_ERROR_HPP
 
-#include <functional>
-#define __JANE_CCONCAT(A, B) A##B
-#define __JANE_CONCAT(A, B) __JANE_CCONCAT(A, B)
+#define __JANE_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(STREAM, START, LEN)      \
+  (STREAM << jane::ERROR_INDEX_OUT_OF_RANGE << '[' << START << ':' << LEN      \
+          << ']')
 
-#define __JANE_DEFER(BLOCK)                                                    \
-  jane::DeferBase __JANE_CONCAT(__deffered__, __LINE__) { [=] BLOCK }
+#define __JANE_WRITE_ERROR_INDEX_OUT_OF_RANGE(STREAM, INDEX)                   \
+  (STREAM << jane::ERROR_INDEX_OUT_OF_RANGE << '[' << INDEX << ']')
 
 namespace jane {
-struct DeferBase;
-struct DeferBase {
-public:
-  std::function<void(void)> scope;
-  DeferBase(const std::function<void(void)> &fn) noexcept { this->scope = fn; }
-  ~DeferBase(void) noexcept { this->scope(); }
-};
+constexpr const char *ERROR_INVALID_MEMORY{
+    "invalid memory address or nil pointer deference"};
+constexpr const char *ERROR_INCOMPATIBLE_TYPE{"incompatible type"};
+constexpr const char *ERROR_MEMORY_ALLOCATION_FAILED{
+    "memory allocation failed"};
+constexpr const char *ERROR_INDEX_OUT_OF_RANGE{"index out of range"};
+constexpr const char *ERROR_DIVIDE_BY_ZERO{"divide by zero"};
+constexpr signed int EXIT_PANIC{2};
 } // namespace jane
 
-#endif // __JANE_DEFER_HPP
+#endif // __JANE_ERROR_HPP

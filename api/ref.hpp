@@ -1,4 +1,4 @@
-// Copyright (c) 2024 - DeRuneLabs
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,146 +21,169 @@
 #ifndef __JANE_REF_HPP
 #define __JANE_REF_HPP
 
-#include "atomicity.hpp"
-#include "typedef.hpp"
-constexpr signed int __JANE_REFERENCE_DELTA{1};
+#include "atomic.hpp"
+#include "error.hpp"
+#include "panic.hpp"
+#include "types.hpp"
+#include <new>
+#include <ostream>
+namespace jane {
+constexpr signed int REFERENCE_DELTA{1};
 
-template <typename T> struct ref_jnt;
+template <typename T> struct Ref;
 
-template <typename T> struct ref_jnt {
-  mutable T *__alloc{nil};
-  mutable uint_jnt *__ref{nil};
+template <typename T> inline jane::Ref<T> new_ref(void) noexcept;
 
-  static ref_jnt<T> make(T *_Ptr, uint_jnt *_Ref) noexcept {
-    ref_jnt<T> _buffer;
-    _buffer.__alloc = _Ptr;
-    _buffer.__ref = _Ref;
-    return (_buffer);
+template <typename T> inline jane::Ref<T> new_ref(const T &init) noexcept;
+
+template <typename T> struct Ref {
+  mutable T *alloc{nullptr};
+  mutable jane::Uint *ref{nullptr};
+
+  static jane::Ref<T> make(T *ptr, jane::Uint *ref) noexcept {
+    jane::Ref<T> buffer;
+    buffer.alloc = ptr;
+    buffer.ref = ref;
+    return buffer;
   }
 
-  static ref_jnt<T> make(T *_Ptr) noexcept {
-    ref_jnt<T> _buffer;
-    _buffer.__ref = (new (std::nothrow) uint_jnt);
-    if (!_buffer.__ref) {
-      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
+  static jane::Ref<T> make(T *ptr) noexcept {
+    jane::Ref<T> buffer;
+    buffer.ref = new (std::nothrow) jane::Uint;
+    if (buffer.ref) {
+      jane::panic(jane::ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    *_buffer.__ref = 1;
-    _buffer.__alloc = _Ptr;
-    return (_buffer);
+    *buffer.ref = 1;
+    buffer.alloc = ptr;
+    return buffer;
   }
 
-  static ref_jnt<T> make(const T &_Instance) noexcept {
-    ref_jnt<T> _buffer;
-    _buffer.__alloc = (new (std::nothrow) T);
-    if (!_buffer.__alloc) {
-      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
+  static jane::Ref<T> make(const T &instance) noexcept {
+    jane::Ref<T> buffer;
+    buffer.alloc = new (std::nothrow) T;
+    if (!buffer.alloc) {
+      jane::panic(jane::ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    _buffer.__ref = (new (std::nothrow) uint_jnt);
-    if (!_buffer.__ref) {
-      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
-    }
-    *_buffer.__ref = __JANE_REFERENCE_DELTA;
-    *_buffer.__aloc = _Instance;
-    return (_buffer);
+    *buffer.ref = new (std::nothrow) jane::Uint;
+    *buffer.alloc = instance;
+    return buffer;
   }
 
-  ref_jnt<T>(void) noexcept {}
+  Ref<T>(void) noexcept {}
+  Ref<T>(const jane::Ref<T> &ref) noexcept { this->operator=(ref); }
+  ~Ref<T>(void) noexcept { this->drop(); }
 
-  ref_jnt<T>(const ref_jnt<T> &_Ref) noexcept { this->operator=(_Ref); }
-
-  ~ref_jnt<T>(void) noexcept { this->_drop(); }
-
-  inline int_jnt __drop_ref(void) const noexcept {
-    return (__jane_atomic_add(this->__ref, -__JANE_REFERENCE_DELTA));
+  inline jane::Int drop_ref(void) const noexcept {
+    return __jane_atomic_add(this->ref, -jane::REFERENCE_DELTA);
   }
 
-  inline int_jnt __add_ref(void) const noexcept {
-    return (__jane_atomic_add(this->__ref, __JANE_REFERENCE_DELTA));
+  inline jane::Int add_ref(void) const noexcept {
+    return __jane_atomic_add(this->ref, jane::REFERENCE_DELTA);
   }
 
-  inline uint_jnt __get_ref_n(void) const noexcept {
-    return (__jane_atomic_load(this->__ref));
+  inline jane::Uint get_ref_n(void) const noexcept {
+    return __jane_atomic_load(this->ref);
   }
 
-  void _drop(void) const noexcept {
-    if (!this->__ref) {
-      this->__alloc = nil;
+  void drop(void) const noexcept {
+    if (!this->ref) {
+      this->alloc = nullptr;
       return;
     }
-    if ((this->__drop_ref()) != __JANE_REFERENCE_DELTA) {
-      this->__ref = nil;
-      this->__alloc = nil;
+    if (this->drop_ref() != jane::REFERENCE_DELTA) {
+      this->ref = nullptr;
+      this->alloc = nullptr;
       return;
     }
-    delete this->__ref;
-    this->__ref = nil;
-    delete this->__alloc;
-    this->__alloc = nil;
+
+    delete this->ref;
+    this->ref = nullptr;
+
+    delete this->alloc;
+    this->alloc = nullptr;
   }
 
-  inline bool _real() const noexcept { return (this->__alloc != nil); }
+  inline jane::Bool real() const noexcept { return this->alloc != nullptr; }
 
-  inline T *operator->(void) noexcept {
-    this->__must_ok();
-    return (*this->__alloc);
+  inline T *operator->(void) const noexcept {
+    this->must_ok();
+    return this->alloc;
   }
 
-  inline operator T(void) noexcept {
-    this->__must_ok();
-    return (*this->__alloc);
+  inline operator T(void) const noexcept {
+    this->must_ok();
+    return *this->alloc;
   }
 
   inline operator T &(void) noexcept {
-    this->__must_ok();
-    return (*this->__alloc);
+    this->must_ok();
+    return *this->alloc;
   }
 
-  inline void __must_ok(void) const noexcept {
-    if (!this->_real()) {
-      JANE_ID(panic)(__JANE_ERROR_INVALID_MEMORY);
+  inline void must_ok(void) const noexcept {
+    if (!this->real()) {
+      jane::panic(jane::ERROR_INVALID_MEMORY);
     }
   }
 
-  void operator=(const ref_jnt<T> &_Ref) noexcept {
-    this->_drop();
-    if (_Ref.__ref) {
-      _Ref.__add_ref();
+  void operator=(const jane::Ref<T> &ref) noexcept {
+    this->drop();
+    if (ref.ref) {
+      ref.add_ref();
     }
-    this->__ref = _Ref.__ref;
-    this->__alloc = _Ref.__alloc;
+    this->ref = ref.ref;
+    this->alloc = ref.alloc;
   }
 
-  inline bool operator==(const T &_Val) const noexcept {
-    return (this->__alloc == nil ? false : *this->__alloc == _Val);
+  inline void operator=(const T &val) const noexcept {
+    this->must_ok();
+    *this->alloc = val;
   }
 
-  inline bool operator!=(const T &_Val) const noexcept {
-    return (!this->operator==(_Val));
+  inline jane::Bool operator==(const T &val) const noexcept {
+    return this->__alloc == nullptr ? false : *this->alloc == val;
   }
 
-  inline bool operator==(const ref_jnt<T> &_Ref) const noexcept {
-    if (this->__alloc == nil) {
-      return _Ref.__alloc == nil;
+  inline jane::Bool operator!=(const T &val) const noexcept {
+    return !this->operator==(val);
+  }
+
+  inline jane::Bool operator==(const jane::Ref<T> &ref) const noexcept {
+    if (this->alloc == nullptr) {
+      return ref.alloc == nullptr;
     }
-    if (_Ref.__alloc == nil) {
+    if (ref.alloc == nullptr) {
       return false;
     }
-    return ((*this->__alloc) == (*_Ref.__alloc));
-  }
-
-  inline bool operator!=(const ref_jnt<T> &_Ref) const noexcept {
-    return (!this->operator==(_Ref));
-  }
-
-  friend inline std::ostream &operator<<(std::ostream &_Stream,
-                                         const ref_jnt<T> &_Ref) noexcept {
-    if (!_Ref._real()) {
-      _Stream << "nil";
-    } else {
-      _Stream << _Ref.operator T();
+    if (this->alloc == ref.alloc) {
+      return true;
     }
-    return (_Stream);
+    return *this->alloc == *ref.alloc;
+  }
+
+  inline jane::Bool operator!=(const jane::Ref<T> &ref) const noexcept {
+    return !this->operator==(ref);
+  }
+
+  friend inline std::ostream &operator<<(std::ostream &stream,
+                                         const jane::Ref<T> &ref) noexcept {
+    if (!ref.real()) {
+      stream << "nil";
+    } else {
+      stream << ref.operator T();
+    }
+    return stream;
   }
 };
 
-#endif // !__JANE_REF_HPP
+template <typename T> inline jane::Ref<T> new_ref(void) noexcept {
+  return jane::Ref<T>();
+}
+
+template <typename T> inline jane::Ref<T> new_ref(const T &init) noexcept {
+  return jane::Ref<T>::make(init);
+}
+
+} // namespace jane
+
+#endif // __JANE_REF_HPP

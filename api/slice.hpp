@@ -1,4 +1,4 @@
-// Copyright (c) 2024 - DeRuneLabs
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,218 +21,237 @@
 #ifndef __JANE_SLICE_HPP
 #define __JANE_SLICE_HPP
 
+#include <cstddef>
+#include <initializer_list>
+#include <ostream>
+#include <sstream>
+
+#include "error.hpp"
+#include "panic.hpp"
 #include "ref.hpp"
-#include "typedef.hpp"
+#include "types.hpp"
 
-template <typename _Item_t> class slice_jnt;
+namespace jane {
+template <typename Item> class Slice;
 
-template <typename _Item_t> class slice_jnt {
+template <typename Item> class Slice {
 public:
-  ref_jnt<_Item_t> __data{};
-  _Item_t *__slice{nil};
-  uint_jnt __len{0};
-  uint_jnt __cap{0};
+  jane::Ref<Item> data{};
+  Item *_slice{nullptr};
+  jane::Uint _len{0};
+  jane::Uint _cap{0};
 
-  slice_jnt<_Item_t>(void) noexcept {}
-  slice_jnt<_Item_t>(const std::nullptr_t) noexcept {}
+  static jane::Slice<Item> alloc(const jane::Uint &n) noexcept {
+    jane::Slice<Item> buffer;
+    buffer.alloc_new(n < 0 ? 0 : n);
+    return buffer;
+  }
 
-  slice_jnt<_Item_t>(const uint_jnt &_N) noexcept {
-    const uint_jnt _n{_N < 0 ? 0 : _N};
-    if (_n == 0) {
+  Slice<Item>(void) noexcept {}
+  Slice<Item>(const std::nullptr_t) noexcept {}
+
+  Slice<Item>(const jane::Slice<Item> &src) noexcept { this->operator=(src); }
+
+  Slice<Item>(const std::initializer_list<Item> &src) noexcept {
+    if (src.size() == 0) {
       return;
     }
-    this->__alloc_new(_n);
+
+    this->alloc_new(src.size());
+    const auto src_begin{src.begin()};
+    for (jane::Int i{0}; i < this->_len; ++i) {
+      this->data.alloc[i] = *reinterpret_cast<const Item *>(src_begin + i);
+    }
   }
 
-  slice_jnt<_Item_t>(const slice_jnt<_Item_t> &_Src) noexcept {
-    this->operator=(_Src);
+  ~Slice<Item>(void) noexcept { this->dealloc(); }
+
+  inline void check(void) const noexcept {
+    if (this->operator==(nullptr)) {
+      jane::panic(jane::ERROR_INVALID_MEMORY);
+    }
   }
 
-  slice_jnt<_Item_t>(const std::initializer_list<_Item_t> &_Src) noexcept {
-    if (_Src.size() == 0) {
+  void dealloc(void) noexcept {
+    this->_len = 0;
+    this->_cap = 0;
+
+    if (!this->data.ref) {
+      this->data.alloc = nullptr;
       return;
     }
-    this->__alloc_new(_Src.size());
-    const auto _Src_begin{_Src.begin()};
-    for (int_jnt _i{0}; _i < this->__len; ++_i) {
-      this->__data.__alloc[_i] = *(_Item_t *)(_Src_begin + _i);
-    }
-  }
 
-  ~slice_jnt<_Item_t>(void) noexcept { this->__dealloc(); }
-
-  inline void __check(void) const noexcept {
-    if (this->operator==(nil)) {
-      JANE_ID(panic)(__JANE_ERROR_INVALID_MEMORY);
-    }
-  }
-
-  void __dealloc(void) noexcept {
-    this->__len = 0;
-    this->__cap = 0;
-    if (!this->__data.__ref) {
-      this->__data.__alloc = nil;
+    if (this->data.get_ref_n() != jane::REFERENCE_DELTA) {
+      this->data.alloc = nullptr;
       return;
     }
-    if ((this->__data.__get_ref_n()) != __JANE_REFERENCE_DELTA) {
-      this->__data.__alloc = nil;
-      return;
+
+    delete this->data.ref;
+    this->data.ref = nullptr;
+
+    delete[] this->data.alloc;
+    this->data.alloc = nullptr;
+    this->data.ref = nullptr;
+    this->_slice = nullptr;
+  }
+
+  void alloc_new(const jane::Int n) noexcept {
+    this->dealloc();
+
+    Item *alloc{n == 0 ? new (std::nothrow) Item[0]
+                       : new (std::nothrow) Item[n]{Item()}};
+    if (!alloc) {
+      jane::panic(jane::ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    delete this->__data.__ref;
-    this->__data.__ref = nil;
-    delete[] this->__data.__alloc;
-    this->__data.__alloc = nil;
-    this->__data.__ref = nil;
-    this->__slice = nil;
+    this->data = jane::Ref<Item>::make(alloc);
+    this->_len = n;
+    this->_cap = n;
+    this->_slice = &alloc[0];
   }
 
-  void __alloc_new(const int_jnt _N) noexcept {
-    this->__dealloc();
-    _Item_t *_alloc{new (std::nothrow) _Item_t[_N]{_Item_t()}};
-    if (!_alloc) {
-      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
+  typedef Item *Iterator;
+  typedef const Item *ConstIterator;
+
+  inline constexpr Iterator begin(void) noexcept { return &this->_slice[0]; }
+
+  inline constexpr ConstIterator begin(void) const noexcept {
+    return &this->_slice[0];
+  }
+
+  inline constexpr Iterator end(void) noexcept {
+    return &this->_slice[this->_len];
+  }
+
+  inline constexpr ConstIterator end(void) const noexcept {
+    return &this->_slice[this->_len];
+  }
+
+  inline Slice<Item> slice(const jane::Int &start,
+                           const jane::Int &end) const noexcept {
+    this->check();
+
+    if (start < 0 || end < 0 || start > end || end > this->cap()) {
+      std::stringstream sstream;
+      __JANE_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(sstream, start, end);
+      jane::panic(sstream.str().c_str());
     }
-    this->__data = ref_jnt<_Item_t>::make(_alloc);
-    this->__len = _N;
-    this->__cap = _N;
-    this->__slice = &_alloc[0];
+
+    jane::Slice<Item> slice;
+    slice.data = this->data;
+    slice._slice = &this->_slice[start];
+    slice._len = end - start;
+    slice._cap = this->_cap - start;
+    return slice;
   }
 
-  typedef _Item_t *iterator;
-  typedef const _Item_t *const_iterator;
-
-  inline constexpr iterator begin(void) noexcept { return &this->__slice[0]; }
-
-  inline constexpr const_iterator begin(void) const noexcept {
-    return &this->__slice[0];
+  inline jane::Slice<Item> slice(const jane::Int &start) const noexcept {
+    return this->slice(start, this->len());
   }
 
-  inline constexpr iterator end(void) noexcept {
-    return &this->__slice[this->__len];
+  inline jane::Slice<Item> slice(void) const noexcept {
+    return this->slice(0, this->len());
   }
 
-  inline constexpr const_iterator end(void) const noexcept {
-    return &this->__slice[this->__len];
+  inline constexpr jane::Int len(void) const noexcept { return this->_len; }
+
+  inline constexpr jane::Int cap(void) const noexcept { return this->_cap; }
+
+  inline jane::Bool empty(void) const noexcept {
+    return !this->_slice || this->_len == 0 || this->_cap == 0;
   }
 
-  inline slice_jnt<_Item_t> ___slice(const int_jnt &_Start,
-                                     const int_jnt &_End) const noexcept {
-    this->__check();
-    if (_Start < 0 || _End < 0 || _Start > _End || _End > this->_cap()) {
-      std::stringstream _sstream;
-      __JANE_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(_sstream, _Start, _End);
-      JANE_ID(panic)(_sstream.str().c_str());
-    } else if (_Start == _End) {
-      return slice_jnt<_Item_t>();
-    }
-    slice_jnt<_Item_t> _slice;
-    _slice.__data = this->__data;
-    _slice.__slice = &this->__slice[_Start];
-    _slice.__len = _End - _Start;
-    _slice.__cap = this->__cap - _Start;
-    return _slice;
-  }
-
-  inline slice_jnt<_Item_t> ___slice(const int_jnt &_Start) const noexcept {
-    return this->___slice(_Start, this->_len());
-  }
-
-  inline slice_jnt<_Item_t> ___slice(void) const noexcept {
-    return this->___slice(0, this->_len());
-  }
-
-  inline constexpr int_jnt _len(void) const noexcept { return (this->__len); }
-
-  inline constexpr int_jnt _cap(void) const noexcept { return (this->__cap); }
-
-  inline bool _empty(void) const noexcept {
-    return (!this->__slice || this->__len == 0 || this->__cap == 0);
-  }
-
-  void __push(const _Item_t &_Item) noexcept {
-    if (this->__len == this->__cap) {
-      _Item_t *_new{new (std::nothrow) _Item_t[this->__len + 1]};
+  void push(const Item &item) noexcept {
+    if (this->_len == this->_cap) {
+      Item *_new{new (std::nothrow) Item[this->_len + 1]};
       if (!_new) {
-        JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
+        jane::panic(jane::ERROR_MEMORY_ALLOCATION_FAILED);
       }
-      for (int_jnt _index{0}; _index < this->__len; ++_index) {
-        _new[_index] = this->__data.__alloc[_index];
+      for (jane::Int index{0}; index < this->_len; ++index) {
+        _new[index] = this->data.alloc[index];
       }
-      _new[this->__len] = _Item;
-      delete[] this->__data.__alloc;
-      this->__data.__alloc = nil;
-      this->__data.__alloc = _new;
-      this->__slice = this->__data.__alloc;
-      ++this->__cap;
+      _new[this->_len] = item;
+
+      delete[] this->data.alloc;
+      this->data.alloc = nullptr;
+      this->data.alloc = _new;
+      this->_slice = this->data.alloc;
     } else {
-      this->__slice[this->__len] = _Item;
+      this->_slice[this->_len] = item;
     }
-    ++this->__len;
+    ++this->_len;
   }
 
-  bool operator==(const slice_jnt<_Item_t> &_Src) const noexcept {
-    if (this->__len != _Src.__len) {
+  jane::Bool operator==(const jane::Slice<Item> &src) const noexcept {
+    if (this->_len != src._len) {
       return false;
     }
-    for (int_jnt _index{0}; _index < this->__len; ++_index) {
-      if (this->__slice[_index] != _Src.__slice[_index]) {
-        return (false);
+    for (jane::Int index{0}; index < this->_len; ++index) {
+      if (this->_slice[index] != src._slice[index]) {
+        return false;
       }
     }
-    return (true);
+    return true;
   }
 
-  inline constexpr bool
-  operator!=(const slice_jnt<_Item_t> &_Src) const noexcept {
-    return !this->operator==(_Src);
+  inline constexpr jane::Bool
+  operator!=(const jane::Slice<Item> &src) const noexcept {
+    return !this->operator==(src);
   }
 
-  inline constexpr bool operator==(const std::nullptr_t) const noexcept {
-    return !this->__slice;
+  inline constexpr jane::Bool operator==(const std::nullptr_t) const noexcept {
+    return !this->_slice;
   }
 
-  inline constexpr bool operator!=(const std::nullptr_t) const noexcept {
-    return !this->operator==(nil);
+  inline constexpr jane::Bool operator!=(const std::nullptr_t) const noexcept {
+    return !this->operator==(nullptr);
   }
 
-  _Item_t &operator[](const int_jnt &_Index) const {
-    this->__check();
-    if (this->_empty() || _Index < 0 || this->_len() <= _Index) {
-      std::stringstream _sstream;
-      __JANE_WRITE_ERROR_INDEX_OUT_OF_RANGE(_sstream, _Index);
-      JANE_ID(panic)(_sstream.str().c_str());
+  Item &operator[](const jane::Int &index) const {
+    this->check();
+    if (this->empty() || index < 0 || this->len() <= index) {
+      std::stringstream sstream;
+      __JANE_WRITE_ERROR_INDEX_OUT_OF_RANGE(sstream, index);
+      jane::panic(sstream.str().c_str());
     }
-    return this->__slice[_Index];
+    return this->_slice[index];
   }
 
-  void operator=(const slice_jnt<_Item_t> &_Src) noexcept {
-    this->__dealloc();
-    if (_Src.operator==(nil)) {
+  void operator=(const jane::Slice<Item> &src) noexcept {
+    if (this->data.alloc == src.data.alloc) {
+      this->_len = src._len;
+      this->_cap = src._cap;
+      this->data = src.data;
+      this->_slice = src._slice;
       return;
     }
-    this->__len = _Src.__len;
-    this->__cap = _Src.__cap;
-    this->__data = _Src.__data;
-    this->__slice = _Src.__slice;
+    this->dealloc();
+    if (src.operator==(nullptr)) {
+      return;
+    }
+    this->_len = src._len;
+    this->_cap = src._cap;
+    this->data = src.data;
+    this->_slice = src._slice;
   }
 
-  void operator=(const std::nullptr_t) noexcept { this->__dealloc(); }
+  void operator=(const std::nullptr_t) noexcept { this->dealloc(); }
 
-  friend std::ostream &operator<<(std::ostream &_Stream,
-                                  const slice_jnt<_Item_t> &_Src) noexcept {
-    if (_Src._empty()) {
-      return (_Stream << "[]");
+  friend std::ostream &operator<<(std::ostream &stream,
+                                  const jane::Slice<Item> &src) noexcept {
+    if (src.empty()) {
+      return stream << "[]";
     }
-    _Stream << '[';
-    for (int_jnt _index{0}; _index < _Src.__len;) {
-      _Stream << _Src.__slice[_index++];
-      if (_index < _Src.__len) {
-        _Stream << ' ';
+    stream << '[';
+    for (jane::Int index{0}; index < src._len;) {
+      stream << src._slice[index++];
+      if (index < src._len) {
+        stream << ' ';
       }
-      _Stream << ']';
-      return (_Stream);
     }
+    stream << ']';
+    return stream;
   }
 };
+} // namespace jane
 
-#endif // !__JANE_SLICE_HPP
+#endif // __JANE_SLICE_HPP

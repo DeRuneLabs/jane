@@ -18,24 +18,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JANE_DEFER_HPP
-#define __JANE_DEFER_HPP
+#ifndef __JANE_PLATFORM_HPP
+#define __JANE_PLATFORM_HPP
 
-#include <functional>
-#define __JANE_CCONCAT(A, B) A##B
-#define __JANE_CONCAT(A, B) __JANE_CCONCAT(A, B)
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+#define OS_WINDOWS
+#elif defined(__linux__) || defined(linux) || defined(__linux)
+#define OS_LINUX
+#elif defined(__APPLE__) || defined(__MACH__)
+#define OS_DARWIN
+#endif
 
-#define __JANE_DEFER(BLOCK)                                                    \
-  jane::DeferBase __JANE_CONCAT(__deffered__, __LINE__) { [=] BLOCK }
+#if defined(OS_LINUX) || defined(OS_DARWIN)
+#define OS_UNIX
+#endif
 
-namespace jane {
-struct DeferBase;
-struct DeferBase {
-public:
-  std::function<void(void)> scope;
-  DeferBase(const std::function<void(void)> &fn) noexcept { this->scope = fn; }
-  ~DeferBase(void) noexcept { this->scope(); }
-};
-} // namespace jane
+#if defined(__amd64) || defined(__amd64__) || defined(__x86_64) ||             \
+    defined(__x86_64__) || defined(_M_AMD64)
+#define ARCH_AMD64
+#elif defined(__arm__) || defined(__thumb__) || defined(_M_ARM) ||             \
+    defined(__arm)
+#define ARCH_ARM
+#elif defined(__aarch64__)
+#define ARCH_ARM64
+#elif defined(i386) || defined(__i386) || defined(__i386__) ||                 \
+    defined(_X86_) || defined(__I86__) || defined(__386)
+#define ARCH_I386
+#endif
 
-#endif // __JANE_DEFER_HPP
+#if defined(ARCH_AMD64) || defined(ARCH_ARM64)
+#define ARCH_64BIT
+#else
+#define ARCH_32BIT
+#endif
+
+#endif // __JANE_PLATFORM_HPP

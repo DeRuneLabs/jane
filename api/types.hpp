@@ -18,24 +18,44 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JANE_DEFER_HPP
-#define __JANE_DEFER_HPP
+#ifndef __JANE_TYPES_HPP
+#define __JANE_TYPES_HPP
 
-#include <functional>
-#define __JANE_CCONCAT(A, B) A##B
-#define __JANE_CONCAT(A, B) __JANE_CCONCAT(A, B)
-
-#define __JANE_DEFER(BLOCK)                                                    \
-  jane::DeferBase __JANE_CONCAT(__deffered__, __LINE__) { [=] BLOCK }
+#include "platform.hpp"
+#include <stddef.h>
 
 namespace jane {
-struct DeferBase;
-struct DeferBase {
-public:
-  std::function<void(void)> scope;
-  DeferBase(const std::function<void(void)> &fn) noexcept { this->scope = fn; }
-  ~DeferBase(void) noexcept { this->scope(); }
-};
+#ifdef ARCH_32BIT
+typedef unsigned long long int Uint;
+typedef signed long int Int;
+typedef unsigned long int Uintptr;
+#else
+typedef unsigned long long int Uint;
+typedef signed long long int Int;
+typedef unsigned long long int Uintptr;
+#endif
+
+typedef signed char I8;
+typedef signed short int I16;
+typedef signed long int I32;
+typedef signed long long int I64;
+typedef unsigned char U8;
+typedef unsigned short int U16;
+typedef unsigned long int U32;
+typedef unsigned long long int U64;
+typedef float F32;
+typedef double F64;
+typedef bool Bool;
+
+constexpr decltype(nullptr) nil{nullptr};
+
+constexpr jane::F32 MAX_F32{0x1p127 * (1 + (1 - 0x1p-23))};
+constexpr jane::F32 MIN_F32{-0x1p127 * (1 + (1 - 0x1p-23))};
+constexpr jane::F64 MAX_F64{0x1p1023 * (1 + (1 - 0x1p-52))};
+constexpr jane::F64 MIN_F64{-0x1p1023 * (1 + (1 - 0x1p-52))};
+constexpr jane::I64 MAX_I64{9223372036854775807LL};
+constexpr jane::I64 MIN_I64{-9223372036854775807 - 1};
+constexpr jane::U64 MAX_U64{18446744073709551615LLU};
 } // namespace jane
 
-#endif // __JANE_DEFER_HPP
+#endif // __JANE_TYPES_HPP

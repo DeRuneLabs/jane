@@ -1,4 +1,4 @@
-// Copyright (c) 2024 - DeRuneLabs
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,186 +21,194 @@
 #ifndef __JANE_SIGNAL_HPP
 #define __JANE_SIGNAL_HPP
 
+#include "platform.hpp"
 #include <csignal>
+#include <cstdlib>
 
-#define __JANE_SIG constexpr int
+namespace jane {
+typedef int Signal;
 
-#if defined(_WINDOWS)
-__JANE_SIG __JANE_SIGHUP{0x1};
-__JANE_SIG __JANE_SIGINT{0x2};
-__JANE_SIG __JANE_SIGQUIT{0x3};
-__JANE_SIG __JANE_SIGILL{0x4};
-__JANE_SIG __JANE_SIGTRAP{0x5};
-__JANE_SIG __JANE_SIGABRT{0x6};
-__JANE_SIG __JANE_SIGBUS{0x7};
-__JANE_SIG __JANE_SIGFPE{0x8};
-__JANE_SIG __JANE_SIGKILL{0x9};
-__JANE_SIG __JANE_SIGSEGV{0xb};
-__JANE_SIG __JANE_SIGPIPE{0xd};
-__JANE_SIG __JANE_SIGALRM{0xe};
-__JANE_SIG __JANE_SIGTERM{0xf};
+void set_sig_handler(void (*handler)(int sig)) noexcept;
+void signal_handler(int signal) noexcept;
 
-#elif defined(_DARWIN)
+#if defined(OS_WINDOWS)
+constexpr jane::Signal SIG_HUP{0x1};
+constexpr jane::Signal SIG_INT{0x2};
+constexpr jane::Signal SIG_QUIT{0x3};
+constexpr jane::Signal SIG_ILL{0x4};
+constexpr jane::Signal SIG_TRAP{0x5};
+constexpr jane::Signal SIG_ABRT{0x6};
+constexpr jane::Signal SIG_BUS{0x7};
+constexpr jane::Signal SIG_FPE{0x8};
+constexpr jane::Signal SIG_KILL{0x9};
+constexpr jane::Signal SIG_SEGV{0xb};
+constexpr jane::Signal SIG_PIPE{0xd};
+constexpr jane::Signal SIG_ALRM{0xe};
+constexpr jane::Signal SIG_TERM{0xf};
+#elif defined(OS_DARWIN)
+constexpr jane::Signal SIG_ABRT{0x6};
+constexpr jane::Signal SIG_ALRM{0xe};
+constexpr jane::Signal SIG_BUS{0xa};
+constexpr jane::Signal SIG_CHLD{0x14};
+constexpr jane::Signal SIG_CONT{0x13};
+constexpr jane::Signal SIG_EMT{0x7};
+constexpr jane::Signal SIG_FPE{0x8};
+constexpr jane::Signal SIG_HUP{0x1};
+constexpr jane::Signal SIG_ILL{0x4};
+constexpr jane::Signal SIG_INFO{0x1d};
+constexpr jane::Signal SIG_INT{0x2};
+constexpr jane::Signal SIG_IO{0x17};
+constexpr jane::Signal SIG_IOT{0x6};
+constexpr jane::Signal SIG_KILL{0x9};
+constexpr jane::Signal SIG_PIPE{0xd};
+constexpr jane::Signal SIG_PROF{0x1b};
+constexpr jane::Signal SIG_QUIT{0x3};
+constexpr jane::Signal SIG_SEGV{0xb};
+constexpr jane::Signal SIG_STOP{0x11};
+constexpr jane::Signal SIG_SYS{0xc};
+constexpr jane::Signal SIG_TERM{0xf};
+constexpr jane::Signal SIG_TRAP{0x5};
+constexpr jane::Signal SIG_TSTP{0x12};
+constexpr jane::Signal SIG_TTIN{0x15};
+constexpr jane::Signal SIG_TTOU{0x16};
+constexpr jane::Signal SIG_URG{0x10};
+constexpr jane::Signal SIG_USR1{0x1e};
+constexpr jane::Signal SIG_USR2{0x1f};
+constexpr jane::Signal SIG_VTALRM{0x1a};
+constexpr jane::Signal SIG_WINCH{0x1c};
+constexpr jane::Signal SIG_XCPU{0x18};
+constexpr jane::Signal SIG_XFSZ{0x19};
+#elif defined(OS_LINUX)
+constexpr jane::Signal SIG_ABRT{0x6};
+constexpr jane::Signal SIG_ALRM{0xe};
+constexpr jane::Signal SIG_BUS{0x7};
+constexpr jane::Signal SIG_CHLD{0x11};
+constexpr jane::Signal SIG_CLD{0x11};
+constexpr jane::Signal SIG_CONT{0x12};
+constexpr jane::Signal SIG_FPE{0x8};
+constexpr jane::Signal SIG_HUP{0x1};
+constexpr jane::Signal SIG_ILL{0x4};
+constexpr jane::Signal SIG_INT{0x2};
+constexpr jane::Signal SIG_IO{0x1d};
+constexpr jane::Signal SIG_IOT{0x6};
+constexpr jane::Signal SIG_KILL{0x9};
+constexpr jane::Signal SIG_PIPE{0xd};
+constexpr jane::Signal SIG_POLL{0x1d};
+constexpr jane::Signal SIG_PROF{0x1b};
+constexpr jane::Signal SIG_PWR{0x1e};
+constexpr jane::Signal SIG_QUIT{0x3};
+constexpr jane::Signal SIG_SEGV{0xb};
+constexpr jane::Signal SIG_STKFLT{0x10};
+constexpr jane::Signal SIG_STOP{0x13};
+constexpr jane::Signal SIG_SYS{0x1f};
+constexpr jane::Signal SIG_TERM{0xf};
+constexpr jane::Signal SIG_TRAP{0x5};
+constexpr jane::Signal SIG_TSTP{0x14};
+constexpr jane::Signal SIG_TTIN{0x15};
+constexpr jane::Signal SIG_TTOU{0x16};
+constexpr jane::Signal SIG_UNUSED{0x1f};
+constexpr jane::Signal SIG_URG{0x17};
+constexpr jane::Signal SIG_USR1{0xa};
+constexpr jane::Signal SIG_USR2{0xc};
+constexpr jane::Signal SIG_VTALRM{0x1a};
+constexpr jane::Signal SIG_WINCH{0x1c};
+constexpr jane::Signal SIG_XCPU{0x18};
+constexpr jane::Signal SIG_XFSZ{0x19};
+#endif
 
-__JANE_SIG __JANE_SIGABRT{0x6};
-__JANE_SIG __JANE_SIGALRM{0xe};
-__JANE_SIG __JANE_SIGBUS{0xa};
-__JANE_SIG __JANE_SIGCHLD{0x14};
-__JANE_SIG __JANE_SIGCONT{0x13};
-__JANE_SIG __JANE_SIGEMT{0x7};
-__JANE_SIG __JANE_SIGFPE{0x8};
-__JANE_SIG __JANE_SIGHUP{0x1};
-__JANE_SIG __JANE_SIGILL{0x4};
-__JANE_SIG __JANE_SIGINFO{0x1d};
-__JANE_SIG __JANE_SIGINT{0x2};
-__JANE_SIG __JANE_SIGIO{0x17};
-__JANE_SIG __JANE_SIGIOT{0x6};
-__JANE_SIG __JANE_SIGKILL{0x9};
-__JANE_SIG __JANE_SIGPIPE{0xd};
-__JANE_SIG __JANE_SIGPROF{0x1b};
-__JANE_SIG __JANE_SIGQUIT{0x3};
-__JANE_SIG __JANE_SIGSEGV{0xb};
-__JANE_SIG __JANE_SIGSTOP{0x11};
-__JANE_SIG __JANE_SIGSYS{0xc};
-__JANE_SIG __JANE_SIGTERM{0xf};
-__JANE_SIG __JANE_SIGTRAP{0x5};
-__JANE_SIG __JANE_SIGTSTP{0x12};
-__JANE_SIG __JANE_SIGTTIN{0x15};
-__JANE_SIG __JANE_SIGTTOU{0x16};
-__JANE_SIG __JANE_SIGURG{0x10};
-__JANE_SIG __JANE_SIGUSR1{0x1e};
-__JANE_SIG __JANE_SIGUSR2{0x1f};
-__JANE_SIG __JANE_SIGVTALRM{0x1a};
-__JANE_SIG __JANE_SIGWINCH{0x1c};
-__JANE_SIG __JANE_SIGXCPU{0x18};
-__JANE_SIG __JANE_SIGXFSZ{0x19};
-
-#elif defined(_LINUX)
-
-__JANE_SIG ___JANE_SIGABRT{0x6};
-__JANE_SIG ___JANE_SIGALRM{0xe};
-__JANE_SIG ___JANE_SIGBUS{0x7};
-__JANE_SIG ___JANE_SIGCHLD{0x11};
-__JANE_SIG ___JANE_SIGCLD{0x11};
-__JANE_SIG ___JANE_SIGCONT{0x12};
-__JANE_SIG ___JANE_SIGFPE{0x8};
-__JANE_SIG ___JANE_SIGHUP{0x1};
-__JANE_SIG ___JANE_SIGILL{0x4};
-__JANE_SIG ___JANE_SIGINT{0x2};
-__JANE_SIG ___JANE_SIGIO{0x1d};
-__JANE_SIG ___JANE_SIGIOT{0x6};
-__JANE_SIG ___JANE_SIGKILL{0x9};
-__JANE_SIG ___JANE_SIGPIPE{0xd};
-__JANE_SIG ___JANE_SIGPOLL{0x1d};
-__JANE_SIG ___JANE_SIGPROF{0x1b};
-__JANE_SIG ___JANE_SIGPWR{0x1e};
-__JANE_SIG ___JANE_SIGQUIT{0x3};
-__JANE_SIG ___JANE_SIGSEGV{0xb};
-__JANE_SIG ___JANE_SIGSTKFLT{0x10};
-__JANE_SIG ___JANE_SIGSTOP{0x13};
-__JANE_SIG ___JANE_SIGSYS{0x1f};
-__JANE_SIG ___JANE_SIGTERM{0xf};
-__JANE_SIG ___JANE_SIGTRAP{0x5};
-__JANE_SIG ___JANE_SIGTSTP{0x14};
-__JANE_SIG ___JANE_SIGTTIN{0x15};
-__JANE_SIG ___JANE_SIGTTOU{0x16};
-__JANE_SIG ___JANE_SIGUNUSED{0x1f};
-__JANE_SIG ___JANE_SIGURG{0x17};
-__JANE_SIG ___JANE_SIGUSR1{0xa};
-__JANE_SIG ___JANE_SIGUSR2{0xc};
-__JANE_SIG ___JANE_SIGVTALRM{0x1a};
-__JANE_SIG ___JANE_SIGWINCH{0x1c};
-__JANE_SIG ___JANE_SIGXCPU{0x18};
-__JANE_SIG ___JANE_SIGXFSZ{0x19};
-
-#endif // #define(_WINDOWS)
-
-void __jane_set_sig_handler(void (*_Handler)(int _Sig)) noexcept;
-void __jane_set_sig_handler(void (*_Handler)(int _Sig)) noexcept {
-#if defined(_WINDOWS)
-  signal(__JANE_SIGHUP, _Handler);
-  signal(__JANE_SIGINT, _Handler);
-  signal(__JANE_SIGQUIT, _Handler);
-  signal(__JANE_SIGILL, _Handler);
-  signal(__JANE_SIGTRAP, _Handler);
-  signal(__JANE_SIGABRT, _Handler);
-  signal(__JANE_SIGBUS, _Handler);
-  signal(__JANE_SIGFPE, _Handler);
-  signal(__JANE_SIGKILL, _Handler);
-  signal(__JANE_SIGSEGV, _Handler);
-  signal(__JANE_SIGPIPE, _Handler);
-  signal(__JANE_SIGALRM, _Handler);
-  signal(__JANE_SIGTERM, _Handler);
-#elif defined(_DARWIN)
-  signal(__JANE_SIGABRT, _Handler);
-  signal(__JANE_SIGALRM, _Handler);
-  signal(__JANE_SIGBUS, _Handler);
-  signal(__JANE_SIGCHLD, _Handler);
-  signal(__JANE_SIGCONT, _Handler);
-  signal(__JANE_SIGEMT, _Handler);
-  signal(__JANE_SIGFPE, _Handler);
-  signal(__JANE_SIGHUP, _Handler);
-  signal(__JANE_SIGILL, _Handler);
-  signal(__JANE_SIGINFO, _Handler);
-  signal(__JANE_SIGINT, _Handler);
-  signal(__JANE_SIGIO, _Handler);
-  signal(__JANE_SIGIOT, _Handler);
-  signal(__JANE_SIGKILL, _Handler);
-  signal(__JANE_SIGPIPE, _Handler);
-  signal(__JANE_SIGPROF, _Handler);
-  signal(__JANE_SIGQUIT, _Handler);
-  signal(__JANE_SIGSEGV, _Handler);
-  signal(__JANE_SIGSTOP, _Handler);
-  signal(__JANE_SIGSYS, _Handler);
-  signal(__JANE_SIGTERM, _Handler);
-  signal(__JANE_SIGTRAP, _Handler);
-  signal(__JANE_SIGTSTP, _Handler);
-  signal(__JANE_SIGTTIN, _Handler);
-  signal(__JANE_SIGTTOU, _Handler);
-  signal(__JANE_SIGURG, _Handler);
-  signal(__JANE_SIGUSR1, _Handler);
-  signal(__JANE_SIGUSR2, _Handler);
-  signal(__JANE_SIGVTALRM, _Handler);
-  signal(__JANE_SIGWINCH, _Handler);
-  signal(__JANE_SIGXCPU, _Handler);
-  signal(__JANE_SIGXFSZ, _Handler);
-#elif defined(_LINUX)
-  signal(___JANE_SIGABRT, _Handler);
-  signal(___JANE_SIGALRM, _Handler);
-  signal(___JANE_SIGBUS, _Handler);
-  signal(___JANE_SIGCHLD, _Handler);
-  signal(___JANE_SIGCLD, _Handler);
-  signal(___JANE_SIGCONT, _Handler);
-  signal(___JANE_SIGFPE, _Handler);
-  signal(___JANE_SIGHUP, _Handler);
-  signal(___JANE_SIGILL, _Handler);
-  signal(___JANE_SIGINT, _Handler);
-  signal(___JANE_SIGIO, _Handler);
-  signal(___JANE_SIGIOT, _Handler);
-  signal(___JANE_SIGKILL, _Handler);
-  signal(___JANE_SIGPIPE, _Handler);
-  signal(___JANE_SIGPOLL, _Handler);
-  signal(___JANE_SIGPROF, _Handler);
-  signal(___JANE_SIGPWR, _Handler);
-  signal(___JANE_SIGQUIT, _Handler);
-  signal(___JANE_SIGSEGV, _Handler);
-  signal(___JANE_SIGSTKFLT, _Handler);
-  signal(___JANE_SIGSTOP, _Handler);
-  signal(___JANE_SIGSYS, _Handler);
-  signal(___JANE_SIGTERM, _Handler);
-  signal(___JANE_SIGTRAP, _Handler);
-  signal(___JANE_SIGTSTP, _Handler);
-  signal(___JANE_SIGTTIN, _Handler);
-  signal(___JANE_SIGTTOU, _Handler);
-  signal(___JANE_SIGUNUSED, _Handler);
-  signal(___JANE_SIGURG, _Handler);
-  signal(___JANE_SIGUSR1, _Handler);
-  signal(___JANE_SIGUSR2, _Handler);
-  signal(___JANE_SIGVTALRM, _Handler);
-  signal(___JANE_SIGWINCH, _Handler);
-  signal(___JANE_SIGXCPU, _Handler);
-  signal(___JANE_SIGXFSZ, _Handler);
-#endif // defined(_WINDOWS)
+void set_sig_handler(void (*handler)(int _sig)) noexcept {
+#if defined(OS_WINDOWS)
+  std::signal(jane::SIG_HUP, handler);
+  std::signal(jane::SIG_INT, handler);
+  std::signal(jane::SIG_QUIT, handler);
+  std::signal(jane::SIG_ILL, handler);
+  std::signal(jane::SIG_TRAP, handler);
+  std::signal(jane::SIG_ABRT, handler);
+  std::signal(jane::SIG_BUS, handler);
+  std::signal(jane::SIG_FPE, handler);
+  std::signal(jane::SIG_KILL, handler);
+  std::signal(jane::SIG_SEGV, handler);
+  std::signal(jane::SIG_PIPE, handler);
+  std::signal(jane::SIG_ALRM, handler);
+  std::signal(jane::SIG_TERM, handler);
+#elif defined(OS_DARWIN)
+  std::signal(jane::SIG_ABRT, handler);
+  std::signal(jane::SIG_ALRM, handler);
+  std::signal(jane::SIG_BUS, handler);
+  std::signal(jane::SIG_CHLD, handler);
+  std::signal(jane::SIG_CONT, handler);
+  std::signal(jane::SIG_EMT, handler);
+  std::signal(jane::SIG_FPE, handler);
+  std::signal(jane::SIG_HUP, handler);
+  std::signal(jane::SIG_ILL, handler);
+  std::signal(jane::SIG_INFO, handler);
+  std::signal(jane::SIG_INT, handler);
+  std::signal(jane::SIG_IO, handler);
+  std::signal(jane::SIG_IOT, handler);
+  std::signal(jane::SIG_KILL, handler);
+  std::signal(jane::SIG_PIPE, handler);
+  std::signal(jane::SIG_PROF, handler);
+  std::signal(jane::SIG_QUIT, handler);
+  std::signal(jane::SIG_SEGV, handler);
+  std::signal(jane::SIG_STOP, handler);
+  std::signal(jane::SIG_SYS, handler);
+  std::signal(jane::SIG_TERM, handler);
+  std::signal(jane::SIG_TRAP, handler);
+  std::signal(jane::SIG_TSTP, handler);
+  std::signal(jane::SIG_TTIN, handler);
+  std::signal(jane::SIG_TTOU, handler);
+  std::signal(jane::SIG_URG, handler);
+  std::signal(jane::SIG_USR1, handler);
+  std::signal(jane::SIG_USR2, handler);
+  std::signal(jane::SIG_VTALRM, handler);
+  std::signal(jane::SIG_WINCH, handler);
+  std::signal(jane::SIG_XCPU, handler);
+  std::signal(jane::SIG_XFSZ, handler);
+#elif defined(OS_LINUX)
+  std::signal(jane::SIG_ABRT, handler);
+  std::signal(jane::SIG_ALRM, handler);
+  std::signal(jane::SIG_BUS, handler);
+  std::signal(jane::SIG_CHLD, handler);
+  std::signal(jane::SIG_CLD, handler);
+  std::signal(jane::SIG_CONT, handler);
+  std::signal(jane::SIG_FPE, handler);
+  std::signal(jane::SIG_HUP, handler);
+  std::signal(jane::SIG_ILL, handler);
+  std::signal(jane::SIG_INT, handler);
+  std::signal(jane::SIG_IO, handler);
+  std::signal(jane::SIG_IOT, handler);
+  std::signal(jane::SIG_KILL, handler);
+  std::signal(jane::SIG_PIPE, handler);
+  std::signal(jane::SIG_POLL, handler);
+  std::signal(jane::SIG_PROF, handler);
+  std::signal(jane::SIG_PWR, handler);
+  std::signal(jane::SIG_QUIT, handler);
+  std::signal(jane::SIG_SEGV, handler);
+  std::signal(jane::SIG_STKFLT, handler);
+  std::signal(jane::SIG_STOP, handler);
+  std::signal(jane::SIG_SYS, handler);
+  std::signal(jane::SIG_TERM, handler);
+  std::signal(jane::SIG_TRAP, handler);
+  std::signal(jane::SIG_TSTP, handler);
+  std::signal(jane::SIG_TTIN, handler);
+  std::signal(jane::SIG_TTOU, handler);
+  std::signal(jane::SIG_UNUSED, handler);
+  std::signal(jane::SIG_URG, handler);
+  std::signal(jane::SIG_USR1, handler);
+  std::signal(jane::SIG_USR2, handler);
+  std::signal(jane::SIG_VTALRM, handler);
+  std::signal(jane::SIG_WINCH, handler);
+  std::signal(jane::SIG_XCPU, handler);
+  std::signal(jane::SIG_XFSZ, handler);
+#endif
 }
 
-#endif // !__JANE_SIGNAL_HPP
+void signal_handler(int signal) noexcept {
+  jane::print("program terminated with signal: ");
+  jane::println(signal);
+  std::exit(signal);
+}
+
+} // namespace jane
+
+#endif // __JANE_SIGNAL_HPP

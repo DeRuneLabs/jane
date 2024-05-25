@@ -1,4 +1,4 @@
-// Copyright (c) 2024 - DeRuneLabs
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,101 +21,83 @@
 #ifndef __JANE_BUILTIN_HPP
 #define __JANE_BUILTIN_HPP
 
-#include "ref.hpp"
 #include "slice.hpp"
-#include "str.hpp"
-#include "typedef.hpp"
+#include "types.hpp"
+#include <iostream>
 
-typedef u8_jnt(JANE_ID(byte));
-typedef i32_jnt(JANE_ID(rune));
+#ifdef OS_WINDOWS
+#include <windows.h>
+#endif
 
-template <typename _Obj_t> str_jnt __jane_to_str(const _Obj_t &_Obj) noexcept;
-slice_jnt<u16_jnt> __jane_utf16_from_str(const str_jnt &_Str) noexcept;
+namespace jane {
+typedef jane::U8 Byte;
+typedef jane::I32 Rune;
 
-template <typename _Obj_t>
-inline void JANE_ID(print)(const _Obj_t &_Obj) noexcept;
-template <typename _Obj_t>
-inline void JANE_ID(println)(const _Obj_t &_Obj) noexcept;
-struct JANE_ID(Error);
-template <typename _Item_t>
-int_jnt JANE_ID(copy)(const slice_jnt<_Item_t> &_Dest,
-                      const slice_jnt<_Item_t> &Components) noexcept;
+template <typename T> inline void print(const T &obj) noexcept;
+template <typename T> inline void println(const T &obj) noexcept;
 
-template <typename T> inline ref_jnt<T> JANE_ID(new)(void) noexcept;
-template <typename T> inline ref_jnt<T> JANE_ID(new)(const T &_Expr) noexcept;
-template <typename T> inline void JANE_ID(drop)(T &_Obj) noexcept;
-template <typename T> inline bool JANE_ID(real)(T &_Obj) noexcept;
+template <typename Item>
+jane::Int copy(const jane::Slice<Item> &dest,
+               const jane::Slice<Item> &src) noexcept;
+template <typename Item>
+jane::Slice<Item> append(const jane::Slice<Item> &src,
+                         const jane::Slice<Item> &components) noexcept;
 
-template <typename _Obj_t>
-inline void JANE_ID(print)(const _Obj_t &_Obj) noexcept {
-#ifdef _WINDOWS
-  const str_jnt _str{__jane_to_str<_Obj_t>(_Obj)};
-  const slice_jnt<u16_jnt> _utf16_str{__jane_utf16_from_str(_str)};
-  HANDLE _handle{GetStdHandle(STD_OUTPUT_HANDLE)};
-  WriteConsoleW(_handle, &_utf16_str[0], _utf16_str._len(), nullptr, nullptr);
+template <typename T> inline jane::Bool real(const T &obj) noexcept;
+
+template <typename T> inline void print(const T &obj) noexcept {
+#ifdef OS_WINDOWS
+  const jane::Str str{jane::to_str<T>(obj)};
+  const jane::Slice<jane::U16> utf16_str{jane::utf16_from_str(str)};
+  HANDLE handle{GetStdHandler(STD_OUTPUT_HANDLE)};
+  WriteConsoleW(handle, &utf16_str[0], utf16_str.len(), nullptr, nullptr);
 #else
-  std::cout << _Obj;
-#endif // DEBUG
+  std::cout << obj;
+#endif
 }
 
-template <typename _Obj_t>
-inline void JANE_ID(println)(const _Obj_t &_Obj) noexcept {
-  JANE_ID(print)(_Obj);
+template <typename T> inline void println(const T &obj) noexcept {
+  jane::print(obj);
   std::cout << std::endl;
 }
 
-struct JANE_ID(Error) {
-  virtual str_jnt _error(void) { return {}; }
-  virtual ~JANE_ID(Error)(void) noexcept {}
-
-  bool operator==(const JANE_ID(Error) & _Src) { return false; }
-  bool operator!=(const JANE_ID(Error) & _Src) {
-    return !this->operator==(_Src);
-  }
-};
-
-template <typename _Item_t>
-int_jnt JANE_ID(copy)(const slice_jnt<_Item_t> &_Dest,
-                      const slice_jnt<_Item_t> &_Src) noexcept {
-  if (_Dest._empty() || _Src._empty()) {
+template <typename Item>
+jane::Int copy(const jane::Slice<Item> &dest,
+               const jane::Slice<Item> &src) noexcept {
+  if (dest.empty() || src.empty()) {
     return 0;
   }
-  int_jnt _len = (_Dest._len() > _Src._len())   ? _Src._len()
-                 : (_Src._len() > _Dest._len()) ? _Dest._len()
-                                                : _Src._len();
-  for (int_jnt _index{0}; _index < _len; ++_index) {
-    _Dest.__slice[_index] = _Src.__slice[_index];
+  jane::Int len{dest.len() > src.len()   ? src.len()
+                : src.len() > dest.len() ? dest.len()
+                                         : src.len()};
+  for (jane::Int index{0}; index < len; ++index) {
+    dest._slice[index] = src._slice[index];
   }
-  return (_len);
+  return len;
 }
 
-template <typename _Item_t>
-slice_jnt<_Item_t>
-JANE_ID(append)(const slice_jnt<_Item_t> &_Src,
-                const slice_jnt<_Item_t> &_Components) noexcept {
-  const int_jnt _N{_Src._len() + _Components._len()};
-  slice_jnt<_Item_t> _buffer(_N);
-  JANE_ID(copy)<_Item_t>(_buffer, _Src);
-  for (int_jnt _index{0}; _index < _Components._len(); ++_index) {
-    _buffer[_Src._len() + _index] = _Components.__slice[_index];
+template <typename Item>
+jane::Slice<Item> append(const jane::Slice<Item> &src,
+                         const jane::Slice<Item> &components) noexcept {
+  if (src == nullptr && components == nullptr) {
+    return nullptr;
   }
-  return (_buffer);
+  const jane::Int n{src.len() + components.len()};
+  jane::Slice<Item> buffer{jane::Slice<Item>::alloc(n)};
+  jane::copy(buffer, src);
+
+  for (jane::Int index{0}; index < components.len(); ++index) {
+    buffer[src.len() + index] = components._slice[index];
+  }
+  return buffer;
 }
 
-template <typename T> inline ref_jnt<T> JANE_ID(new)(void) noexcept {
-  return (ref_jnt<T>());
+template <typename T> inline void drop(T &obj) noexcept { obj.drop(); }
+
+template <typename T> inline jane::Bool real(const T &obj) noexcept {
+  return obj.real();
 }
 
-template <typename T> inline ref_jnt<T> JANE_ID(new)(const T &_Expr) noexcept {
-  return (ref_jnt<T>::make(_Expr));
-}
+} // namespace jane
 
-template <typename T> inline void JANE_ID(drop)(T &_Obj) noexcept {
-  _Obj._drop();
-}
-
-template <typename T> inline bool JANE_ID(real)(T &_Obj) noexcept {
-  return (_Obj._real());
-}
-
-#endif // !__JANE_BUILTIN_HPP
+#endif // __JANE_BUILTIN_HPP

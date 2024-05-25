@@ -1,4 +1,4 @@
-// Copyright (c) 2024 - DeRuneLabs
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,91 +21,106 @@
 #ifndef __JANE_TRAIT_HPP
 #define __JANE_TRAIT_HPP
 
+#include "error.hpp"
+#include "panic.hpp"
 #include "ref.hpp"
-#include "typedef.hpp"
+#include "types.hpp"
+#include <cstddef>
+#include <cstring>
+namespace jane {
+template <typename Mask> struct Trait;
 
-template <typename T> struct trait_jnt;
-
-template <typename T> struct trait_jnt {
+template <typename Mask> struct Trait {
 public:
-  ref_jnt<T> __data{};
-  const char *__type_id{nil};
+  mutable jane::Ref<Mask> data{};
+  const char *type_id{nullptr};
+  Trait<Mask>(void) noexcept {}
+  Trait<Mask>(std::nullptr_t) noexcept {}
 
-  trait_jnt<T>(void) noexcept {}
-  trait_jnt<T>(std::nullptr_t) noexcept {}
-
-  template <typename TT> trait_jnt<T>(const TT &_Data) noexcept {
-    TT *_alloc{new (std::nothrow) TT};
-    if (!_alloc) {
-      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
+  template <typename T> Trait<Mask>(const T &data) noexcept {
+    T *alloc{new (std::nothrow) T};
+    if (!alloc) {
+      jane::panic(jane::ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    *_alloc = _Data;
-    this->__data = ref_jnt<T>::make((T *)(_alloc));
-    this->__type_id = typeid(_Data).name();
+    *alloc = data;
+    this->data = jane::Ref<Mask>::make(reinterpret_cast<Mask *>(alloc));
+    this->type_id = typeid(T).name();
   }
 
-  template <typename TT> trait_jnt<T>(const ref_jnt<TT> &_Ref) noexcept {
-    this->__data = ref_jnt<T>::make(((T *)(_Ref.__alloc)), _Ref.__ref);
-    this->__data.__add_ref();
-    this->__type_id = typeid(_Ref).name();
-  }
+  Trait<Mask>(const jane::Trait<Mask> &src) noexcept { this->operator=(src); }
 
-  trait_jnt<T>(const trait_jnt<T> &_Src) noexcept { this->operator=(_Src); }
+  void dealloc(void) noexcept { this->data.drop(); }
 
-  void __dealloc(void) noexcept { this->__data._drop(); }
-
-  inline void __must_ok(void) noexcept {
-    if (this->operator==(nil)) {
-      JANE_ID(panic)(__JANE_ERROR_INVALID_MEMORY);
+  inline void must_ok(void) const noexcept {
+    if (this->operator==(nullptr)) {
+      jane::panic(jane::ERROR_INVALID_MEMORY);
     }
   }
 
-  inline T &_get(void) noexcept {
-    return this->__data;
-  }
-
-  ~trait_jnt(void) noexcept {}
-
-  template <typename TT> operator TT(void) noexcept {
-    this->__must_ok();
-    if (std::strcmp(this->__type_id, typeid(TT).name()) != 0) {
-      JANE_ID(panic)(__JANE_ERROR_INCOMPATIBLE_TYPE);
+  template <typename T> inline jane::Bool type_is(void) const noexcept {
+    if (this->operator==(nullptr)) {
+      return false;
     }
-    this->__data.__add_ref();
-    return (ref_jnt<TT>((TT *)(this->__data.__alloc), this->__data.__ref));
+    return std::strcmp(this->type_id, typeid(T).name()) == 0;
   }
 
-  inline void operator==(const std::nullptr_t) noexcept { this->__dealloc(); }
+  inline Mask &get(void) noexcept {
+    this->must_ok();
+    return this->data;
+  }
 
-  inline void operator=(const trait_jnt<T> &_Src) noexcept {
-    this->__dealloc();
-    if (_Src == nil) {
+  inline Mask &get(void) const noexcept {
+    this->must_ok();
+    return this->data;
+  }
+
+  ~Trait(void) noexcept {}
+
+  template <typename T> operator T(void) noexcept {
+    this->must_ok();
+    if (std::strcmp(this->type_id, typeid(T).name()) != 0) {
+      jane::panic(jane::ERROR_INCOMPATIBLE_TYPE);
+    }
+    this->data.add_ref();
+    return jane::Ref<T>::make(reinterpret_cast<T *>(this->data.alloc),
+                              this->data.ref);
+  }
+
+  inline void operator=(const std::nullptr_t) noexcept { this->dealloc(); }
+
+  inline void operator=(const jane::Trait<Mask> &src) noexcept {
+    if (this->data.alloc == src.data.alloc) {
       return;
     }
-    this->__data = _Src.__data;
-    this->__type_id = _Src.__type_id;
+    this->dealloc();
+    if (src == nullptr) {
+      return;
+    }
+    this->data = src.data;
+    this->type_id = src.type_id;
   }
 
-  inline bool operator==(const trait_jnt<T> &_Src) const noexcept {
-    return (this->__data.__alloc == this->__data.__alloc);
+  inline jane::Bool operator==(const jane::Trait<Mask> &src) const noexcept {
+    return this->data.alloc == this->data.alloc;
   }
 
-  inline bool operator!=(const trait_jnt<T> &_Src) const noexcept {
-    return (!this->operator==(_Src));
+  inline jane::Bool operator!=(const jane::Trait<Mask> &src) const noexcept {
+    return !this->operator==(src);
   }
 
-  inline bool operator==(std::nullptr_t) const noexcept {
-    return (this->__data.__alloc == nil);
+  inline jane::Bool operator==(const std::nullptr_t) const noexcept {
+    return this->data.alloc == nullptr;
   }
 
-  inline bool operator!=(std::nullptr_t) const noexcept {
-    return (!this->operator==(nil));
+  inline jane::Bool operator!=(std::nullptr_t) const noexcept {
+    return !this->operator==(nullptr);
   }
 
-  friend inline std::ostream &operator<<(std::ostream &_Stream,
-                                         const trait_jnt<T> &_Src) noexcept {
-    return (_Stream << _Src.__data.__alloc);
+  friend inline std::ostream &
+  operator<<(std::ostream &stream, const jane::Trait<Mask> &src) noexcept {
+    return stream << src.data.alloc;
   }
 };
+} // namespace jane
 
-#endif // !__JANE_TRAIT_HPP
+#endif // __JANE_TRAIT_HPP

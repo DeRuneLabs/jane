@@ -18,24 +18,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JANE_DEFER_HPP
-#define __JANE_DEFER_HPP
+#ifndef __JANE_PANIC_HPP
+#define __JANE_PANIC_HPP
 
-#include <functional>
-#define __JANE_CCONCAT(A, B) A##B
-#define __JANE_CONCAT(A, B) __JANE_CCONCAT(A, B)
-
-#define __JANE_DEFER(BLOCK)                                                    \
-  jane::DeferBase __JANE_CONCAT(__deffered__, __LINE__) { [=] BLOCK }
+#include <exception>
+#include <sstream>
+#include <string>
 
 namespace jane {
-struct DeferBase;
-struct DeferBase {
+class Exception;
+
+template <typename T> void panic(const T &expr);
+
+class Exception : public std::exception {
+private:
+  std::string message;
+
 public:
-  std::function<void(void)> scope;
-  DeferBase(const std::function<void(void)> &fn) noexcept { this->scope = fn; }
-  ~DeferBase(void) noexcept { this->scope(); }
+  Exception(void) noexcept {}
+
+  Exception(char *message) noexcept { this->message = message; }
+
+  Exception(const std::string &message) noexcept { this->message = message; }
+
+  char *what(void) noexcept { return (char *)this->message.c_str(); }
+
+  const char *what(void) const noexcept { return this->message.c_str(); }
 };
+
+template <typename T> void panic(const T &expr) {
+  std::stringstream sstream;
+  sstream << expr;
+  jane::Exception exception(sstream.str());
+  throw exception;
+}
 } // namespace jane
 
-#endif // __JANE_DEFER_HPP
+#endif // __JANE_PANIC_HPP

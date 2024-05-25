@@ -1,4 +1,4 @@
-// Copyright (c) 2024 - DeRuneLabs
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,301 +21,322 @@
 #ifndef __JANE_STR_HPP
 #define __JANE_STR_HPP
 
+#include "error.hpp"
+#include "panic.hpp"
 #include "slice.hpp"
-#include "typedef.hpp"
+#include "types.hpp"
 #include "utf8.hpp"
+#include <climits>
+#include <cstring>
+#include <initializer_list>
+#include <ostream>
 #include <sstream>
+#include <string>
+#include <tuple>
+namespace jane {
+class Str;
+template <typename T> jane::Str to_str(const T &obj) noexcept;
+jane::Str to_str(const jane::Str &s) noexcept;
 
-class str_jnt;
-
-class str_jnt {
+class Str {
 public:
-  std::basic_string<u8_jnt> __buffer{};
+  jane::Int _len{};
+  std::basic_string<jane::U8> buffer{};
+  Str(void) noexcept {}
 
-  str_jnt(void) noexcept {}
-
-  str_jnt(const char *_Src) noexcept {
-    if (!_Src) {
+  Str(const char *src, const jane::Int &len) noexcept {
+    if (!src) {
       return;
     }
-    this->__buffer =
-        std::basic_string<u8_jnt>(&_Src[0], &_Src[std::strlen(_Src)]);
+    this->_len = len;
+    this->buffer = std::basic_string<jane::U8>(&src[0], &src[this->_len]);
   }
 
-  str_jnt(const std::initializer_list<u8_jnt> &_Src) noexcept {
-    this->__buffer = _Src;
+  Str(const char *src) noexcept {
+    if (!src) {
+      return;
+    }
+    this->_len = std::strlen(src);
+    this->buffer = std::basic_string<jane::U8>(&src[0], &src[this->_len]);
   }
 
-  str_jnt(const i32_jnt &_Rune) noexcept
-      : str_jnt(__jane_utf8_rune_to_bytes(_Rune)) {}
-
-  str_jnt(const std::basic_string<u8_jnt> &_Src) noexcept {
-    this->__buffer = _Src;
+  Str(const std::initializer_list<jane::U8> &src) noexcept {
+    this->_len = src.size();
+    this->buffer = src;
   }
 
-  str_jnt(const std::string &_Src) noexcept {
-    this->__buffer = std::basic_string<u8_jnt>(_Src.begin(), _Src.end());
+  Str(const jane::I32 &rune) noexcept : Str(jane::utf8_rune_to_bytes(rune)) {}
+
+  Str(const std::basic_string<jane::U8> &src) noexcept {
+    this->_len = src.length();
+    this->buffer = src;
   }
 
-  str_jnt(const str_jnt &_Src) noexcept { this->__buffer = _Src.__buffer; }
-
-  str_jnt(const slice_jnt<u8_jnt> &_Src) noexcept {
-    this->__buffer = std::basic_string<u8_jnt>(_Src.begin(), _Src.end());
+  Str(const std::string &src) noexcept {
+    this->_len = src.length();
+    this->buffer = std::basic_string<jane::U8>(src.begin(), src.end());
   }
 
-  str_jnt(const slice_jnt<i32_jnt> &_Src) noexcept {
-    for (const i32_jnt &_rune : _Src) {
-      const slice_jnt<u8_jnt> _bytes{__jane_utf8_rune_to_bytes(_rune)};
-      for (const u8_jnt _byte : _bytes) {
-        this->__buffer += _byte;
+  Str(const jane::Str &src) noexcept {
+    this->_len = src._len;
+    this->buffer = src.buffer;
+  }
+
+  Str(const jane::Slice<U8> &src) noexcept {
+    this->_len = src.len();
+    this->buffer = std::basic_string<jane::U8>(src.begin(), src.end());
+  }
+
+  Str(const jane::Slice<jane::I32> &src) noexcept {
+    for (const jane::I32 &r : src) {
+      const jane::Slice<jane::U8> bytes{jane::utf8_rune_to_bytes(r)};
+      this->_len += bytes.len();
+      for (const jane::U8 _byte : bytes) {
+        this->buffer += _byte;
       }
     }
   }
 
-  typedef u8_jnt *iterator;
-  typedef const u8_jnt *const_iterator;
+  typedef jane::U8 *Iterator;
+  typedef const jane::U8 *ConstIterator;
 
-  inline iterator begin(void) noexcept {
-    return ((iterator)(&this->__buffer[0]));
+  inline Iterator begin(void) noexcept {
+    return reinterpret_cast<Iterator>(&this->buffer[0]);
   }
 
-  inline const_iterator begin(void) const noexcept {
-    return ((const_iterator)(&this->__buffer[0]));
+  inline ConstIterator begin(void) const noexcept {
+    return reinterpret_cast<ConstIterator>(&this->buffer[0]);
   }
 
-  inline iterator end(void) noexcept {
-    return ((iterator)(&this->__buffer[this->_len()]));
+  inline Iterator end(void) noexcept {
+    return reinterpret_cast<Iterator>(&this->buffer[this->len()]);
   }
 
-  inline const_iterator end(void) const noexcept {
-    return ((const_iterator)(&this->__buffer[this->_len()]));
+  inline ConstIterator end(void) const noexcept {
+    return reinterpret_cast<ConstIterator>(&this->buffer[this->len()]);
   }
 
-  inline str_jnt ___slice(const int_jnt &_Start,
-                          const int_jnt &_End) const noexcept {
-    if (_Start < 0 || _End < 0 || _Start < _End || _End > this->_len()) {
-      std::stringstream _sstream;
-      __JANE_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(_sstream, _Start, _End);
-      JANE_ID(panic)(_sstream.str().c_str());
-    } else if (_Start == _End) {
-      return (str_jnt());
+  inline jane::Str slice(const jane::Int &start,
+                         const jane::Int &end) const noexcept {
+    if (start < 0 || end < 0 || start > end || end > this->len()) {
+      std::stringstream sstream;
+      __JANE_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(sstream, start, end);
+      jane::panic(sstream.str().c_str());
+    } else if (start == end) {
+      return jane::Str();
     }
-    const int_jnt _n{_End - _Start};
-    return (this->__buffer.substr(_Start, _n));
+    const jane::Int n{end - start};
+    return this->buffer.substr(start, n);
   }
 
-  inline str_jnt ___slice(const int_jnt &_Start) const noexcept {
-    return (this->___slice(_Start, this->_len()));
+  inline jane::Str slice(const jane::Int &start) const noexcept {
+    return this->slice(start, this->len());
   }
 
-  inline str_jnt ___slice(void) const noexcept {
-    return (this->___slice(0, this->_len()));
+  inline jane::Str slice(void) const noexcept {
+    return this->slice(0, this->len());
   }
 
-  inline int_jnt _len(void) const noexcept { return (this->__buffer.length()); }
-
-  inline bool _empty(void) const noexcept { return (this->__buffer.empty()); }
-
-  inline bool _has_prefix(const str_jnt &_Sub) const noexcept {
-    return this->_len() >= _Sub._len() &&
-           this->__buffer.substr(0, _Sub._len()) == _Sub.__buffer;
+  inline jane::Int len(void) const noexcept { return this->_len; }
+  inline jane::Bool empty(void) const noexcept { return this->buffer.empty(); }
+  inline jane::Bool has_prefix(const jane::Str &sub) const noexcept {
+    return this->buffer.find(sub.buffer, 0) == 0;
+  }
+  inline jane::Bool has_suffix(const jane::Str &sub) const noexcept {
+    return this->len() >= sub.len() &&
+           this->buffer.substr(this->len() - sub.len()) == sub.buffer;
   }
 
-  inline bool _has_suffix(const str_jnt &_Sub) const noexcept {
-    return this->_len() >= _Sub._len() &&
-           this->__buffer.substr(this->_len() - _Sub._len()) == _Sub.__buffer;
+  inline jane::Int find(const jane::Str &sub) const noexcept {
+    return static_cast<jane::Int>(this->buffer.find(sub.buffer));
+  }
+  inline jane::Int rfind(const jane::Str &sub) const noexcept {
+    return static_cast<jane::Int>(this->buffer.rfind(sub.buffer));
   }
 
-  inline int_jnt _find(const str_jnt &_Sub) const noexcept {
-    return ((int_jnt)(this->__buffer.find(_Sub.__buffer)));
-  }
-
-  inline int_jnt _rfind(const str_jnt &_Sub) const noexcept {
-    return ((int_jnt)(this->__buffer.rfind(_Sub.__buffer)));
-  }
-
-  str_jnt _trim(const str_jnt &_Bytes) const noexcept {
-    const_iterator _it{this->begin()};
-    const const_iterator _end{this->end()};
-    const_iterator _begin{this->begin()};
-    for (; _it < _end; ++_it) {
-      bool exist{false};
-      const_iterator _bytes_it{_Bytes.begin()};
-      const const_iterator _bytes_end{_Bytes.end()};
-      for (; _bytes_it < _bytes_end; ++_bytes_it) {
-        if ((exist = *_it == *_bytes_it)) {
+  jane::Str trim(const jane::Str &bytes) const noexcept {
+    ConstIterator it{this->begin()};
+    const ConstIterator begin{this->end()};
+    for (; it >= begin; --it) {
+      jane::Bool exist{false};
+      ConstIterator bytes_it{bytes.begin()};
+      const ConstIterator bytes_end{bytes.end()};
+      for (; bytes_it < bytes_end; ++bytes_it) {
+        if ((exist = *it == *bytes_it)) {
           break;
         }
       }
       if (!exist) {
-        return (this->__buffer.substr(_it - _begin));
+        return this->buffer.substr(0, it - begin + 1);
       }
     }
-    return (str_jnt());
+    return jane::Str();
   }
 
-  str_jnt _rtrim(const str_jnt &_Bytes) const noexcept {
-    const_iterator _it{this->end() - 1};
-    const const_iterator _begin{this->begin()};
-    for (; _it >= _begin; --_it) {
-      bool exist{false};
-      const_iterator _bytes_it{_Bytes.begin()};
-      const const_iterator _bytes_end{_Bytes.end()};
-      for (; _bytes_it < _bytes_end; ++_bytes_it) {
-        if ((exist = *_it == *_bytes_it)) {
+  jane::Str rtrim(const jane::Str &bytes) const noexcept {
+    ConstIterator it{this->end() - 1};
+    const ConstIterator begin{this->begin()};
+    for (; it >= begin; --it) {
+      jane::Bool exist{false};
+      ConstIterator bytes_it{bytes.begin()};
+      const ConstIterator bytes_end{bytes.end()};
+      for (; bytes_it < bytes_end; ++bytes_it) {
+        if ((exist = *it == *bytes_it)) {
           break;
         }
       }
-      if (!exist)
-        return (this->__buffer.substr(0, _it - _begin + 1));
+      if (!exist) {
+        return this->buffer.substr(0, it - begin + 1);
+      }
     }
-    return (str_jnt());
+    return jane::Str();
   }
 
-  slice_jnt<str_jnt> _split(const str_jnt &_Sub,
-                            const i64_jnt &_N) const noexcept {
-    slice_jnt<str_jnt> _parts;
-    if (_N == 0) {
-      return (_parts);
+  jane::Slice<jane::Str> split(const jane::Str &sub,
+                               const jane::I64 &n) const noexcept {
+    jane::Slice<jane::Str> parts;
+    if (n == 0) {
+      return parts;
     }
-    const const_iterator _begin{this->begin()};
-    std::basic_string<u8_jnt> _s{this->__buffer};
-    uint_jnt _pos{std::string::npos};
-    if (_N < 0) {
-      while ((_pos = _s.find(_Sub.__buffer)) != std::string::npos) {
-        _parts.__push(_s.substr(0, _pos));
-        _s = _s.substr(_pos + _Sub._len());
+    const ConstIterator begin{this->begin()};
+    std::basic_string<jane::U8> s{this->buffer};
+    constexpr jane::Uint npos{static_cast<jane::Uint>(std::string::npos)};
+    jane::Uint pos{npos};
+    if (n < 0) {
+      while ((pos = s.find(sub.buffer)) != npos) {
+        parts.push(s.substr(0, pos));
+        s = s.substr(pos + sub.len());
       }
-      if (!_s.empty()) {
-        _parts.__push(str_jnt(_s));
+      if (!s.empty()) {
+        parts.push(jane::Str(s));
       }
     } else {
-      uint_jnt _n{0};
-      while ((_pos = _s.find(_Sub.__buffer)) != std::string::npos) {
-        if (++_n >= _N) {
-          _parts.__push(str_jnt(_s));
+      jane::Uint _n{0};
+      while ((pos = s.find(sub.buffer)) != npos) {
+        if (++_n >= n) {
+          parts.push(jane::Str(s));
           break;
         }
-        _parts.__push(_s.substr(0, _pos));
-        _s = _s.substr(_pos + _Sub._len());
+        parts.push(s.substr(0, pos));
+        s = s.substr(pos + sub.len());
       }
-      if (!_parts._empty() && _n < _N) {
-        _parts.__push(str_jnt(_s));
-      } else if (_parts._empty()) {
-        _parts.__push(str_jnt(_s));
+      if (!parts.empty() && _n < n) {
+        parts.push(jane::Str(s));
+      } else if (parts.empty()) {
+        parts.push(jane::Str(s));
       }
     }
-    return (_parts);
+    return parts;
   }
 
-  str_jnt _replace(const str_jnt &_Sub, const str_jnt &_New,
-                   const i64_jnt &_N) const noexcept {
-    if (_N == 0) {
-      return (*this);
+  jane::Str replace(const jane::Str &sub, const jane::Str &_new,
+                    const jane::I64 &n) const noexcept {
+    if (n == 0) {
+      return *this;
     }
-    std::basic_string<u8_jnt> _s(this->__buffer);
-    uint_jnt start_pos{0};
-    if (_N < 0) {
-      while ((start_pos = _s.find(_Sub.__buffer, start_pos)) !=
-             std::string::npos) {
-        _s.replace(start_pos, _Sub._len(), _New.__buffer);
-        start_pos += _New._len();
+
+    std::basic_string<jane::U8> s(this->buffer);
+    constexpr jane::Uint npos{static_cast<jane::Uint>(std::string::npos)};
+    jane::Uint start_pos{0};
+    if (n < 0) {
+      while ((start_pos = s.find(sub.buffer, start_pos)) != npos) {
+        s.replace(start_pos, sub.len(), _new.buffer);
+        start_pos += _new.len();
       }
     } else {
-      uint_jnt _n{0};
-      while ((start_pos = _s.find(_Sub.__buffer, start_pos)) !=
-             std::string::npos) {
-        _s.replace(start_pos, _Sub._len(), _New.__buffer);
-        if (++_n >= _N) {
+      jane::Uint _n{0};
+      while ((start_pos = s.find(sub.buffer, start_pos)) != npos) {
+        s.replace(start_pos, sub.len(), _new.buffer);
+        start_pos += _new.len();
+        if (++_n >= n) {
           break;
         }
       }
     }
-    return (str_jnt(_s));
+    return jane::Str(s);
   }
 
   inline operator const char *(void) const noexcept {
-    return ((char *)(this->__buffer.c_str()));
+    return reinterpret_cast<const char *>(this->buffer.c_str());
   }
 
-  inline operator const std::basic_string<u8_jnt>(void) const noexcept {
-    return (this->__buffer);
+  inline operator const std::basic_string<jane::U8>(void) const noexcept {
+    return this->buffer;
   }
 
   inline operator const std::basic_string<char>(void) const noexcept {
-    return (
-        std::basic_string<char>(this->__buffer.begin(), this->__buffer.end()));
+    return std::basic_string<char>(this->begin(), this->end());
   }
 
-  operator slice_jnt<u8_jnt>(void) const noexcept {
-    slice_jnt<u8_jnt> _slice(this->_len());
-    for (int_jnt _index{0}; _index < this->_len(); ++_index) {
-      _slice[_index] = this->operator[](_index);
+  operator jane::Slice<jane::U8>(void) const noexcept {
+    jane::Slice<jane::U8> slice{jane::Slice<jane::U8>::alloc(this->len())};
+    for (jane::Int index{0}; index < this->len(); ++index) {
+      slice[index] = this->operator[](index);
     }
-    return (_slice);
+    return slice;
   }
 
-  operator slice_jnt<i32_jnt>(void) const noexcept {
-    slice_jnt<i32_jnt> _runes{};
-    const char *_str{this->operator const char *()};
-    for (int_jnt _index{0}; _index < this->_len();) {
-      i32_jnt _rune;
-      int_jnt _n;
-      std::tie(_rune, _n) =
-          __jane_utf8_decode_rune_str(_str + _index, this->_len() - _index);
-      _index += _n;
-      _runes.__push(_rune);
+  operator jane::Slice<jane::I32>(void) const noexcept {
+    jane::Slice<jane::I32> runes{};
+    const char *str{this->operator const char *()};
+    for (jane::Int index{0}; index < this->len();) {
+      jane::I32 rune;
+      jane::Int n;
+      std::tie(rune, n) =
+          jane::utf8_decode_rune_st(str + index, this->len() - index);
+      index += n;
+      runes.push(rune);
     }
-    return (_runes);
+    return runes;
   }
 
-  u8_jnt &operator[](const int_jnt &_Index) {
-    if (this->_empty() || _Index < 0 || this->_len() <= _Index) {
-      std::stringstream _sstream;
-      __JANE_WRITE_ERROR_INDEX_OUT_OF_RANGE(_sstream, _Index);
-      JANE_ID(panic)(_sstream.str().c_str());
+  jane::U8 &operator[](const jane::Int &index) {
+    if (this->empty() || index < 0 || this->len() <= index) {
+      std::stringstream sstream;
+      __JANE_WRITE_ERROR_INDEX_OUT_OF_RANGE(sstream, index);
+      jane::panic(sstream.str().c_str());
     }
-    return (this->__buffer[_Index]);
+    return this->buffer[index];
   }
 
-  inline u8_jnt operator[](const int_jnt &_Index) const {
-    return ((*this).__buffer[_Index]);
+  inline jane::U8 operator[](const jane::Int &index) const {
+    return (*this).buffer[index];
   }
 
-  inline void operator+=(const str_jnt &_Str) noexcept {
-    this->__buffer += _Str.__buffer;
+  inline void operator+=(const jane::Str &str) noexcept {
+    this->_len += str.len();
+    this->buffer += str.buffer;
   }
 
-  inline str_jnt operator+(const str_jnt &_Str) const noexcept {
-    return (str_jnt(this->__buffer + _Str.__buffer));
+  inline jane::Str operator+(const jane::Str &str) const noexcept {
+    return jane::Str(this->buffer + str.buffer);
   }
 
-  inline bool operator==(const str_jnt &_Str) const noexcept {
-    return (this->__buffer == _Str.__buffer);
+  inline jane::Bool operator==(const jane::Str &str) const noexcept {
+    return this->buffer == str.buffer;
   }
 
-  inline bool operator!=(const str_jnt &_Str) const noexcept {
-    return (!this->operator==(_Str));
+  inline jane::Bool operator!=(const jane::Str &str) const noexcept {
+    return !this->operator==(str);
   }
 
-  friend std::ostream &operator<<(std::ostream &_Stream,
-                                  const str_jnt &_Src) noexcept {
-    for (const u8_jnt &_byte : _Src) {
-      _Stream << static_cast<char>(_byte);
+  friend std::ostream &operator<<(std::ostream &stream,
+                                  const jane::Str &src) noexcept {
+    for (const jane::U8 &b : src) {
+      stream << static_cast<char>(b);
     }
-    return (_Stream);
+    return stream;
   }
 };
 
-template <typename _Obj_t> str_jnt __jane_to_str(const _Obj_t &_Obj) noexcept;
-str_jnt __jane_to_str(const str_jnt &_Obj) noexcept;
-
-template <typename _Obj_t> str_jnt __jane_to_str(const _Obj_t &_Obj) noexcept {
-  std::stringstream _stream;
-  _stream << _Obj;
-  return (str_jnt(_stream.str()));
+template <typename T> jane::Str to_str(const T &obj) noexcept {
+  std::stringstream stream;
+  stream << obj;
+  return jane::Str(stream.str());
 }
 
-inline str_jnt __jane_to_str(const str_jnt &_Obj) noexcept { return (_Obj); }
+inline jane::Str to_str(const jane::Str &s) noexcept { return s; }
 
-#endif // !__JANE_STR_HPP
+} // namespace jane
+
+#endif // __JANE_STR_HPP

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 - DeRuneLabs
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,96 +21,114 @@
 #ifndef __JANE_ARRAY_HPP
 #define __JANE_ARRAY_HPP
 
+#include "error.hpp"
+#include "panic.hpp"
 #include "slice.hpp"
-#include "typedef.hpp"
+#include "types.hpp"
+#include <initializer_list>
+#include <ostream>
+#include <sstream>
 
-template <typename _Item_t, const uint_jnt _N> struct array_jnt;
+namespace jane {
+template <typename Item, jane::Uint N> struct Array;
 
-template <typename _Item_t, const uint_jnt _N> struct array_jnt {
+template <typename Item, const jane::Uint N> struct Array {
 public:
-  std::array<_Item_t, _N> _buffer{};
-  array_jnt<_Item_t, _N>(const std::initializer_list<_Item_t> &_Src) noexcept {
-    const auto _Src_begin{_Src.begin()};
-    for (int_jnt _index{0}; _index < _Src.size(); ++_index) {
-      this->_buffer[_index] = *((_Item_t *)(_Src_begin + _index));
+  mutable std::array<Item, N> buffer{};
+  Array<Item, N>(void) noexcept {}
+  Array<Item, N>(const std::initializer_list<Item> &src) noexcept {
+    const auto src_begin{src.begin()};
+    for (jane::Int index{0}; index < src.size(); ++index) {
+      this->buffer[index] = *(Item)(src.begin + index);
     }
   }
 
-  typedef _Item_t *iterator;
-  typedef const _Item_t *const_iterator;
+  typedef Item *Iterator;
+  typedef const Item *ConstIterator;
 
-  inline constexpr iterator begin(void) noexcept { return (&this->_buffer[0]); }
+  inline constexpr Iterator begin(void) noexcept { return &this->buffer[0]; }
 
-  inline constexpr const_iterator begin(void) const noexcept {
-    return (&this->_buffer[0]);
+  inline constexpr ConstIterator begin(void) const noexcept {
+    return &this->buffer[0];
   }
 
-  inline constexpr iterator end(void) noexcept { return (&this->_buffer[_N]); }
+  inline constexpr Iterator end(void) noexcept { return &this->buffer[N]; }
 
-  inline constexpr const_iterator end(void) const noexcept {
-    return (&this->_buffer[_N]);
+  inline constexpr ConstIterator end(void) const noexcept {
+    return &this->_buffer[N];
   }
 
-  inline slice_jnt<_Item_t> ___slice(const int_jnt &_Start,
-                                     const int_jnt &_End) const noexcept {
-    if (_Start < 0 || _End < 0 || _Start > _End || _End > this->_len()) {
-      std::stringstream _sstream;
-      __JANE_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(_sstream, _Start, _End);
-      JANE_ID(panic)(_sstream.str().c_str());
-    } else if (_Start == _End) {
-      return (slice_jnt<_Item_t>());
+  inline jane::Slice<Item> slice(const jane::Int &start,
+                                 const jane::Int &end) const noexcept {
+    if (start < 0 || end < 0 || start > end || end > this->len()) {
+      std::stringstream sstream;
+      __JANE_WRITE_ERROR_SLICING_INDEX_OUT_OF_RANGE(sstream, start, end);
+      jane::panic(sstream.str().c_str());
+    } else if (start == end) {
+      return jane::Slice<Item>();
     }
-    const int_jnt _n{_End - _Start};
-    slice_jnt<_Item_t> _slice(_n);
-    for (int_jnt _counter{0}; _counter < _n; ++_counter) {
-      _slice[_counter] = this->_buffer[_Start + _counter];
+
+    const jane::Int n{end - start};
+    jane::Slice<Item> slice{jane::Slice<Item>::alloc(n)};
+    for (jane::Int counter{0}; counter < n; ++counter) {
+      slice[counter] = this->buffer[start + counter];
     }
-    return (_slice);
+    return slice;
   }
 
-  inline slice_jnt<_Item_t> ___slice(const int_jnt &_Start) const noexcept {
-    return this->___slice(_Start, this->_len());
+  inline jane::Slice<Item> slice(const jane::Int &start) const noexcept {
+    return this->slice(start, this->len());
   }
 
-  inline slice_jnt<_Item_t> ___slice(void) const noexcept {
-    return this->___slice(0, this->_len());
+  inline jane::Slice<Item> slice(void) const noexcept {
+    return this->slice(0, this->len());
   }
 
-  inline constexpr int_jnt _len(void) const noexcept { return (_N); }
+  inline constexpr jane::Int len(void) const noexcept { return N; }
 
-  inline constexpr bool _empty(void) const noexcept { return (_N == 0); }
+  inline constexpr jane::Bool empty(void) const noexcept { return N == 0; }
 
-  inline constexpr bool
-  operator==(const array_jnt<_Item_t, _N> &_Src) const noexcept {
-    return (!this->operator==(_Src));
+  inline constexpr jane::Bool
+  operator==(const jane::Array<Item, N> &src) const noexcept {
+    return this->buffer == src.buffer;
   }
 
-  inline constexpr bool
-  operator!=(const array_jnt<_Item_t, _N> &_Src) const noexcept {
-    return (!this->operator==(_Src));
+  inline constexpr jane::Bool
+  operator!=(const jane::Array<Item, N> &src) const noexcept {
+    return !this->operator==(src);
   }
 
-  _Item_t &operator[](const int_jnt &_Index) {
-    if (this->_empty() || _Index < 0 || this->_len() <= _Index) {
-      std::stringstream _sstream;
-      __JANE_WRITE_ERROR_INDEX_OUT_OF_RANGE(_sstream, _Index);
-      JANE_ID(panic)(_sstream.str().c_str());
+  Item &operator[](const jane::Int &index) const {
+    if (this->empty() || index < 0 || this->len() <= index) {
+      std::stringstream sstream;
+      __JANE_WRITE_ERROR_INDEX_OUT_OF_RANGE(sstream, index);
+      jane::panic(sstream.str().c_str());
     }
-    return (this->_buffer[_Index]);
+    return this->buffer[index];
   }
 
-  friend std::ostream &operator<<(std::ostream &_Stream,
-                                  const array_jnt<_Item_t, _N> &_Src) noexcept {
-    _Stream << '[';
-    for (int_jnt _index{0}; _index < _Src._len();) {
-      _Stream << _Src._buffer[_index++];
-      if (_index < _Src._len()) {
-        _Stream << " ";
+  Item &operator[](const jane::Int &index) {
+    if (this->empty() || index < 0 || this->len() <= index) {
+      std::stringstream sstream;
+      __JANE_WRITE_ERROR_INDEX_OUT_OF_RANGE(sstream, index);
+      jane::panic(sstream.str().c_str());
+    }
+    return this->buffer[index];
+  }
+
+  friend std::ostream &operator<<(std::ostream &stream,
+                                  const jane::Array<Item, N> &src) noexcept {
+    stream << '[';
+    for (jane::Int index{0}; index < src.len();) {
+      stream << src.buffer[index++];
+      if (index < src.len()) {
+        stream << " ";
       }
     }
-    _Stream << ']';
-    return (_Stream);
+    stream << ']';
+    return stream;
   }
 };
+} // namespace jane
 
-#endif // !__JANE_ARRAY_HPP
+#endif //__JANE_ARRAY_HPP

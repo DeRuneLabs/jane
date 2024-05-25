@@ -1,4 +1,4 @@
-// Copyright (c) 2024 - DeRuneLabs
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,86 +23,92 @@
 
 #include "slice.hpp"
 #include "str.hpp"
-#include "typedef.hpp"
-#include <initializer_list>
+#include "types.hpp"
+#include <cstddef>
 #include <unordered_map>
+namespace jane {
+class MapKeyHasher;
+template <typename Key, typename Value> class Map;
 
-class __jane_map_key_hasher;
-
-template <typename _Key_t, typename _Value_t> class map_jnt;
-
-class __jane_map_key_hasher {
+class MapKeyHasher {
 public:
-  size_t operator()(const str_jnt &_Key) const noexcept {
-    size_t _hash{0};
-    for (int_jnt _i{0}; _i < _Key._len(); ++_i) {
-      _hash += _Key[_i] % 7;
+  size_t operator()(const jane::Str &key) const noexcept {
+    size_t hash{0};
+    for (jane::Int i{0}; i < key.len(); ++i) {
+      hash += key[i] % 7;
     }
-    return (_hash);
+    return hash;
   }
-
-  template <typename _Obj_t>
-  inline size_t operator()(const _Obj_t &_Obj) const noexcept {
-    return (this->operator()(__jane_to_str<_Obj_t>(_Obj)));
-  };
+  template <typename T> inline size_t operator()(const T &obj) const noexcept {
+    return this->operator()(jane::to_str<T>(obj));
+  }
 };
 
-template <typename _Key_t, typename _Value_t>
-class map_jnt
-    : public std::unordered_map<_Key_t, _Value_t, __jane_map_key_hasher> {
+template <typename Key, typename Value> class Map {
 public:
-  map_jnt<_Key_t, _Value_t>(void) noexcept {}
-  map_jnt<_Key_t, _Value_t>(const std::nullptr_t) noexcept {}
-
-  map_jnt<_Key_t, _Value_t>(
-      const std::initializer_list<std::pair<_Key_t, _Value_t>> &_Src) noexcept {
-    for (const auto _data : _Src) {
-      this->insert(_data);
+  mutable std::unordered_map<Key, Value, MapKeyHasher> buffer{};
+  Map<Key, Value>(void) noexcept {}
+  Map<Key, Value>(const std::nullptr_t) noexcept {}
+  Map<Key, Value>(
+      const std::initializer_list<std::pair<Key, Value>> &src) noexcept {
+    for (const std::pair<Key, Value> &pair : src) {
+      this->buffer.insert(pair);
     }
   }
 
-  slice_jnt<_Key_t> _keys(void) const noexcept {
-    slice_jnt<_Key_t> _keys(this->size());
-    uint_jnt _index{0};
-    for (const auto &_pair : *this) {
-      _keys._alloc[_index++] = _pair.first;
+  inline constexpr auto begin(void) noexcept { return this->buffer.begin(); }
+
+  inline constexpr auto end(void) noexcept { return this->buffer.end(); }
+
+  inline constexpr auto end(void) const noexcept { return this->buffer.end(); }
+
+  inline void clear(void) noexcept { this->buffer.clear(); }
+
+  jane::Slice<Key> keys(void) const noexcept {
+    jane::Slice<Key> keys(this->len());
+    jane::Uint index{0};
+    for (const auto &pair : *this) {
+      keys._slice[index++] = pair.second;
     }
-    return (_keys);
+    return keys;
   }
 
-  slice_jnt<_Value_t> _values(void) const noexcept {
-    slice_jnt<_Value_t> _keys(this->size());
-    uint_jnt _index{0};
-    for (const auto &_pair : *this) {
-      _keys._alloc[_index++] = _pair.second;
-    }
-    return (_keys);
+  inline constexpr jane::Bool has(const Key &key) const noexcept {
+    return this->buffer.find(key) != this->end();
   }
 
-  inline constexpr bool _has(const _Key_t _Key) const noexcept {
-    return (this->find(_Key) != this->end());
+  inline jane::Int len(void) const noexcept { return this->buffer.size(); }
+
+  inline void del(const Key &key) noexcept { this->buffer.erase(key); }
+
+  inline jane::Bool operator==(const std::nullptr_t) const noexcept {
+    return this->buffer.empty();
   }
 
-  inline int_jnt _len(void) const noexcept { return (this->size()); }
+  inline jane::Bool operator!=(const std::nullptr_t) const noexcept {
+    return !this->operator==(nullptr);
+  }
 
-  inline void _del(const _Key_t _Key) noexcept { this->erase(_Key); }
+  Value &operator[](const Key &key) { return this->buffer[key]; }
 
-  friend std::ostream &
-  operator<<(std::ostream &_Stream,
-             const map_jnt<_Key_t, _Value_t> &_Src) noexcept {
-    _Stream << '{';
-    uint_jnt _length{_Src.size()};
-    for (const auto _pair : _Src) {
-      _Stream << _pair.first;
-      _Stream << ':';
-      _Stream << _pair.second;
-      if (--_length > 0) {
-        _Stream << ", ";
+  Value &operator[](const Key &key) const { return this->buffer[key]; }
+
+  friend std::ostream &operator<<(std::ostream &stream,
+                                  const Map<Key, Value> &src) noexcept {
+    stream << '{';
+    jane::Int length{src.len()};
+    for (const auto pair : src) {
+      stream << pair.first;
+      stream << ':';
+      stream << pair.second;
+      if (--length > 0) {
+        stream << ", ";
       }
     }
-    _Stream << '}';
-    return (_Stream);
+    stream << '}';
+    return stream;
   }
 };
+} // namespace jane
 
-#endif // !__JANE_MAP_HPP
+#endif // __JANE_MAP_HPP

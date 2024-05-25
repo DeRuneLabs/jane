@@ -18,24 +18,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __JANE_DEFER_HPP
-#define __JANE_DEFER_HPP
+#ifndef __JANE_MISC_HPP
+#define __JANE_MISC_HPP
 
-#include <functional>
-#define __JANE_CCONCAT(A, B) A##B
-#define __JANE_CONCAT(A, B) __JANE_CCONCAT(A, B)
-
-#define __JANE_DEFER(BLOCK)                                                    \
-  jane::DeferBase __JANE_CONCAT(__deffered__, __LINE__) { [=] BLOCK }
-
+#include "error.hpp"
+#include "panic.hpp"
+#include "ref.hpp"
+#include "types.hpp"
 namespace jane {
-struct DeferBase;
-struct DeferBase {
-public:
-  std::function<void(void)> scope;
-  DeferBase(const std::function<void(void)> &fn) noexcept { this->scope = fn; }
-  ~DeferBase(void) noexcept { this->scope(); }
-};
+template <typename T, typename Denominator>
+auto div(const T &x, const Denominator &denominator) noexcept;
+
+template <typename T> jane::Ref<T> new_struct(T *ptr);
+
+template <typename T, typename Denominator>
+auto div(const T &x, const Denominator &denominator) noexcept {
+  if (denominator == 0) {
+    jane::panic(jane::ERROR_DIVIDE_BY_ZERO);
+  }
+  return (x / denominator);
+}
+
+template <typename T> jane::Ref<T> new_struct(T *ptr) {
+  if (!ptr) {
+    jane::panic(jane::ERROR_MEMORY_ALLOCATION_FAILED);
+  }
+  ptr->self.ref = new (std::nothrow) jane::Uint;
+  if (!ptr->self.ref) {
+    jane::panic(jane::ERROR_MEMORY_ALLOCATION_FAILED);
+  }
+  *ptr->self.ref = 0;
+  return ptr->self;
+}
 } // namespace jane
 
-#endif // __JANE_DEFER_HPP
+#endif //__JANE_MISC_HPP

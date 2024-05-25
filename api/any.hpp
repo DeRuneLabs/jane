@@ -1,4 +1,4 @@
-// Copyright (c) 2024 - DeRuneLabs
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,126 +21,195 @@
 #ifndef __JANE_ANY_HPP
 #define __JANE_ANY_HPP
 
+#include <cstddef>
+#include <cstdlib>
+#include <cstring>
+#include <ostream>
+#include <stddef.h>
+
+#include "builtin.hpp"
+#include "error.hpp"
 #include "ref.hpp"
-#include "typedef.hpp"
-struct any_jnt;
+#include "str.hpp"
+#include "types.hpp"
+namespace jane {
+class Any;
 
-struct any_jnt {
+class Any {
+private:
+  template <typename T> struct DynamicType {
+  public:
+    static const char *type_id(void) noexcept { return typeid(T).name(); }
+
+    static void dealloc(void *alloc) noexcept {
+      delete reinterpret_cast<T *>(alloc);
+    }
+
+    static jane::Bool eq(void *alloc, void *other) noexcept {
+      T *l{reinterpret_cast<T *>(alloc)};
+      T *r{reinterpret_cast<T *>(other)};
+      return *l == *r;
+    }
+
+    static const jane::Str to_str(const void *alloc) noexcept {
+      const T *v{reinterpret_cast<T *>(alloc)};
+      return jane::to_str(*v);
+    }
+  };
+
+  struct Type {
+  public:
+    const char *(*type_id)(void) noexcept;
+    void (*dealloc)(void *alloc) noexcept;
+    jane::Bool (*eq)(void *alloc, void *other) noexcept;
+    const jane::Str (*to_str)(const void *alloc) noexcept;
+  };
+
+  template <typename T> static jane::Any::Type *new_type(void) noexcept {
+    using t = typename std::decay<DynamicType<T>>::type;
+    static jane::Any::Type table = {
+        t::type_id,
+        t::dealloc,
+        t::eq,
+        t::to_str,
+    };
+    return &table;
+  }
+
 public:
-  ref_jnt<void *> __data{};
-  const char *__type_id{nil};
+  jane::Ref<void *> data{};
+  jane::Any::Type *type{nullptr};
+  Any(void) noexcept {}
+  template <typename T> Any(const T &expr) noexcept { this->operator=(expr); }
 
-  any_jnt(void) noexcept {}
+  Any(const jane::Any &src) noexcept { this->operator=(src); }
 
-  template <typename T> any_jnt(const T &_Expr) noexcept {
-    this->operator=(_Expr);
-  }
+  ~Any(void) noexcept { this->dealloc(); }
 
-  any_jnt(const any_jnt &_Src) noexcept { this->operator=(_Src); }
-
-  ~any_jnt(void) noexcept { this->__dealloc(); }
-
-  inline void __dealloc(void) noexcept {
-    this->__type_id = nil;
-    if (!this->__data.__ref) {
-      this->__data.__alloc = nil;
+  void dealloc(void) noexcept {
+    if (!this->data.ref) {
+      this->type = nullptr;
+      this->data.alloc = nullptr;
       return;
     }
-    if ((this->__data.__get_ref_n()) != __JANE_REFERENCE_DELTA) {
+
+    if ((this->data.get_ref_n()) != jane::REFERENCE_DELTA) {
       return;
     }
-    delete this->__data.__ref;
-    this->__data.__ref = nil;
-    std::free(*this->__data.__alloc);
-    *this->__data.__alloc = nil;
-    std::free(this->__data.__alloc);
-    this->__data.__alloc = nil;
+    this->type->dealloc(*this->data.alloc);
+    *this->data.alloc = nullptr;
+    this->type = nullptr;
+
+    delete this->data.ref;
+    this->data.ref = nullptr;
+    std::free(this->data.alloc);
+    this->data.alloc = nullptr;
   }
 
-  template <typename T> inline bool __type_is(void) const noexcept {
-    if (std::is_same<T, std::nullptr_t>::value) {
-      return (false);
+  template <typename T> inline jane::Bool type_is(void) const noexcept {
+    if (std::is_same<typename std::decay<T>::type, std::nullptr_t>::value) {
+      return false;
     }
-    if (this->operator==(nil)) {
-      return (false);
+    if (this->operator==(nullptr)) {
+      return false;
     }
-    return std::strcmp(this->__type_id, typeid(T).name()) == 0;
+    return std::strcmp(this->type->type_id(), typeid(T).name()) == 0;
   }
 
-  template <typename T> void operator=(const T &_Expr) noexcept {
-    this->__dealloc();
-    T *_alloc{new (std::nothrow) T};
-    if (!_alloc) {
-      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
+  template <typename T> void operator=(const T &expr) noexcept {
+    this->dealloc();
+
+    T *alloc{new (std::nothrow) void *};
+    if (!alloc) {
+      jane::panic(jane::ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    void **_main_alloc{new (std::nothrow) void *};
-    if (!_main_alloc) {
-      JANE_ID(panic)(__JANE_ERROR_MEMORY_ALLOCATION_FAILED);
+
+    void **main_alloc{new (std::nothrow) void *};
+    if (!main_alloc) {
+      jane::panic(jane::ERROR_MEMORY_ALLOCATION_FAILED);
     }
-    *_alloc = _Expr;
-    *_main_alloc = ((void *)(_alloc));
-    this->__data = ref_jnt<void *>::make(_main_alloc);
-    this->__type_id = typeid(_Expr).name();
+
+    *alloc = expr;
+    *main_alloc = reinterpret_cast<void *>(alloc);
+    this->data = jane::Ref<void *>::make(main_alloc);
+    this->type = jane::Any::new_type<T>();
   }
 
-  void operator=(const any_jnt &_Src) noexcept {
-    if (_Src.operator==(nil)) {
-      this->operator=(nil);
+  void operator=(const jane::Any &src) noexcept {
+    if (this->data.alloc == src.data.alloc) {
       return;
     }
-    this->__dealloc();
-    this->__data = _Src.__data;
-    this->__type_id = _Src.__type_id;
+    if (src.operator==(nullptr)) {
+      this->operator=(nullptr);
+    }
+
+    this->dealloc();
+    this->data = src.data;
+    this->type = src.type;
   }
 
-  inline void operator=(const std::nullptr_t) noexcept { this->__dealloc(); }
+  inline void operator=(const std::nullptr_t) noexcept { this->dealloc(); }
 
   template <typename T> operator T(void) const noexcept {
-    if (this->operator==(nil)) {
-      JANE_ID(panic)(__JANE_ERROR_INVALID_MEMORY);
+    if (this->operator==(nullptr)) {
+      jane::panic(jane::ERROR_INVALID_MEMORY);
     }
-    if (!this->__type_is<T>()) {
-      JANE_ID(panic)(__JANE_ERROR_INCOMPATIBLE_TYPE);
-    }
-    return (*(T *)(*this->__data.__alloc));
-  }
 
-  template <typename T> inline bool operator==(const T &_Expr) const noexcept {
-    return (this->__type_is<T>() && this->operator T() == _Expr);
+    if (!this->type_is<T>()) {
+      jane::panic(jane::ERROR_INCOMPATIBLE_TYPE);
+    }
+
+    return *reinterpret_cast<T *>(*this->data.alloc);
   }
 
   template <typename T>
-  inline constexpr bool operator!=(const T &_Expr) const noexcept {
+  inline jane::Bool operator==(const T &_Expr) const noexcept {
+    return (this->type_is<T>() && this->operator T() == _Expr);
+  }
+
+  template <typename T>
+  inline jane::Bool operator!=(const T &_Expr) const noexcept {
     return (!this->operator==(_Expr));
   }
 
-  inline bool operator==(const any_jnt &_Any) const noexcept {
-    if (this->operator==(nil) && _Any.operator==(nil)) {
-      return (true);
+  inline jane::Bool operator==(const jane::Any &other) const noexcept {
+    if (this->data.alloc == other.data.alloc) {
+      return true;
     }
-    return (std::strcmp(this->__type_id, _Any.__type_id) == 0);
+
+    if (this->operator==(nullptr) && other.operator==(nullptr)) {
+      return true;
+    }
+
+    if (std::strcmp(this->type->type_id(), other.type->type_id()) != 0) {
+      return false;
+    }
+
+    return this->type->eq(*this->data.alloc, *other.data.alloc);
   }
 
-  inline bool operator!=(const any_jnt &_Any) const noexcept {
-    return (!this->operator==(_Any));
+  inline jane::Bool operator!=(const jane::Any &other) const noexcept {
+    return !this->operator==(other);
   }
 
-  inline bool operator==(std::nullptr_t) const noexcept {
-    return (!this->__data.__alloc);
+  inline jane::Bool operator==(std::nullptr_t) const noexcept {
+    return !this->data.alloc;
   }
 
-  inline bool operator!=(std::nullptr_t) const noexcept {
-    return (!this->operator==(nil));
+  inline jane::Bool operator!=(std::nullptr_t) const noexcept {
+    return !this->operator==(nullptr);
   }
 
-  friend std::ostream &operator<<(std::ostream &_Stream, const any_jnt &_Src) noexcept {
-    if (_Src.operator!=(nil)) {
-      _Stream << "<any>";
+  friend std::ostream &operator<<(std::ostream &stream,
+                                  const jane::Any &src) noexcept {
+    if (src.operator!=(nullptr)) {
+      stream << src.type->to_str(*src.data.alloc);
     } else {
-      _Stream << 0;
+      stream << 0;
     }
-    return (_Stream);
+    return stream;
   }
 };
+} // namespace jane
 
-#endif // !__JANE_ANY_HPP
+#endif //__JANE_ANY_HPP

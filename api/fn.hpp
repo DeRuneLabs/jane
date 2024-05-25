@@ -1,4 +1,4 @@
-// Copyright (c) 2024 - DeRuneLabs
+// Copyright (c) 2024 arfy slowy - DeRuneLabs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,48 +21,105 @@
 #ifndef __JANE_FN_HPP
 #define __JANE_FN_HPP
 
-#include "typedef.hpp"
 #include <cstddef>
+#include <functional>
+#include <stddef.h>
+#include <thread>
 
-template <typename _Function_t> struct fn_jnt;
+#include "builtin.hpp"
+#include "error.hpp"
+#include "types.hpp"
 
-template <typename _Function_t> struct fn_jnt {
-  std::function<_Function_t> __buffer;
+#define __JANE_CO(EXPR)                                                        \
+  (std::thread{[&](void) mutable -> void { EXPR; }}.detach())
 
-  fn_jnt<_Function_t>(void) noexcept {}
+namespace jane {
+template <typename> struct Fn;
 
-  fn_jnt<_Function_t>(const std::function<_Function_t> &_Function) noexcept {
-    this->__buffer = _Function;
-  }
-  fn_jnt<_Function_t>(const _Function_t &_Function) noexcept {
-    this->__buffer = _Function;
-  }
+template <typename T, typename... U>
+jane::Uintptr addr_of_fn(std::function<T(U...)> f) noexcept;
 
-  template <typename... _Arguments_t>
-  auto operator()(_Arguments_t... _Arguments) noexcept {
-    if (this->__buffer == nil) {
-      JANE_ID(panic)(__JANE_ERROR_INVALID_MEMORY);
+template <typename Function> struct Fn {
+public:
+  std::function<Function> buffer;
+  jane::Uintptr _addr;
+
+  Fn<Function>(void) noexcept {}
+  Fn<Function>(std::nullptr_t) noexcept {}
+
+  Fn<Function>(const std::function<Function> &function) noexcept {
+    this->_addr = jane::addr_of_fn(function);
+    if (this->_addr == 0) {
+      this->_addr = (jane::Uintptr)(&function);
     }
-    return (this->__buffer(_Arguments...));
+    this->buffer = function;
   }
 
-  inline void operator=(std::nullptr_t) noexcept { this->__buffer = nil; }
-
-  inline void operator=(const std::function<_Function_t> &_Function) noexcept {
-    this->__buffer = _Function;
+  Fn<Function>(const Function *function) noexcept {
+    this->buffer = function;
+    this->addr = jane::addr_of_fn(this->buffer);
+    if (this->_addr == 0) {
+      this->_addr = (jane::Uintptr)(function);
+    }
   }
 
-  inline void operator=(const _Function_t &_Function) noexcept {
-    this->__buffer = _Function;
+  Fn<Function>(const Fn<Function> &fn) noexcept {
+    this->buffer = fn.buffer;
+    this->_addr = fn._addr;
   }
 
-  inline bool operator==(std::nullptr_t) const noexcept {
-    return (this->__buffer == nil);
+  template <typename... Arguments>
+  auto operator()(Arguments... arguments) noexcept {
+    if (this->buffer == nullptr) {
+      jane::panic(jane::ERROR_INVALID_MEMORY);
+    }
+    return this->buffer(arguments...);
   }
 
-  inline bool operator!=(std::nullptr_t) const noexcept {
-    return (!this->operator==(nil));
+  jane::Uintptr addr(void) const noexcept { return this->_addr; }
+
+  inline void operator=(std::nullptr_t) noexcept { this->buffer = nullptr; }
+
+  inline void operator=(const std::function<Function> &function) noexcept {
+    this->buffer = function;
+  }
+
+  inline void operator=(const Function &function) noexcept {
+    this->buffer = function;
+  }
+
+  inline jane::Bool operator==(const Fn<Function> &fn) const noexcept {
+    return this->addr() == fn.addr();
+  }
+
+  inline jane::Bool operator!=(const Fn<Function> &fn) const noexcept {
+    return this->buffer == nullptr;
+  }
+
+  inline jane::Bool operator==(std::nullptr_t) const noexcept {
+    return this->buffer == nullptr;
+  }
+
+  inline jane::Bool operator!=(std::nullptr_t) const noexcept {
+    return !this->operator==(nullptr);
+  }
+
+  friend std::ostream &operator<<(std::ostream &stream,
+                                  const Fn<Function> &src) noexcept {
+    stream << "<fn>";
+    return stream;
   }
 };
 
-#endif // !__JANE_FN_HPP
+template <typename T, typename... U>
+jane::Uintptr addr_of_fn(std::function<T(U...)> f) noexcept {
+  typedef T(FnType)(U...);
+  FnType **fn_ptr{f.template target<FnType *>()};
+  if (!fn_ptr) {
+    return 0;
+  }
+  return (jane::Uintptr)(*fn_ptr);
+}
+} // namespace jane
+
+#endif // __JANE_FN_HPP
