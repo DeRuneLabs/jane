@@ -1,67 +1,125 @@
-// copyright (c) 2024 arfy slowy - derunelabs
+// MIT License
 //
-// permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "software"), to deal
-// in the software without restriction, including without limitation the rights
+// # Copyright (c) 2024 arfy slowy - DeRuneLabs
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the software, and to permit persons to whom the software is
+// copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// the above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the software.
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
 //
-// the software is provided "as is", without warranty of any kind, express or
-// implied, including but not limited to the warranties of merchantability,
-// fitness for a particular purpose and noninfringement. in no event shall the
-// authors or copyright holders be liable for any claim, damages or other
-// liability, whether in an action of contract, tort or otherwise, arising from,
-// out of or in connection with the software or the use or other dealings in the
-// software.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 package types
 
-import "math"
+// Maximum positive value of 32-bit floating-points.
+const MAX_F32 = 0x1p127 * (1 + (1 - 0x1p-23))
 
-func MinOfType(id uint8) int64 {
-	if !IsInteger(id) {
+// Maximum negative value of 32-bit floating-points.
+const MIN_F32 = -0x1p127 * (1 + (1 - 0x1p-23))
+
+// Maximum positive value of 64-bit floating-points.
+const MAX_F64 = 0x1p1023 * (1 + (1 - 0x1p-52))
+
+// Maximum negative value of 64-bit floating-points.
+const MIN_F64 = -0x1p1023 * (1 + (1 - 0x1p-52))
+
+// Maximum positive value of 8-bit signed integers.
+const MAX_I8 = 127
+
+// Maximum negative value of 8-bit signed integers.
+const MIN_I8 = -128
+
+// Maximum positive value of 16-bit signed integers.
+const MAX_I16 = 32767
+
+// Maximum negative value of 16-bit signed integers.
+const MIN_I16 = -32768
+
+// Maximum positive value of 32-bit signed integers.
+const MAX_I32 = 2147483647
+
+// Maximum negative value of 32-bit signed integers.
+const MIN_I32 = -2147483648
+
+// Maximum positive value of 64-bit signed integers.
+const MAX_I64 = 9223372036854775807
+
+// Maximum negative value of 64-bit signed integers.
+const MIN_I64 = -9223372036854775808
+
+// Maximum value of 8-bit unsigned integers.
+const MAX_U8 = 255
+
+// Maximum value of 16-bit unsigned integers.
+const MAX_U16 = 65535
+
+// Maximum value of 32-bit unsigned integers.
+const MAX_U32 = 4294967295
+
+// Maximum value of 64-bit unsigned integers.
+const MAX_U64 = 18446744073709551615
+
+func Min_of(k string) float64 {
+	k = Real_kind_of(k)
+	switch k {
+	case TypeKind_I8:
+		return MIN_I8
+
+	case TypeKind_I16:
+		return MIN_I16
+
+	case TypeKind_I32:
+		return MIN_I32
+
+	case TypeKind_I64:
+		return MIN_I64
+
+	case TypeKind_F32:
+		return MIN_F32
+
+	case TypeKind_F64:
+		return MIN_F64
+
+	default:
 		return 0
 	}
-	id = GetRealCode(id)
-	switch id {
-	case I8:
-		return math.MinInt8
-	case I16:
-		return math.MinInt16
-	case I32:
-		return math.MinInt32
-	case I64:
-		return math.MinInt64
-	}
-	return 0
 }
 
-func MaxOfType(id uint8) uint64 {
-	if !IsInteger(id) {
+func Max_of(k string) float64 {
+	k = Real_kind_of(k)
+	switch k {
+	case TypeKind_I8:
+		return MAX_I8
+	case TypeKind_I16:
+		return MAX_I16
+	case TypeKind_I32:
+		return MAX_I32
+	case TypeKind_I64:
+		return MAX_I64
+	case TypeKind_U8:
+		return MAX_U8
+	case TypeKind_U16:
+		return MAX_U16
+	case TypeKind_U32:
+		return MAX_U32
+	case TypeKind_U64:
+		return MAX_U64
+	case TypeKind_F32:
+		return MAX_F32
+	case TypeKind_F64:
+		return MAX_F64
+	default:
 		return 0
 	}
-	id = GetRealCode(id)
-	switch id {
-	case I8:
-		return math.MaxInt8
-	case I16:
-		return math.MaxInt16
-	case I32:
-		return math.MaxInt32
-	case I64:
-		return math.MaxInt64
-	case U8:
-		return math.MaxUint8
-	case U16:
-		return math.MaxUint16
-	case U32:
-		return math.MaxUint32
-	case U64:
-		return math.MaxUint64
-	}
-	return 0
 }
