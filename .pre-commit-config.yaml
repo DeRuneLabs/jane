@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v5.0.0
     hooks:
       - id: check-yaml
       - id: end-of-file-fixer
@@ -16,6 +16,6 @@ repos:
         name: golang mod tidy
 
   - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.17
+    rev: 0.7.19
     hooks:
       - id: mdformat
